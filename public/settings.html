@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - StoryForge</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header>
+        <h1><a href="/" style="text-decoration: none; color: inherit;">StoryForge</a></h1>
+        <div id="user-info" class="hidden">
+            <span id="user-display-name"></span>
+            <button id="logout-btn">Logout</button>
+        </div>
+    </header>
+
+    <main>
+        <section id="api-settings-section">
+            <h2>API Key Settings</h2>
+            <p>Securely save your API keys here. They are encrypted and only accessible to you.</p>
+            
+            <form id="save-api-key-form">
+                <label for="api-name">API Provider</label>
+                <select id="api-name" name="api-name">
+                    <option value="openai">OpenAI</option>
+                    <!-- Add other APIs like Anthropic, Cohere, etc. here later -->
+                </select>
+
+                <label for="api-key-input">API Key</label>
+                <input type="password" id="api-key-input" placeholder="Enter your secret API key (e.g., sk-...)" required>
+                
+                <button type="submit" id="save-key-btn">Save Key</button>
+                <p id="save-status" class="hidden"></p>
+            </form>
+        </section>
+    </main>
+
+    <!-- The Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-functions-compat.js"></script>
+
+    <!-- We will create a new settings.js file for this page's logic -->
+    <script src="settings.js"></script>
+
+</body>
+</html>
