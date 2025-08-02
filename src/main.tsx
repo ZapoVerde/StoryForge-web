@@ -1,10 +1,11 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.tsx'
+// src/App.tsx
+import React from 'react';
+import LoginScreen from './ui/screens/LoginScreen';
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+export default function App() {
+  return (
+    <div>
+      <LoginScreen />
+    </div>
+  );
+}
