@@ -1,0 +1,38 @@
+// .devcontainer/devcontainer.json
+
+{
+  "name": "StoryForge Web Development",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-docker"
+        // Add any other VS Code extensions you find useful for web dev
+      ]
+    }
+  },
+  // This section ensures Vite's port (5173) is always public
+  "portsAttributes": {
+    "5173": {
+      "label": "StoryForge Web App",
+      "onAutoForward": "notify",
+      "visibility": "public" // <--- THIS IS THE KEY SETTING
+    }
+  },
+  "forwardPorts": [5173], // <--- This ensures the port is forwarded
+  // Use 'postCreateCommand' to run commands after the container is created.
+  // This is a good place to install dependencies.
+  "postCreateCommand": "npm install",
+  // Configure tool-specific properties.
+  "remoteUser": "node",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "latest"
+    }
+  }
+}
