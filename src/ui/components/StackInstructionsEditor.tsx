@@ -15,9 +15,10 @@ import {
   MenuItem,
   Grid,
   Checkbox,
+  Divider,
 } from '@mui/material';
 import { CollapsibleSection } from './CollapsibleSection';
-import { StackInstructions, StackMode, FilterMode, EmissionRule } from '../../models/StackInstructions'; // Assuming StackInstructions model is available
+import { StackInstructions, StackMode, FilterMode, EmissionRule, ProsePolicy } from '../../models/StackInstructions';
 
 interface StackInstructionsEditorProps {
   stackInstructions: StackInstructions;
@@ -28,15 +29,15 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
   stackInstructions,
   onStackInstructionsChange,
 }) => {
-  const handleProsePolicyChange = (
-    policyKey: keyof StackInstructions,
-    field: keyof EmissionRule | 'filtering', // EmissionRule and ProsePolicy have similar structure for mode/n
+  // Helper to update a ProsePolicy or EmissionRule (they share 'mode' and 'n')
+  const handlePolicyChange = (
+    policyKey: keyof StackInstructions, // Can be 'narratorProseEmission', 'expressionLogPolicy', etc.
+    field: keyof ProsePolicy | keyof EmissionRule, // 'mode', 'n', or 'filtering'
     value: any
   ) => {
-    const currentPolicy = stackInstructions[policyKey] as EmissionRule; // Cast to common interface
     onStackInstructionsChange({
       ...stackInstructions,
-      [policyKey]: { ...currentPolicy, [field]: value },
+      [policyKey]: { ...(stackInstructions[policyKey] as any), [field]: value },
     });
   };
 
@@ -45,7 +46,7 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
     field: keyof EmissionRule,
     value: any
   ) => {
-    const currentRule = stackInstructions.digestEmission[score] || { mode: StackMode.NEVER, n: 0 };
+    const currentRule = stackInstructions.digestEmission[score] || { mode: StackMode.NEVER, n: 0 }; // Ensure a default if rule is missing
     onStackInstructionsChange({
       ...stackInstructions,
       digestEmission: {
@@ -74,15 +75,16 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
 
   return (
     <CollapsibleSection title="🧠 Stack Instructions" initiallyExpanded={false}>
-      <Typography variant="subtitle1" gutterBottom>
+      <Typography variant="h6" gutterBottom>
         Narrator Prose Emission
       </Typography>
-      <FormControl component="fieldset" fullWidth sx={{ mb: 2 }}>
+      <FormControl component="fieldset" fullWidth margin="normal">
+        <FormLabel component="legend">Mode</FormLabel>
         <RadioGroup
           row
           value={stackInstructions.narratorProseEmission.mode}
           onChange={(e) =>
-            handleProsePolicyChange('narratorProseEmission', 'mode', e.target.value as StackMode)
+            handlePolicyChange('narratorProseEmission', 'mode', e.target.value as StackMode)
           }
         >
           {Object.values(StackMode).map((mode) => (
@@ -95,17 +97,19 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
             label="N (Turns/Count)"
             type="number"
             value={stackInstructions.narratorProseEmission.n}
-            onChange={(e) => handleProsePolicyChange('narratorProseEmission', 'n', parseInt(e.target.value))}
+            onChange={(e) => handlePolicyChange('narratorProseEmission', 'n', parseInt(e.target.value))}
             sx={{ mt: 1, width: '150px' }}
+            inputProps={{ min: 0 }}
           />
         )}
-        <FormControl fullWidth sx={{ mt: 1 }}>
-          <InputLabel>Filtering</InputLabel>
+        <FormControl fullWidth sx={{ mt: 2 }}>
+          <InputLabel id="narrator-filtering-label">Filtering</InputLabel>
           <Select
+            labelId="narrator-filtering-label"
             value={stackInstructions.narratorProseEmission.filtering}
             label="Filtering"
             onChange={(e) =>
-              handleProsePolicyChange('narratorProseEmission', 'filtering', e.target.value as FilterMode)
+              handlePolicyChange('narratorProseEmission', 'filtering', e.target.value as FilterMode)
             }
           >
             {Object.values(FilterMode).map((mode) => (
@@ -117,12 +121,12 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
         </FormControl>
       </FormControl>
 
-      <Divider sx={{ my: 2 }} />
+      <Divider sx={{ my: 3 }} />
 
-      <Typography variant="subtitle1" gutterBottom>
+      <Typography variant="h6" gutterBottom>
         Digest Lines Emission & Policy
       </Typography>
-      <FormControl component="fieldset" fullWidth sx={{ mb: 2 }}>
+      <FormControl component="fieldset" fullWidth margin="normal">
         <FormLabel component="legend">Global Digest Filtering Policy</FormLabel>
         <RadioGroup
           row
@@ -161,6 +165,7 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
                     onChange={(e) => handleDigestEmissionChange(score, 'n', parseInt(e.target.value))}
                     size="small"
                     sx={{ mt: 1, width: '100px' }}
+                    inputProps={{ min: 0 }}
                   />
                 )}
               </FormControl>
@@ -169,17 +174,18 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
         ))}
       </Grid>
 
-      <Divider sx={{ my: 2 }} />
+      <Divider sx={{ my: 3 }} />
 
-      <Typography variant="subtitle1" gutterBottom>
+      <Typography variant="h6" gutterBottom>
         Expression Log Policy
       </Typography>
-      <FormControl component="fieldset" fullWidth sx={{ mb: 2 }}>
+      <FormControl component="fieldset" fullWidth margin="normal">
+        <FormLabel component="legend">Mode</FormLabel>
         <RadioGroup
           row
           value={stackInstructions.expressionLogPolicy.mode}
           onChange={(e) =>
-            handleProsePolicyChange('expressionLogPolicy', 'mode', e.target.value as StackMode)
+            handlePolicyChange('expressionLogPolicy', 'mode', e.target.value as StackMode)
           }
         >
           {Object.values(StackMode).map((mode) => (
@@ -192,17 +198,19 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
             label="N (Turns/Count)"
             type="number"
             value={stackInstructions.expressionLogPolicy.n}
-            onChange={(e) => handleProsePolicyChange('expressionLogPolicy', 'n', parseInt(e.target.value))}
+            onChange={(e) => handlePolicyChange('expressionLogPolicy', 'n', parseInt(e.target.value))}
             sx={{ mt: 1, width: '150px' }}
+            inputProps={{ min: 0 }}
           />
         )}
-        <FormControl fullWidth sx={{ mt: 1 }}>
-          <InputLabel>Filtering</InputLabel>
+        <FormControl fullWidth sx={{ mt: 2 }}>
+          <InputLabel id="expression-filtering-label">Filtering</InputLabel>
           <Select
+            labelId="expression-filtering-label"
             value={stackInstructions.expressionLogPolicy.filtering}
             label="Filtering"
             onChange={(e) =>
-              handleProsePolicyChange('expressionLogPolicy', 'filtering', e.target.value as FilterMode)
+              handlePolicyChange('expressionLogPolicy', 'filtering', e.target.value as FilterMode)
             }
           >
             {Object.values(FilterMode).map((mode) => (
@@ -214,11 +222,13 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
         </FormControl>
       </FormControl>
       <TextField
+        fullWidth
         label="Expression Lines Per Character"
         type="number"
         value={stackInstructions.expressionLinesPerCharacter}
         onChange={(e) => onStackInstructionsChange({ ...stackInstructions, expressionLinesPerCharacter: parseInt(e.target.value) })}
-        sx={{ mb: 2, width: '200px' }}
+        sx={{ mb: 2, width: '250px' }}
+        inputProps={{ min: 0 }}
       />
       <FormControlLabel
         control={
@@ -230,17 +240,18 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
         label="Emotion Weighting"
       />
 
-      <Divider sx={{ my: 2 }} />
+      <Divider sx={{ my: 3 }} />
 
-      <Typography variant="subtitle1" gutterBottom>
+      <Typography variant="h6" gutterBottom>
         World State Policy
       </Typography>
-      <FormControl component="fieldset" fullWidth sx={{ mb: 2 }}>
+      <FormControl component="fieldset" fullWidth margin="normal">
+        <FormLabel component="legend">Mode</FormLabel>
         <RadioGroup
           row
           value={stackInstructions.worldStatePolicy.mode}
           onChange={(e) =>
-            handleProsePolicyChange('worldStatePolicy', 'mode', e.target.value as StackMode)
+            handlePolicyChange('worldStatePolicy', 'mode', e.target.value as StackMode)
           }
         >
           {Object.values(StackMode).map((mode) => (
@@ -253,17 +264,19 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
             label="N (Items/Count)"
             type="number"
             value={stackInstructions.worldStatePolicy.n}
-            onChange={(e) => handleProsePolicyChange('worldStatePolicy', 'n', parseInt(e.target.value))}
+            onChange={(e) => handlePolicyChange('worldStatePolicy', 'n', parseInt(e.target.value))}
             sx={{ mt: 1, width: '150px' }}
+            inputProps={{ min: 0 }}
           />
         )}
-        <FormControl fullWidth sx={{ mt: 1 }}>
-          <InputLabel>Filtering</InputLabel>
+        <FormControl fullWidth sx={{ mt: 2 }}>
+          <InputLabel id="worldstate-filtering-label">Filtering</InputLabel>
           <Select
+            labelId="worldstate-filtering-label"
             value={stackInstructions.worldStatePolicy.filtering}
             label="Filtering"
             onChange={(e) =>
-              handleProsePolicyChange('worldStatePolicy', 'filtering', e.target.value as FilterMode)
+              handlePolicyChange('worldStatePolicy', 'filtering', e.target.value as FilterMode)
             }
           >
             {Object.values(FilterMode).map((mode) => (
@@ -275,17 +288,18 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
         </FormControl>
       </FormControl>
 
-      <Divider sx={{ my: 2 }} />
+      <Divider sx={{ my: 3 }} />
 
-      <Typography variant="subtitle1" gutterBottom>
+      <Typography variant="h6" gutterBottom>
         Known Entities Policy
       </Typography>
-      <FormControl component="fieldset" fullWidth sx={{ mb: 2 }}>
+      <FormControl component="fieldset" fullWidth margin="normal">
+        <FormLabel component="legend">Mode</FormLabel>
         <RadioGroup
           row
           value={stackInstructions.knownEntitiesPolicy.mode}
           onChange={(e) =>
-            handleProsePolicyChange('knownEntitiesPolicy', 'mode', e.target.value as StackMode)
+            handlePolicyChange('knownEntitiesPolicy', 'mode', e.target.value as StackMode)
           }
         >
           {Object.values(StackMode).map((mode) => (
@@ -298,17 +312,19 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
             label="N (Entities)"
             type="number"
             value={stackInstructions.knownEntitiesPolicy.n}
-            onChange={(e) => handleProsePolicyChange('knownEntitiesPolicy', 'n', parseInt(e.target.value))}
+            onChange={(e) => handlePolicyChange('knownEntitiesPolicy', 'n', parseInt(e.target.value))}
             sx={{ mt: 1, width: '150px' }}
+            inputProps={{ min: 0 }}
           />
         )}
-        <FormControl fullWidth sx={{ mt: 1 }}>
-          <InputLabel>Filtering</InputLabel>
+        <FormControl fullWidth sx={{ mt: 2 }}>
+          <InputLabel id="knownentities-filtering-label">Filtering</InputLabel>
           <Select
+            labelId="knownentities-filtering-label"
             value={stackInstructions.knownEntitiesPolicy.filtering}
             label="Filtering"
             onChange={(e) =>
-              handleProsePolicyChange('knownEntitiesPolicy', 'filtering', e.target.value as FilterMode)
+              handlePolicyChange('knownEntitiesPolicy', 'filtering', e.target.value as FilterMode)
             }
           >
             {Object.values(FilterMode).map((mode) => (
@@ -320,17 +336,20 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
         </FormControl>
       </FormControl>
 
-      <Divider sx={{ my: 2 }} />
+      <Divider sx={{ my: 3 }} />
 
+      <Typography variant="h6" gutterBottom>
+        Output Format
+      </Typography>
       <TextField
         fullWidth
-        label="Output Format"
+        label="Output Format String"
         value={stackInstructions.outputFormat}
         onChange={(e) => onStackInstructionsChange({ ...stackInstructions, outputFormat: e.target.value })}
-        sx={{ mb: 2 }}
+        sx={{ mb: 3 }}
       />
 
-      <Typography variant="subtitle1" gutterBottom>
+      <Typography variant="h6" gutterBottom>
         Token Policy
       </Typography>
       <TextField
@@ -339,7 +358,8 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
         type="number"
         value={stackInstructions.tokenPolicy.minTokens}
         onChange={(e) => handleTokenPolicyChange('minTokens', parseInt(e.target.value))}
-        sx={{ mb: 1.5 }}
+        sx={{ mb: 2 }}
+        inputProps={{ min: 0 }}
       />
       <TextField
         fullWidth
@@ -347,14 +367,15 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
         type="number"
         value={stackInstructions.tokenPolicy.maxTokens}
         onChange={(e) => handleTokenPolicyChange('maxTokens', parseInt(e.target.value))}
-        sx={{ mb: 1.5 }}
+        sx={{ mb: 2 }}
+        inputProps={{ min: 0 }}
       />
       <TextField
         fullWidth
-        label="Fallback Plan (comma-separated)"
+        label="Fallback Plan (comma-separated, e.g., drop_known_entities, truncate_expression_logs)"
         value={stackInstructions.tokenPolicy.fallbackPlan.join(', ')}
         onChange={(e) => handleTokenPolicyChange('fallbackPlan', e.target.value.split(',').map(s => s.trim()))}
-        sx={{ mb: 1.5 }}
+        sx={{ mb: 2 }}
       />
     </CollapsibleSection>
   );

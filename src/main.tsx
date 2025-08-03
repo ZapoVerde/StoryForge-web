@@ -2,19 +2,11 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
-import './index.css'; // Assuming you might add a global CSS file here later, currently it might not exist.
+import App from './App.tsx';
+import './index.css'; // You can keep or remove this if you rely purely on MUI styling
 
-// Get the root element from your public/index.html
-const rootElement = document.getElementById('root');
-
-if (rootElement) {
-  // Create a React root and render your App component
-  ReactDOM.createRoot(rootElement).render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>
-  );
-} else {
-  console.error("Root element with ID 'root' not found in the HTML.");
-}
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);
