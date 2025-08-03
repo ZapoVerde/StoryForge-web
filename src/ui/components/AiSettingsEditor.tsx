@@ -1,156 +1,367 @@
-// src/ui/components/AiSettingsEditor.tsx
+// src/state/useGameStateStore.ts
 
-import React from 'react';
-import {
-  Box,
-  Typography,
-  Slider,
-  Switch,
-  FormControlLabel,
-  Divider,
-  TextField,
-  MenuItem,
-} from '@mui/material';
-import { AiSettings, AiConnection } from '../../models/index';
-import { CollapsibleSection } from './CollapsibleSection';
+import { create } from 'zustand';
+import { GameSnapshot, GameState, LogEntry, Message } from '../models/index';
+// import { gameSession } from '../logic/gameSession'; // REMOVE this import
+import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
+import { produce } from 'immer'; // For immutable updates of nested objects
+import { useSettingsStore } from './useSettingsStore'; // Import the new settings store
+import { useCallback } from 'react'; // Import useCallback
 
-interface AiSettingsEditorProps {
-  label: string;
-  settings: AiSettings;
-  onSettingsChange: (updatedSettings: AiSettings) => void;
-  availableConnections: AiConnection[];
+// Access the globally available gameSessionInstance
+// This requires `declare global` block in main.tsx or a separate declaration file.
+const gameSession = typeof window !== 'undefined' ? window.gameSessionInstance : null;
+
+// Define types for pinning
+type PinToggleType = 'variable' | 'entity' | 'category';
+
+interface GameStateStore {
+  currentSnapshot: GameSnapshot | null;
+  currentPromptCardId: string | null;
+  currentGameState: GameState | null;
+  gameLogs: LogEntry[];
+  conversationHistory: Message[];
+  worldStatePinnedKeys: string[]; // Stores full variable paths, e.g., "npcs.#fox.hp"
+  narratorInputText: string;
+  narratorScrollPosition: number;
+  gameError: string | null;
+  gameLoading: boolean;
+
+  // Actions
+  initializeGame: (userId: string, cardId: string, existingSnapshotId?: string) => Promise<void>;
+  processPlayerAction: (action: string) => Promise<void>;
+  saveGame: () => Promise<void>;
+  loadGame: (snapshotId: string) => Promise<void>;
+
+  // Pinning actions
+  toggleWorldStatePin: (keyPath: string, type: PinToggleType) => void;
+  unpinAllForEntity: (entityPath: string) => void; // e.g., "npcs.#fox"
+  unpinIndividualVariable: (variablePath: string) => void; // e.g., "npcs.#fox.hp"
+
+  // UI related state updates
+  updateNarratorInputText: (text: string) => void;
+  updateNarratorScrollPosition: (position: number) => void;
+
+  // World state editing actions (will be implemented via logic layer eventually)
+  renameWorldCategory: (oldName: string, newName: string) => Promise<void>;
+  renameWorldEntity: (category: string, oldName: string, newName: string) => Promise<void>;
+  deleteWorldCategory: (category: string) => Promise<void>;
+  deleteWorldEntity: (category: string, entity: string) => Promise<void>;
+  editWorldKeyValue: (key: string, value: any) => Promise<void>;
+  deleteWorldKey: (key: string) => Promise<void>;
 }
 
-export const AiSettingsEditor: React.FC<AiSettingsEditorProps> = ({
-  label,
-  settings,
-  onSettingsChange,
-  availableConnections,
-}) => {
-  const handleSliderChange = (
-    prop: keyof AiSettings,
-    newValue: number | number[]
-  ) => {
-    onSettingsChange({ ...settings, [prop]: newValue as number });
-  };
+export const useGameStateStore = create<GameStateStore>((set, get) => ({
+  currentSnapshot: null,
+  currentPromptCardId: null,
+  currentGameState: null,
+  gameLogs: [],
+  conversationHistory: [],
+  worldStatePinnedKeys: [],
+  narratorInputText: '',
+  narratorScrollPosition: 0,
+  gameError: null,
+  gameLoading: false,
 
-  const handleSwitchChange = (prop: keyof AiSettings, checked: boolean) => {
-    onSettingsChange({ ...settings, [prop]: checked });
-  };
+  initializeGame: async (userId, cardId, existingSnapshotId) => {
+    if (!gameSession) {
+        set({ gameError: "Game session not initialized.", gameLoading: false });
+        return;
+    }
+    set({ gameLoading: true, gameError: null });
+    try {
+      await gameSession.initializeGame(userId, cardId, existingSnapshotId);
+      const snapshot = gameSession.getCurrentGameSnapshot();
+      if (snapshot) {
+        set({
+          currentSnapshot: snapshot,
+          currentPromptCardId: cardId,
+          currentGameState: snapshot.gameState,
+          gameLogs: snapshot.logs || [],
+          conversationHistory: snapshot.conversationHistory || [],
+          worldStatePinnedKeys: snapshot.worldStatePinnedKeys || [], // Load pinned keys
+        });
+      }
+      set({ gameLoading: false });
+    } catch (error: any) {
+      set({ gameError: error.message, gameLoading: false });
+      console.error("Error initializing game:", error);
+    }
+  },
 
-  const handleConnectionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    onSettingsChange({ ...settings, selectedConnectionId: event.target.value });
-  };
+  processPlayerAction: async (action) => {
+    if (!gameSession) {
+        set({ gameError: "Game session not initialized.", gameLoading: false });
+        return;
+    }
+    set({ gameLoading: true, gameError: null });
 
-  return (
-    <CollapsibleSection title={label} initiallyExpanded={false}>
-      <TextField
-        select
-        fullWidth
-        label="AI Connection"
-        value={settings.selectedConnectionId}
-        onChange={handleConnectionChange}
-        variant="outlined"
-        sx={{ mb: 2 }}
-      >
-        {availableConnections.map((conn) => (
-          <MenuItem key={conn.id} value={conn.id}>
-            {conn.modelName} ({conn.id})
-          </MenuItem>
-        ))}
-      </TextField>
+    // Get the dummy narrator state from useSettingsStore
+    const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
 
-      <Typography gutterBottom>
-        Temperature: {settings.temperature.toFixed(2)}
-      </Typography>
-      <Slider
-        value={settings.temperature}
-        onChange={(_e, val) => handleSliderChange('temperature', val)}
-        min={0.0}
-        max={1.5}
-        step={0.01}
-        valueLabelDisplay="auto"
-      />
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Controls randomness. Low = logical, high = creative. RPG-optimal:
-        0.7–1.0.
-      </Typography>
+    try {
+      // Pass the dummy narrator flag to gameSession
+      const { aiProse, newLogEntries, updatedSnapshot } = await gameSession.processPlayerAction(
+        action,
+        useDummyNarrator // Pass the flag
+      );
+      set({
+        currentSnapshot: updatedSnapshot,
+        currentGameState: updatedSnapshot.gameState,
+        gameLogs: updatedSnapshot.logs,
+        conversationHistory: updatedSnapshot.conversationHistory,
+        narratorInputText: '',
+        worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys || [], // Update pinned keys
+      });
+      set({ gameLoading: false });
+    } catch (error: any) {
+      set({ gameError: error.message, gameLoading: false });
+      console.error("Error processing player action:", error);
+    }
+  },
 
-      <Typography gutterBottom>Top P: {settings.topP.toFixed(2)}</Typography>
-      <Slider
-        value={settings.topP}
-        onChange={(_e, val) => handleSliderChange('topP', val)}
-        min={0.0}
-        max={1.0}
-        step={0.01}
-        valueLabelDisplay="auto"
-      />
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Controls diversity. Lower = focused, higher = expressive. RPG-optimal:
-        0.8–1.0.
-      </Typography>
+  saveGame: async () => {
+    if (!gameSession) {
+        console.warn("Cannot save game: game session not initialized.");
+        return;
+    }
+    const currentSnapshot = get().currentSnapshot;
+    if (currentSnapshot) {
+        // Before saving, ensure the gameSession's internal snapshot reflects the current pinned keys from Zustand.
+        // This is important because `toggleWorldStatePin` directly updates the store's `currentSnapshot` object,
+        // but `gameSession` might not immediately reflect that change in its *own* internal `currentSnapshot`.
+        // A direct way to do this is to ensure `gameSession.currentSnapshot` is explicitly updated.
+        // For now, `processPlayerAction` already sets `gameSession.currentSnapshot = updatedSnapshot`,
+        // and `toggleWorldStatePin` also updates the `currentSnapshot` within the Zustand store.
+        // So, when `saveGame` is called, `gameSession.getCurrentGameSnapshot()` will return the
+        // Zustand-updated snapshot (if the reference is the same, which it is if Immer is used to update the whole object).
+        // To be explicit, we could pass the currentSnapshot:
+        // await gameSession.saveGame(currentSnapshot); // (Requires modifying IGameSession.saveGame)
+        // For now, relying on the fact that `currentSnapshot` in GameSession points to the same object as in store after updates.
+        await gameSession.saveGame();
+    } else {
+        console.warn("No current snapshot to save.");
+    }
+  },
+  loadGame: async (snapshotId) => {
+    if (!gameSession || !get().currentUserId) {
+        set({ gameError: "Game session not initialized or user not logged in.", gameLoading: false });
+        return;
+    }
+    set({ gameLoading: true, gameError: null });
+    try {
+      await gameSession.loadGame(snapshotId);
+      const snapshot = gameSession.getCurrentGameSnapshot();
+      if (snapshot) {
+        set({
+          currentSnapshot: snapshot,
+          currentPromptCardId: snapshot.promptCardId,
+          currentGameState: snapshot.gameState,
+          gameLogs: snapshot.logs || [],
+          conversationHistory: snapshot.conversationHistory || [],
+          worldStatePinnedKeys: snapshot.worldStatePinnedKeys || [], // Load pinned keys
+        });
+      }
+      set({ gameLoading: false });
+    } catch (error: any) {
+      set({ gameError: error.message, gameLoading: false });
+      console.error("Error loading game:", error);
+    }
+  },
 
-      <Typography gutterBottom>Max Tokens: {settings.maxTokens}</Typography>
-      <Slider
-        value={settings.maxTokens}
-        onChange={(_e, val) => handleSliderChange('maxTokens', val)}
-        min={256}
-        max={8192}
-        step={256}
-        valueLabelDisplay="auto"
-      />
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Maximum length of AI reply. Longer = more story depth. RPG-optimal:
-        1024–4096.
-      </Typography>
+  toggleWorldStatePin: (keyPath: string, type: PinToggleType) => {
+    set(produce((state: GameStateStore) => { // Use immer's produce for immutable updates
+      const currentWorldState = state.currentGameState?.worldState || {};
+      const newPinnedKeys = new Set(state.worldStatePinnedKeys);
 
-      <Typography gutterBottom>
-        Presence Penalty: {settings.presencePenalty.toFixed(2)}
-      </Typography>
-      <Slider
-        value={settings.presencePenalty}
-        onChange={(_e, val) => handleSliderChange('presencePenalty', val)}
-        min={-2.0}
-        max={2.0}
-        step={0.01}
-        valueLabelDisplay="auto"
-      />
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Discourages introducing new topics repeatedly. RPG-optimal: 0.0–0.5.
-      </Typography>
+      const isCurrentlyPinned = (path: string) => newPinnedKeys.has(path);
 
-      <Typography gutterBottom>
-        Frequency Penalty: {settings.frequencyPenalty.toFixed(2)}
-      </Typography>
-      <Slider
-        value={settings.frequencyPenalty}
-        onChange={(_e, val) => handleSliderChange('frequencyPenalty', val)}
-        min={-2.0}
-        max={2.0}
-        step={0.01}
-        valueLabelDisplay="auto"
-      />
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Discourages repeating phrases. Helps avoid spam. RPG-optimal: 0.2–0.8.
-      </Typography>
+      let relevantKeysToToggle: string[] = [];
 
-      <Divider sx={{ my: 2 }} />
+      if (type === 'variable') {
+        relevantKeysToToggle = [keyPath];
+      } else if (type === 'entity') {
+        const flattenedEntity = flattenJsonObject(getNestedValue(currentWorldState, keyPath.split('.')), keyPath);
+        relevantKeysToToggle = Object.keys(flattenedEntity).filter(k => {
+          return k.startsWith(keyPath + '.') && k.split('.').length > keyPath.split('.').length;
+        });
+      } else if (type === 'category') {
+        const flattenedCategory = flattenJsonObject(getNestedValue(currentWorldState, keyPath.split('.')), keyPath);
+        relevantKeysToToggle = Object.keys(flattenedCategory).filter(k => {
+          return k.startsWith(keyPath + '.') && k.split('.').length > keyPath.split('.').length;
+        });
+      }
 
-      <FormControlLabel
-        control={
-          <Switch
-            checked={settings.functionCallingEnabled}
-            onChange={(e) =>
-              handleSwitchChange('functionCallingEnabled', e.target.checked)
-            }
-          />
+      const shouldPin = relevantKeysToToggle.length > 0
+        ? !isCurrentlyPinned(relevantKeysToToggle[0])
+        : true; // If no keys found, default to pinning (e.g., new category/entity)
+
+      relevantKeysToToggle.forEach(key => {
+        if (shouldPin) {
+          newPinnedKeys.add(key);
+        } else {
+          newPinnedKeys.delete(key);
         }
-        label="Enable Function Calling"
-      />
-      <Typography variant="body2" color="text.secondary">
-        Allows AI to call structured functions (if you've defined them in the
-        prompt).
-      </Typography>
-    </CollapsibleSection>
-  );
-};
+      });
+
+      state.worldStatePinnedKeys = Array.from(newPinnedKeys);
+      if (state.currentSnapshot) {
+        state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+      }
+    }));
+    get().saveGame(); // Trigger a save after pinning state changes
+  },
+
+  unpinAllForEntity: (entityPath: string) => {
+    set(produce((state: GameStateStore) => {
+      const newPinnedKeys = new Set(state.worldStatePinnedKeys);
+      state.worldStatePinnedKeys.forEach(key => {
+        if (key.startsWith(entityPath + '.')) {
+          newPinnedKeys.delete(key);
+        }
+      });
+      state.worldStatePinnedKeys = Array.from(newPinnedKeys);
+      if (state.currentSnapshot) {
+        state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+      }
+    }));
+    get().saveGame();
+  },
+
+  unpinIndividualVariable: (variablePath: string) => {
+    set(produce((state: GameStateStore) => {
+      state.worldStatePinnedKeys = state.worldStatePinnedKeys.filter(key => key !== variablePath);
+      if (state.currentSnapshot) {
+        state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+      }
+    }));
+    get().saveGame();
+  },
+
+  updateNarratorInputText: (text) => set({ narratorInputText: text }),
+  updateNarratorScrollPosition: (position) => set({ narratorScrollPosition: position }),
+
+  renameWorldCategory: async (oldName, newName) => {
+    set(produce((state: GameStateStore) => {
+      if (!state.currentGameState) return;
+      const newWorldState = state.currentGameState.worldState; // immer makes this mutable draft
+      if (newWorldState[oldName]) {
+        newWorldState[newName] = newWorldState[oldName];
+        delete newWorldState[oldName];
+        state.currentGameState.worldState = newWorldState; // Assign back the draft
+
+        // Update pinned keys
+        state.worldStatePinnedKeys = state.worldStatePinnedKeys.map(key =>
+            key.startsWith(oldName + '.') ? `${newName}${key.substring(oldName.length)}` : key
+        );
+        if (state.currentSnapshot) {
+            state.currentSnapshot.gameState.worldState = newWorldState;
+            state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+        }
+      }
+    }));
+    get().saveGame();
+  },
+  renameWorldEntity: async (category, oldName, newName) => {
+    set(produce((state: GameStateStore) => {
+      if (!state.currentGameState || !state.currentGameState.worldState[category]) return;
+      const categoryObj = state.currentGameState.worldState[category]; // mutable draft
+      if (categoryObj[oldName]) {
+        categoryObj[newName] = categoryObj[oldName];
+        delete categoryObj[oldName];
+        state.currentGameState.worldState[category] = categoryObj;
+
+        // Update pinned keys
+        const oldEntityPath = `${category}.${oldName}`;
+        const newEntityPath = `${category}.${newName}`;
+        state.worldStatePinnedKeys = state.worldStatePinnedKeys.map(key =>
+            key.startsWith(oldEntityPath + '.') ? `${newEntityPath}${key.substring(oldEntityPath.length)}` : key
+        );
+        if (state.currentSnapshot) {
+            state.currentSnapshot.gameState.worldState = state.currentGameState.worldState;
+            state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+        }
+      }
+    }));
+    get().saveGame();
+  },
+  deleteWorldCategory: async (category) => {
+    set(produce((state: GameStateStore) => {
+      if (!state.currentGameState || !state.currentGameState.worldState[category]) return;
+      const newWorldState = state.currentGameState.worldState; // mutable draft
+      delete newWorldState[category];
+      state.currentGameState.worldState = newWorldState;
+
+      // Remove relevant pinned keys
+      state.worldStatePinnedKeys = state.worldStatePinnedKeys.filter(key => !key.startsWith(category + '.'));
+      if (state.currentSnapshot) {
+          state.currentSnapshot.gameState.worldState = newWorldState;
+          state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+      }
+    }));
+    get().saveGame();
+  },
+  deleteWorldEntity: async (category, entity) => {
+    set(produce((state: GameStateStore) => {
+      if (!state.currentGameState || !state.currentGameState.worldState[category] || !state.currentGameState.worldState[category][entity]) return;
+      const categoryObj = state.currentGameState.worldState[category]; // mutable draft
+      delete categoryObj[entity];
+      state.currentGameState.worldState[category] = categoryObj;
+
+      // Remove relevant pinned keys
+      const entityPath = `${category}.${entity}`;
+      state.worldStatePinnedKeys = state.worldStatePinnedKeys.filter(key => !key.startsWith(entityPath + '.'));
+      if (state.currentSnapshot) {
+          state.currentSnapshot.gameState.worldState = state.currentGameState.worldState;
+          state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+      }
+    }));
+    get().saveGame();
+  },
+  editWorldKeyValue: async (key, value) => {
+    set(produce((state: GameStateStore) => {
+      if (!state.currentGameState) return;
+      const newWorldState = state.currentGameState.worldState; // mutable draft
+      const parts = key.split('.');
+      let current: any = newWorldState;
+      for (let i = 0; i < parts.length - 1; i++) {
+          const part = parts[i];
+          if (!(part in current)) {
+              current[part] = {};
+          }
+          current = current[part];
+      }
+      current[parts[parts.length - 1]] = value;
+      state.currentGameState.worldState = newWorldState; // Assign back the draft
+      if (state.currentSnapshot) {
+          state.currentSnapshot.gameState.worldState = newWorldState;
+      }
+    }));
+    get().saveGame();
+  },
+  deleteWorldKey: async (key) => {
+    set(produce((state: GameStateStore) => {
+      if (!state.currentGameState) return;
+      const newWorldState = state.currentGameState.worldState; // mutable draft
+      const parts = key.split('.');
+      let current: any = newWorldState;
+      for (let i = 0; i < parts.length - 1; i++) {
+          const part = parts[i];
+          if (!(part in current)) {
+              return; // Path doesn't exist, nothing to delete
+          }
+          current = current[part];
+      }
+      delete current[parts[parts.length - 1]];
+      state.currentGameState.worldState = newWorldState;
+
+      // Remove from pinned keys
+      state.worldStatePinnedKeys = state.worldStatePinnedKeys.filter(pk => pk !== key);
+      if (state.currentSnapshot) {
+          state.currentSnapshot.gameState.worldState = newWorldState;
+          state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+      }
+    }));
+    get().saveGame();
+  },
+}));

@@ -29,4 +29,7 @@ export interface GameSnapshot {
   // Note: All "digests" are now just part of the logs.
   // We extract them for context building, but don't store them separately.
   logs: LogEntry[];
+
+  // --- UI Preferences (Persisted with Snapshot) ---
+  worldStatePinnedKeys: string[]; // Stores full variable paths, e.g., "npcs.#fox.hp"
 }

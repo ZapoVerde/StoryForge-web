@@ -9,14 +9,16 @@ import {
   query,
   getDocs,
   serverTimestamp,
-  orderBy
+  orderBy,
+  Timestamp, // Import Timestamp type
 } from 'firebase/firestore';
 import { db } from '../infrastructure/firebaseClient';
 import { GameSnapshot } from '../../models/GameSnapshot';
 import { AiConnection } from '../../models/AiConnection';
+import { generateUuid } from '../../utils/uuid'; // Import generateUuid
 
 /**
- * Defines the contract for GameSnapshot data persistence operations.
+ * Defines the contract for GameSnapshot and AiConnection data persistence operations.
  */
 export interface IGameRepository {
   /**
@@ -52,11 +54,26 @@ export interface IGameRepository {
 
   /**
    * Retrieves all AI Connections for a user.
-   * For MVP, this might be a static list or a simple Firestore collection.
    * @param userId The ID of the user.
    * @returns A Promise resolving with an array of AiConnection objects.
    */
   getAiConnections(userId: string): Promise<AiConnection[]>;
+
+  /**
+   * Saves a new or updates an existing AI Connection.
+   * @param userId The ID of the user.
+   * @param connection The AiConnection object to save.
+   * @returns A Promise that resolves when the connection is successfully saved.
+   */
+  saveAiConnection(userId: string, connection: AiConnection): Promise<void>;
+
+  /**
+   * Deletes an AI Connection by its ID for a specific user.
+   * @param userId The ID of the user.
+   * @param connectionId The ID of the AiConnection to delete.
+   * @returns A Promise that resolves when the connection is successfully deleted.
+   */
+  deleteAiConnection(userId: string, connectionId: string): Promise<void>;
 }
 
 /**
@@ -69,15 +86,23 @@ class FirestoreGameRepository implements IGameRepository {
     return collection(db, 'users', userId, 'gameSnapshots');
   }
 
-  private getConnectionsCollectionRef(userId: string) {
+  private getAiConnectionsCollectionRef(userId: string) {
     // Path: users/{userId}/aiConnections
     return collection(db, 'users', userId, 'aiConnections');
   }
 
+  // Helper to convert Firestore Timestamp to ISO string
+  private convertTimestamps<T extends { createdAt?: string | Timestamp; updatedAt?: string | Timestamp; lastUpdated?: string | Timestamp }>(data: any): T {
+    return {
+      ...data,
+      createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
+      updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
+      lastUpdated: data.lastUpdated instanceof Timestamp ? data.lastUpdated.toDate().toISOString() : data.lastUpdated,
+    } as T;
+  }
+
   async saveGameSnapshot(userId: string, snapshot: GameSnapshot): Promise<void> {
     const snapshotDocRef = doc(this.getSnapshotsCollectionRef(userId), snapshot.id);
-    // Use setDoc with merge: true to avoid overwriting on partial updates, though we save the whole object here.
-    // It's a good practice.
     await setDoc(snapshotDocRef, {
       ...snapshot,
       updatedAt: serverTimestamp() // Use Firestore's server-side timestamp for accuracy
@@ -91,12 +116,7 @@ class FirestoreGameRepository implements IGameRepository {
 
     if (snapshotSnap.exists()) {
       const data = snapshotSnap.data();
-      // Firestore's serverTimestamp() retrieves as a Timestamp object. Convert to ISO string.
-      return {
-        ...data,
-        createdAt: data.createdAt?.toDate?.()?.toISOString() ?? data.createdAt,
-        updatedAt: data.updatedAt?.toDate?.()?.toISOString() ?? data.updatedAt,
-      } as GameSnapshot;
+      return this.convertTimestamps<GameSnapshot>(data);
     } else {
       console.log(`No GameSnapshot found with ID: ${snapshotId} for user ${userId}`);
       return null;
@@ -111,12 +131,7 @@ class FirestoreGameRepository implements IGameRepository {
     const querySnapshot = await getDocs(q);
     const snapshots: GameSnapshot[] = [];
     querySnapshot.forEach((doc) => {
-      const data = doc.data();
-      snapshots.push({
-        ...data,
-        createdAt: data.createdAt?.toDate?.()?.toISOString() ?? data.createdAt,
-        updatedAt: data.updatedAt?.toDate?.()?.toISOString() ?? data.updatedAt,
-      } as GameSnapshot);
+      snapshots.push(this.convertTimestamps<GameSnapshot>(doc.data()));
     });
     return snapshots;
   }
@@ -128,25 +143,53 @@ class FirestoreGameRepository implements IGameRepository {
   }
 
   async getAiConnections(userId: string): Promise<AiConnection[]> {
-    // For MVP, we can return a static, default list.
-    // A full implementation would fetch this from `users/{userId}/aiConnections` in Firestore.
-    // This allows users to configure their own API keys and endpoints.
-    return [
-      {
-        id: 'deepseek-coder-default',
-        modelName: 'DeepSeek Coder (Default)',
-        modelSlug: 'deepseek-coder',
-        apiUrl: 'https://api.deepseek.com/v1/',
-        apiToken: 'YOUR_DEEPSEEK_API_KEY_HERE', // User should be able to edit this
-      },
-      // {
-      //   id: 'openai-gpt4-default',
-      //   modelName: 'OpenAI GPT-4 (Default)',
-      //   modelSlug: 'gpt-4-turbo',
-      //   apiUrl: 'https://api.openai.com/v1/',
-      //   apiToken: 'YOUR_OPENAI_API_KEY_HERE',
-      // },
-    ];
+    const q = query(
+      this.getAiConnectionsCollectionRef(userId),
+      orderBy('displayName', 'asc') // Order by display name
+    );
+    const querySnapshot = await getDocs(q);
+    const connections: AiConnection[] = [];
+    querySnapshot.forEach((docSnap) => {
+      // Ensure the ID from the document is used
+      connections.push(this.convertTimestamps<AiConnection>(docSnap.data()));
+    });
+
+    // Provide a default DeepSeek connection if no connections exist for the user.
+    // This allows immediate testing without requiring users to manually add one.
+    if (connections.length === 0) {
+      console.log("No AI connections found, returning default.");
+      return [
+        {
+          id: generateUuid(), // Use a generated UUID for the default
+          displayName: 'DeepSeek Coder (Default)', // Added displayName
+          modelName: 'DeepSeek Coder (Default)',
+          modelSlug: 'deepseek-coder',
+          apiUrl: 'https://api.deepseek.com/v1/',
+          apiToken: 'YOUR_DEEPSEEK_API_KEY_HERE', // User should be able to edit this
+          functionCallingEnabled: false, // Default value
+          createdAt: new Date().toISOString(),
+          lastUpdated: new Date().toISOString(),
+          userAgent: 'StoryForge/1.0 (Default)'
+        },
+      ];
+    }
+    return connections;
+  }
+
+  async saveAiConnection(userId: string, connection: AiConnection): Promise<void> {
+    const connectionDocRef = doc(this.getAiConnectionsCollectionRef(userId), connection.id);
+    await setDoc(connectionDocRef, {
+      ...connection,
+      createdAt: connection.createdAt || serverTimestamp(), // Set createdAt only on initial creation
+      lastUpdated: serverTimestamp(), // Always update lastUpdated
+    }, { merge: true });
+    console.log(`AI Connection ${connection.id} saved for user ${userId}`);
+  }
+
+  async deleteAiConnection(userId: string, connectionId: string): Promise<void> {
+    const connectionDocRef = doc(this.getAiConnectionsCollectionRef(userId), connectionId);
+    await deleteDoc(connectionDocRef);
+    console.log(`AI Connection ${connectionId} deleted for user ${userId}`);
   }
 }
 

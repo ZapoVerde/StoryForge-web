@@ -2,8 +2,15 @@
 
 import { create } from 'zustand';
 import { GameSnapshot, GameState, LogEntry, Message } from '../models/index';
-import { gameSession } from '../logic/gameSession';
-import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils'; // Import flattenJsonObject and getNestedValue (will add getNestedValue to jsonUtils)
+// import { gameSession } from '../logic/gameSession'; // REMOVE this import
+import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
+import { produce } from 'immer'; // For immutable updates of nested objects
+import { useSettingsStore } from './useSettingsStore'; // Import the new settings store
+import { useCallback } from 'react'; // Import useCallback
+
+// Access the globally available gameSessionInstance
+// This requires `declare global` block in main.tsx or a separate declaration file.
+const gameSession = typeof window !== 'undefined' ? window.gameSessionInstance : null;
 
 // Define types for pinning
 type PinToggleType = 'variable' | 'entity' | 'category';
@@ -57,83 +64,24 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   gameLoading: false,
 
   initializeGame: async (userId, cardId, existingSnapshotId) => {
+    if (!gameSession) {
+        set({ gameError: "Game session not initialized.", gameLoading: false });
+        return;
+    }
     set({ gameLoading: true, gameError: null });
     try {
-      // Stub: Replace with actual gameSession call and state update
-      // await gameSession.initializeGame(userId, cardId, existingSnapshotId);
-      // const snapshot = gameSession.getCurrentGameSnapshot();
-      // if (snapshot) {
-      //   set({
-      //     currentSnapshot: snapshot,
-      //     currentPromptCardId: cardId,
-      //     currentGameState: snapshot.gameState,
-      //     gameLogs: snapshot.logs || [],
-      //     conversationHistory: snapshot.conversationHistory || [],
-      //   });
-      // }
-      // Placeholder for testing:
-      const dummySnapshot: GameSnapshot = {
-        id: 'dummy-game-1',
-        userId: userId,
-        promptCardId: cardId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        currentTurn: 0,
-        gameState: {
-          narration: "Welcome to the dummy game!",
-          worldState: {
-            player: {
-              "#you": {
-                hp: 100,
-                mana: 50,
-                tag: 'character'
-              }
-            },
-            npcs: {
-              "#goblin_1": {
-                hp: 20,
-                weapon: "axe",
-                tag: 'character'
-              },
-              "#fox": {
-                trust: 75,
-                status: "friendly",
-                tag: 'character'
-              }
-            },
-            locations: {
-                "@deepwood": {
-                    weather: "foggy",
-                    season: "autumn",
-                    tag: 'location'
-                }
-            },
-            inventory: {
-                sword: 1,
-                shield: 1
-            },
-            quests: {
-                main: {
-                    status: "active",
-                    objective: "Find the lost artifact"
-                }
-            }
-          },
-          scene: {
-            location: "@deepwood",
-            present: ["player.#you", "npcs.#fox"],
-          },
-        },
-        conversationHistory: [],
-        logs: [],
-      };
-      set({
-        currentSnapshot: dummySnapshot,
-        currentPromptCardId: cardId,
-        currentGameState: dummySnapshot.gameState,
-        gameLogs: dummySnapshot.logs || [],
-        conversationHistory: dummySnapshot.conversationHistory || [],
-      });
+      await gameSession.initializeGame(userId, cardId, existingSnapshotId);
+      const snapshot = gameSession.getCurrentGameSnapshot();
+      if (snapshot) {
+        set({
+          currentSnapshot: snapshot,
+          currentPromptCardId: cardId,
+          currentGameState: snapshot.gameState,
+          gameLogs: snapshot.logs || [],
+          conversationHistory: snapshot.conversationHistory || [],
+          worldStatePinnedKeys: snapshot.worldStatePinnedKeys || [], // Load pinned keys
+        });
+      }
       set({ gameLoading: false });
     } catch (error: any) {
       set({ gameError: error.message, gameLoading: false });
@@ -142,46 +90,28 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   processPlayerAction: async (action) => {
+    if (!gameSession) {
+        set({ gameError: "Game session not initialized.", gameLoading: false });
+        return;
+    }
     set({ gameLoading: true, gameError: null });
-    try {
-      // Stub: Replace with actual gameSession call
-      // const { aiProse, newLogEntries, updatedSnapshot } = await gameSession.processPlayerAction(action);
-      // set({
-      //   currentSnapshot: updatedSnapshot,
-      //   currentGameState: updatedSnapshot.gameState,
-      //   gameLogs: updatedSnapshot.logs,
-      //   conversationHistory: updatedSnapshot.conversationHistory,
-      //   narratorInputText: '',
-      // });
-      // Placeholder for testing:
-      set((state) => {
-        const newLogEntry: LogEntry = {
-          turnNumber: (state.currentSnapshot?.currentTurn || 0) + 1,
-          timestamp: new Date().toISOString(),
-          userInput: action,
-          narratorOutput: `AI responds to: "${action}". Some new event happens...`,
-          digestLines: [{ text: `User acted: ${action}`, importance: 3 }],
-          deltas: null,
-          errorFlags: [],
-          modelSlugUsed: 'dummy-model',
-        };
-        const updatedLogs = [...state.gameLogs, newLogEntry];
-        const updatedHistory = [...state.conversationHistory, { role: 'user', content: action }, { role: 'assistant', content: newLogEntry.narratorOutput }];
-        const updatedSnapshot = state.currentSnapshot ? {
-            ...state.currentSnapshot,
-            currentTurn: newLogEntry.turnNumber,
-            logs: updatedLogs,
-            conversationHistory: updatedHistory,
-            updatedAt: new Date().toISOString(),
-        } : null;
 
-        return {
-          gameLogs: updatedLogs,
-          conversationHistory: updatedHistory,
-          narratorInputText: '',
-          currentSnapshot: updatedSnapshot,
-          currentGameState: updatedSnapshot?.gameState, // Ensure game state is updated too
-        };
+    // Get the dummy narrator state from useSettingsStore
+    const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
+
+    try {
+      // Pass the dummy narrator flag to gameSession
+      const { aiProse, newLogEntries, updatedSnapshot } = await gameSession.processPlayerAction(
+        action,
+        useDummyNarrator // Pass the flag
+      );
+      set({
+        currentSnapshot: updatedSnapshot,
+        currentGameState: updatedSnapshot.gameState,
+        gameLogs: updatedSnapshot.logs,
+        conversationHistory: updatedSnapshot.conversationHistory,
+        narratorInputText: '',
+        worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys || [], // Update pinned keys
       });
       set({ gameLoading: false });
     } catch (error: any) {
@@ -191,21 +121,56 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   saveGame: async () => {
-    if (!get().currentUserId || !get().currentSnapshot) {
-        console.warn("Cannot save game: user or game snapshot not initialized.");
+    if (!gameSession) {
+        console.warn("Cannot save game: game session not initialized.");
         return;
     }
-    // await gameSession.saveGame();
-    // For stub, just log
-    console.log(`Stub: Game snapshot ${get().currentSnapshot?.id} saved.`);
+    const currentSnapshot = get().currentSnapshot;
+    if (currentSnapshot) {
+        // Before saving, ensure the gameSession's internal snapshot reflects the current pinned keys from Zustand.
+        // This is important because `toggleWorldStatePin` directly updates the store's `currentSnapshot` object,
+        // but `gameSession` might not immediately reflect that change in its *own* internal `currentSnapshot`.
+        // A direct way to do this is to ensure `gameSession.currentSnapshot` is explicitly updated.
+        // For now, `processPlayerAction` already sets `gameSession.currentSnapshot = updatedSnapshot`,
+        // and `toggleWorldStatePin` also updates the `currentSnapshot` within the Zustand store.
+        // So, when `saveGame` is called, `gameSession.getCurrentGameSnapshot()` will return the
+        // Zustand-updated snapshot (if the reference is the same, which it is if Immer is used to update the whole object).
+        // To be explicit, we could pass the currentSnapshot:
+        // await gameSession.saveGame(currentSnapshot); // (Requires modifying IGameSession.saveGame)
+        // For now, relying on the fact that `currentSnapshot` in GameSession points to the same object as in store after updates.
+        await gameSession.saveGame();
+    } else {
+        console.warn("No current snapshot to save.");
+    }
   },
   loadGame: async (snapshotId) => {
-    // Stub: Implement load logic via gameSession
-    console.log(`Stub: Loading game ${snapshotId}`);
+    if (!gameSession || !get().currentUserId) {
+        set({ gameError: "Game session not initialized or user not logged in.", gameLoading: false });
+        return;
+    }
+    set({ gameLoading: true, gameError: null });
+    try {
+      await gameSession.loadGame(snapshotId);
+      const snapshot = gameSession.getCurrentGameSnapshot();
+      if (snapshot) {
+        set({
+          currentSnapshot: snapshot,
+          currentPromptCardId: snapshot.promptCardId,
+          currentGameState: snapshot.gameState,
+          gameLogs: snapshot.logs || [],
+          conversationHistory: snapshot.conversationHistory || [],
+          worldStatePinnedKeys: snapshot.worldStatePinnedKeys || [], // Load pinned keys
+        });
+      }
+      set({ gameLoading: false });
+    } catch (error: any) {
+      set({ gameError: error.message, gameLoading: false });
+      console.error("Error loading game:", error);
+    }
   },
 
   toggleWorldStatePin: (keyPath: string, type: PinToggleType) => {
-    set((state) => {
+    set(produce((state: GameStateStore) => { // Use immer's produce for immutable updates
       const currentWorldState = state.currentGameState?.worldState || {};
       const newPinnedKeys = new Set(state.worldStatePinnedKeys);
 
@@ -216,23 +181,19 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
       if (type === 'variable') {
         relevantKeysToToggle = [keyPath];
       } else if (type === 'entity') {
-        // Find all variables under this entity
         const flattenedEntity = flattenJsonObject(getNestedValue(currentWorldState, keyPath.split('.')), keyPath);
         relevantKeysToToggle = Object.keys(flattenedEntity).filter(k => {
-          // Exclude the entity path itself if it's not a direct variable (e.g., 'npcs.#fox' vs 'npcs.#fox.hp')
-          return k.split('.').length > keyPath.split('.').length;
+          return k.startsWith(keyPath + '.') && k.split('.').length > keyPath.split('.').length;
         });
       } else if (type === 'category') {
-        // Find all variables under this category
         const flattenedCategory = flattenJsonObject(getNestedValue(currentWorldState, keyPath.split('.')), keyPath);
         relevantKeysToToggle = Object.keys(flattenedCategory).filter(k => {
-          return k.split('.').length > keyPath.split('.').length;
+          return k.startsWith(keyPath + '.') && k.split('.').length > keyPath.split('.').length;
         });
       }
 
-      // Determine if we should pin or unpin based on the first relevant key's current state
       const shouldPin = relevantKeysToToggle.length > 0
-        ? !isCurrentlyPinned(relevantKeysToToggle[0]) // Toggle based on first key
+        ? !isCurrentlyPinned(relevantKeysToToggle[0])
         : true; // If no keys found, default to pinning (e.g., new category/entity)
 
       relevantKeysToToggle.forEach(key => {
@@ -243,36 +204,164 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
         }
       });
 
-      return { worldStatePinnedKeys: Array.from(newPinnedKeys) };
-    });
+      state.worldStatePinnedKeys = Array.from(newPinnedKeys);
+      if (state.currentSnapshot) {
+        state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+      }
+    }));
+    get().saveGame(); // Trigger a save after pinning state changes
   },
 
   unpinAllForEntity: (entityPath: string) => {
-    set((state) => {
+    set(produce((state: GameStateStore) => {
       const newPinnedKeys = new Set(state.worldStatePinnedKeys);
-      // Remove all keys that start with the entityPath
       state.worldStatePinnedKeys.forEach(key => {
         if (key.startsWith(entityPath + '.')) {
           newPinnedKeys.delete(key);
         }
       });
-      return { worldStatePinnedKeys: Array.from(newPinnedKeys) };
-    });
+      state.worldStatePinnedKeys = Array.from(newPinnedKeys);
+      if (state.currentSnapshot) {
+        state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+      }
+    }));
+    get().saveGame();
   },
 
   unpinIndividualVariable: (variablePath: string) => {
-    set((state) => ({
-      worldStatePinnedKeys: state.worldStatePinnedKeys.filter(key => key !== variablePath),
+    set(produce((state: GameStateStore) => {
+      state.worldStatePinnedKeys = state.worldStatePinnedKeys.filter(key => key !== variablePath);
+      if (state.currentSnapshot) {
+        state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+      }
     }));
+    get().saveGame();
   },
 
   updateNarratorInputText: (text) => set({ narratorInputText: text }),
   updateNarratorScrollPosition: (position) => set({ narratorScrollPosition: position }),
 
-  renameWorldCategory: async (oldName, newName) => { console.log(`Stub: Renaming category ${oldName} to ${newName}`); /* Implement logic */ },
-  renameWorldEntity: async (category, oldName, newName) => { console.log(`Stub: Renaming entity ${oldName} in ${category} to ${newName}`); /* Implement logic */ },
-  deleteWorldCategory: async (category) => { console.log(`Stub: Deleting category ${category}`); /* Implement logic */ },
-  deleteWorldEntity: async (category, entity) => { console.log(`Stub: Deleting entity ${entity} in ${category}`); /* Implement logic */ },
-  editWorldKeyValue: async (key, value) => { console.log(`Stub: Editing world key ${key} with value ${value}`); /* Implement logic */ },
-  deleteWorldKey: async (key) => { console.log(`Stub: Deleting world key ${key}`); /* Implement logic */ },
+  renameWorldCategory: async (oldName, newName) => {
+    set(produce((state: GameStateStore) => {
+      if (!state.currentGameState) return;
+      const newWorldState = state.currentGameState.worldState; // immer makes this mutable draft
+      if (newWorldState[oldName]) {
+        newWorldState[newName] = newWorldState[oldName];
+        delete newWorldState[oldName];
+        state.currentGameState.worldState = newWorldState; // Assign back the draft
+
+        // Update pinned keys
+        state.worldStatePinnedKeys = state.worldStatePinnedKeys.map(key =>
+            key.startsWith(oldName + '.') ? `${newName}${key.substring(oldName.length)}` : key
+        );
+        if (state.currentSnapshot) {
+            state.currentSnapshot.gameState.worldState = newWorldState;
+            state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+        }
+      }
+    }));
+    get().saveGame();
+  },
+  renameWorldEntity: async (category, oldName, newName) => {
+    set(produce((state: GameStateStore) => {
+      if (!state.currentGameState || !state.currentGameState.worldState[category]) return;
+      const categoryObj = state.currentGameState.worldState[category]; // mutable draft
+      if (categoryObj[oldName]) {
+        categoryObj[newName] = categoryObj[oldName];
+        delete categoryObj[oldName];
+        state.currentGameState.worldState[category] = categoryObj;
+
+        // Update pinned keys
+        const oldEntityPath = `${category}.${oldName}`;
+        const newEntityPath = `${category}.${newName}`;
+        state.worldStatePinnedKeys = state.worldStatePinnedKeys.map(key =>
+            key.startsWith(oldEntityPath + '.') ? `${newEntityPath}${key.substring(oldEntityPath.length)}` : key
+        );
+        if (state.currentSnapshot) {
+            state.currentSnapshot.gameState.worldState = state.currentGameState.worldState;
+            state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+        }
+      }
+    }));
+    get().saveGame();
+  },
+  deleteWorldCategory: async (category) => {
+    set(produce((state: GameStateStore) => {
+      if (!state.currentGameState || !state.currentGameState.worldState[category]) return;
+      const newWorldState = state.currentGameState.worldState; // mutable draft
+      delete newWorldState[category];
+      state.currentGameState.worldState = newWorldState;
+
+      // Remove relevant pinned keys
+      state.worldStatePinnedKeys = state.worldStatePinnedKeys.filter(key => !key.startsWith(category + '.'));
+      if (state.currentSnapshot) {
+          state.currentSnapshot.gameState.worldState = newWorldState;
+          state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+      }
+    }));
+    get().saveGame();
+  },
+  deleteWorldEntity: async (category, entity) => {
+    set(produce((state: GameStateStore) => {
+      if (!state.currentGameState || !state.currentGameState.worldState[category] || !state.currentGameState.worldState[category][entity]) return;
+      const categoryObj = state.currentGameState.worldState[category]; // mutable draft
+      delete categoryObj[entity];
+      state.currentGameState.worldState[category] = categoryObj;
+
+      // Remove relevant pinned keys
+      const entityPath = `${category}.${entity}`;
+      state.worldStatePinnedKeys = state.worldStatePinnedKeys.filter(key => !key.startsWith(entityPath + '.'));
+      if (state.currentSnapshot) {
+          state.currentSnapshot.gameState.worldState = state.currentGameState.worldState;
+          state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+      }
+    }));
+    get().saveGame();
+  },
+  editWorldKeyValue: async (key, value) => {
+    set(produce((state: GameStateStore) => {
+      if (!state.currentGameState) return;
+      const newWorldState = state.currentGameState.worldState; // mutable draft
+      const parts = key.split('.');
+      let current: any = newWorldState;
+      for (let i = 0; i < parts.length - 1; i++) {
+          const part = parts[i];
+          if (!(part in current)) {
+              current[part] = {};
+          }
+          current = current[part];
+      }
+      current[parts[parts.length - 1]] = value;
+      state.currentGameState.worldState = newWorldState; // Assign back the draft
+      if (state.currentSnapshot) {
+          state.currentSnapshot.gameState.worldState = newWorldState;
+      }
+    }));
+    get().saveGame();
+  },
+  deleteWorldKey: async (key) => {
+    set(produce((state: GameStateStore) => {
+      if (!state.currentGameState) return;
+      const newWorldState = state.currentGameState.worldState; // mutable draft
+      const parts = key.split('.');
+      let current: any = newWorldState;
+      for (let i = 0; i < parts.length - 1; i++) {
+          const part = parts[i];
+          if (!(part in current)) {
+              return; // Path doesn't exist, nothing to delete
+          }
+          current = current[part];
+      }
+      delete current[parts[parts.length - 1]];
+      state.currentGameState.worldState = newWorldState;
+
+      // Remove from pinned keys
+      state.worldStatePinnedKeys = state.worldStatePinnedKeys.filter(pk => pk !== key);
+      if (state.currentSnapshot) {
+          state.currentSnapshot.gameState.worldState = newWorldState;
+          state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+      }
+    }));
+    get().saveGame();
+  },
 }));

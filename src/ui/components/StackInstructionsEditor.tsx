@@ -18,7 +18,9 @@ import {
   Divider,
 } from '@mui/material';
 import { CollapsibleSection } from './CollapsibleSection';
-import { StackInstructions, StackMode, FilterMode, EmissionRule, ProsePolicy } from '../../models/StackInstructions';
+// Import StackModes and FilterModes as values
+import { StackInstructions, StackModes, FilterModes, EmissionRule, ProsePolicy } from '../../models/StackInstructions';
+import type { StackMode, FilterMode } from '../../models/StackInstructions'; // Keep type imports for type usage
 
 interface StackInstructionsEditorProps {
   stackInstructions: StackInstructions;
@@ -46,7 +48,7 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
     field: keyof EmissionRule,
     value: any
   ) => {
-    const currentRule = stackInstructions.digestEmission[score] || { mode: StackMode.NEVER, n: 0 }; // Ensure a default if rule is missing
+    const currentRule = stackInstructions.digestEmission[score] || { mode: StackModes.NEVER, n: 0 }; // Use StackModes.NEVER
     onStackInstructionsChange({
       ...stackInstructions,
       digestEmission: {
@@ -56,7 +58,7 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
     });
   };
 
-  const handleDigestFilterPolicyChange = (filterMode: FilterMode) => {
+  const handleDigestFilterPolicyChange = (filterMode: FilterMode) => { // FilterMode type used here
     onStackInstructionsChange({
       ...stackInstructions,
       digestPolicy: { filtering: filterMode },
@@ -84,15 +86,16 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
           row
           value={stackInstructions.narratorProseEmission.mode}
           onChange={(e) =>
-            handlePolicyChange('narratorProseEmission', 'mode', e.target.value as StackMode)
+            handlePolicyChange('narratorProseEmission', 'mode', e.target.value as StackMode) // StackMode type used here
           }
         >
-          {Object.values(StackMode).map((mode) => (
+          {/* Iterate over values of StackModes object */}
+          {Object.values(StackModes).map((mode) => (
             <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
           ))}
         </RadioGroup>
-        {(stackInstructions.narratorProseEmission.mode === StackMode.FIRST_N ||
-          stackInstructions.narratorProseEmission.mode === StackMode.AFTER_N) && (
+        {(stackInstructions.narratorProseEmission.mode === StackModes.FIRST_N || // Use StackModes.FIRST_N
+          stackInstructions.narratorProseEmission.mode === StackModes.AFTER_N) && ( // Use StackModes.AFTER_N
           <TextField
             label="N (Turns/Count)"
             type="number"
@@ -109,10 +112,11 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
             value={stackInstructions.narratorProseEmission.filtering}
             label="Filtering"
             onChange={(e) =>
-              handlePolicyChange('narratorProseEmission', 'filtering', e.target.value as FilterMode)
+              handlePolicyChange('narratorProseEmission', 'filtering', e.target.value as FilterMode) // FilterMode type used here
             }
           >
-            {Object.values(FilterMode).map((mode) => (
+            {/* Iterate over values of FilterModes object */}
+            {Object.values(FilterModes).map((mode) => (
               <MenuItem key={mode} value={mode}>
                 {mode}
               </MenuItem>
@@ -133,7 +137,7 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
           value={stackInstructions.digestPolicy.filtering}
           onChange={(e) => handleDigestFilterPolicyChange(e.target.value as FilterMode)}
         >
-          {Object.values(FilterMode).map((mode) => (
+          {Object.values(FilterModes).map((mode) => (
             <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
           ))}
         </RadioGroup>
@@ -147,17 +151,17 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
               <FormControl component="fieldset" fullWidth size="small">
                 <RadioGroup
                   row
-                  value={stackInstructions.digestEmission[score]?.mode || StackMode.NEVER}
+                  value={stackInstructions.digestEmission[score]?.mode || StackModes.NEVER} // Use StackModes.NEVER
                   onChange={(e) =>
                     handleDigestEmissionChange(score, 'mode', e.target.value as StackMode)
                   }
                 >
-                  {Object.values(StackMode).map((mode) => (
+                  {Object.values(StackModes).map((mode) => (
                     <FormControlLabel key={mode} value={mode} control={<Radio size="small" />} label={mode} />
                   ))}
                 </RadioGroup>
-                {(stackInstructions.digestEmission[score]?.mode === StackMode.FIRST_N ||
-                  stackInstructions.digestEmission[score]?.mode === StackMode.AFTER_N) && (
+                {(stackInstructions.digestEmission[score]?.mode === StackModes.FIRST_N || // Use StackModes.FIRST_N
+                  stackInstructions.digestEmission[score]?.mode === StackModes.AFTER_N) && ( // Use StackModes.AFTER_N
                   <TextField
                     label="N"
                     type="number"
@@ -188,12 +192,12 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
             handlePolicyChange('expressionLogPolicy', 'mode', e.target.value as StackMode)
           }
         >
-          {Object.values(StackMode).map((mode) => (
+          {Object.values(StackModes).map((mode) => (
             <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
           ))}
         </RadioGroup>
-        {(stackInstructions.expressionLogPolicy.mode === StackMode.FIRST_N ||
-          stackInstructions.expressionLogPolicy.mode === StackMode.AFTER_N) && (
+        {(stackInstructions.expressionLogPolicy.mode === StackModes.FIRST_N ||
+          stackInstructions.expressionLogPolicy.mode === StackModes.AFTER_N) && (
           <TextField
             label="N (Turns/Count)"
             type="number"
@@ -213,7 +217,7 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
               handlePolicyChange('expressionLogPolicy', 'filtering', e.target.value as FilterMode)
             }
           >
-            {Object.values(FilterMode).map((mode) => (
+            {Object.values(FilterModes).map((mode) => (
               <MenuItem key={mode} value={mode}>
                 {mode}
               </MenuItem>
@@ -254,12 +258,12 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
             handlePolicyChange('worldStatePolicy', 'mode', e.target.value as StackMode)
           }
         >
-          {Object.values(StackMode).map((mode) => (
+          {Object.values(StackModes).map((mode) => (
             <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
           ))}
         </RadioGroup>
-        {(stackInstructions.worldStatePolicy.mode === StackMode.FIRST_N ||
-          stackInstructions.worldStatePolicy.mode === StackMode.AFTER_N) && (
+        {(stackInstructions.worldStatePolicy.mode === StackModes.FIRST_N ||
+          stackInstructions.worldStatePolicy.mode === StackModes.AFTER_N) && (
           <TextField
             label="N (Items/Count)"
             type="number"
@@ -279,7 +283,7 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
               handlePolicyChange('worldStatePolicy', 'filtering', e.target.value as FilterMode)
             }
           >
-            {Object.values(FilterMode).map((mode) => (
+            {Object.values(FilterModes).map((mode) => (
               <MenuItem key={mode} value={mode}>
                 {mode}
               </MenuItem>
@@ -302,12 +306,12 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
             handlePolicyChange('knownEntitiesPolicy', 'mode', e.target.value as StackMode)
           }
         >
-          {Object.values(StackMode).map((mode) => (
+          {Object.values(StackModes).map((mode) => (
             <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
           ))}
         </RadioGroup>
-        {(stackInstructions.knownEntitiesPolicy.mode === StackMode.FIRST_N ||
-          stackInstructions.knownEntitiesPolicy.mode === StackMode.AFTER_N) && (
+        {(stackInstructions.knownEntitiesPolicy.mode === StackModes.FIRST_N ||
+          stackInstructions.knownEntitiesPolicy.mode === StackModes.AFTER_N) && (
           <TextField
             label="N (Entities)"
             type="number"
@@ -327,7 +331,7 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
               handlePolicyChange('knownEntitiesPolicy', 'filtering', e.target.value as FilterMode)
             }
           >
-            {Object.values(FilterMode).map((mode) => (
+            {Object.values(FilterModes).map((mode) => (
               <MenuItem key={mode} value={mode}>
                 {mode}
               </MenuItem>
@@ -380,3 +384,6 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
     </CollapsibleSection>
   );
 };
+
+// Add the named export here
+export { StackInstructionsEditor };

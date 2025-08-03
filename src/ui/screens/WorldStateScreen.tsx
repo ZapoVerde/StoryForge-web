@@ -1,6 +1,6 @@
 // src/ui/screens/WorldStateScreen.tsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react'; // Import useCallback and useMemo
 import {
   Box,
   Typography,
@@ -16,7 +16,7 @@ import {
   ListItemText,
   Collapse,
   Checkbox,
-  Switch, // Not directly used for pinning, but was in stub
+  Switch,
   TextField,
   Dialog,
   DialogTitle,
@@ -41,7 +41,7 @@ interface GroupedWorldState {
   [category: string]: {
     [entity: string]: {
       [variable: string]: any;
-      tag?: string;
+      tag?: string; // Add tag as a possible property for entities
     };
   };
 }
@@ -69,49 +69,87 @@ const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
   const [newEntityName, setNewEntityName] = useState('');
 
   const worldState = currentGameState?.worldState || {};
-  const flattenedWorld = React.useMemo(() => flattenJsonObject(worldState), [worldState]);
+  const flattenedWorld = useMemo(() => flattenJsonObject(worldState), [worldState]);
 
-  const groupedByCategory: GroupedWorldState = React.useMemo(() => {
+  // Helper function: Get all direct child variable keys under a given path
+  const getAllChildVariableKeys = useCallback((basePath: string): string[] => {
+    const relevantKeys: string[] = [];
+    const nestedData = getNestedValue(worldState, basePath.split('.'));
+
+    if (typeof nestedData !== 'object' || nestedData === null) {
+      return [];
+    }
+
+    const flattenedChildren = flattenJsonObject(nestedData, basePath);
+
+    // Filter to only include direct children (variables) of the current path
+    // A key "parent.child.grandchild" is a child of "parent.child" but not a direct child of "parent"
+    for (const key in flattenedChildren) {
+        if (key.startsWith(basePath) && key.length > basePath.length) { // Ensure it's a descendant
+            // Check if it's a direct variable and not an intermediate object in a deeper path
+            const partsAfterBase = key.substring(basePath.length + 1).split('.');
+            if (partsAfterBase.length === 1 && typeof flattenedChildren[key] !== 'object') {
+                relevantKeys.push(key);
+            } else if (partsAfterBase.length > 1 && typeof getNestedValue(nestedData, partsAfterBase.slice(0, partsAfterBase.length -1)) === 'object') {
+                // If it's a nested key, but its immediate parent is still an object (not a primitive value)
+                // this means it's an intermediate path or a variable under a nested object.
+                // We want to capture the leaf variables. This logic needs to be careful.
+                // A simpler approach for "all variables under a path" is to flatten and then filter.
+                relevantKeys.push(key); // Add all descendant leaf nodes
+            }
+        }
+    }
+    return relevantKeys;
+  }, [worldState]);
+
+
+  // Helper: Check if ANY child variable of a given parent path is pinned
+  const isAnyChildPinned = useCallback((parentPath: string) => {
+    const allChildKeys = getAllChildVariableKeys(parentPath);
+    return allChildKeys.some(key => worldStatePinnedKeys.includes(key));
+  }, [getAllChildVariableKeys, worldStatePinnedKeys]);
+
+  // Helper: Check if ALL child variables of a given parent path are pinned
+  const areAllChildrenPinned = useCallback((parentPath: string) => {
+    const allChildKeys = getAllChildVariableKeys(parentPath);
+    if (allChildKeys.length === 0) return false; // No children to be pinned, so not "all pinned"
+    return allChildKeys.every(key => worldStatePinnedKeys.includes(key));
+  }, [getAllChildVariableKeys, worldStatePinnedKeys]);
+
+
+  const groupedByCategory: GroupedWorldState = useMemo(() => {
     const grouped: GroupedWorldState = {};
     for (const fullKey in flattenedWorld) {
       const value = flattenedWorld[fullKey];
       const parts = fullKey.split(".");
-      if (parts.length < 2) continue; // Needs at least category.variable or category.entity
+      if (parts.length < 1) continue; // Should at least have a category
 
       const category = parts[0];
       let entity: string | undefined;
       let variable: string;
 
-      // Determine if it's a category.entity.variable or just category.variable
-      // This logic attempts to distinguish between direct properties of a category
-      // and properties nested within entities, which may have tags.
-      // We assume if the second part of the path (entity) has a #, @, or $ prefix, it's an entity.
-      const secondPart = parts[1];
-      const isTaggedEntity = secondPart.startsWith('#') || secondPart.startsWith('@') || secondPart.startsWith('$');
+      // Determine if it's category.entity.variable or just category.variable
+      // If path is "category.variable" -> entity is '@@_direct', variable is 'variable'
+      // If path is "category.entity.variable" -> entity is 'entity', variable is 'variable'
+      const isTopLevelVariable = parts.length === 2 && !parts[1].startsWith('#') && !parts[1].startsWith('@') && !parts[1].startsWith('$');
+      const isNestedEntityVariable = parts.length >= 2 && (parts[1].startsWith('#') || parts[1].startsWith('@') || parts[1].startsWith('$'));
 
-      if (parts.length >= 3 && isTaggedEntity) {
-        entity = parts[1];
-        variable = parts.slice(2).join(".");
-      } else { // Handle top-level category variables (e.g., inventory.sword) or untagged entities
-        entity = undefined; // No distinct entity level
-        variable = parts.slice(1).join("."); // Variable is everything after category
+      if (isNestedEntityVariable) {
+          entity = parts[1];
+          variable = parts.slice(2).join(".");
+      } else { // Handle top-level category variables or untagged entities that are direct children of categories
+          entity = '@@_direct'; // Use a special marker for direct category properties
+          variable = parts.slice(1).join(".");
       }
 
       grouped[category] = grouped[category] || {};
-      if (entity) {
-        grouped[category][entity] = grouped[category][entity] || {};
-        grouped[category][entity][variable] = value;
-      } else {
-        // Treat direct category variables as if they are under a special '@@_direct' entity
-        // This is a hack to fit into the current grouping structure if direct category properties exist
-        grouped[category]['@@_direct'] = grouped[category]['@@_direct'] || {};
-        grouped[category]['@@_direct'][variable] = value;
-      }
+      grouped[category][entity] = grouped[category][entity] || {};
+      grouped[category][entity][variable] = value;
     }
 
-    // Filter out empty '@@_direct' if it was created but no direct variables existed
+    // Clean up empty '@@_direct' entities if no direct variables existed
     for (const category in grouped) {
-      if (Object.keys(grouped[category]).length === 1 && grouped[category]['@@_direct'] && Object.keys(grouped[category]['@@_direct']).length === 0) {
+      if (Object.keys(grouped[category]['@@_direct'] || {}).length === 0) {
         delete grouped[category]['@@_direct'];
       }
     }
@@ -119,70 +157,32 @@ const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
   }, [flattenedWorld]);
 
 
-  const getAllChildVariableKeys = useCallback((basePath: string, targetType: 'entity' | 'category'): string[] => {
-    const relevantKeys: string[] = [];
-    const nestedData = getNestedValue(worldState, basePath.split('.'));
-    if (typeof nestedData !== 'object' || nestedData === null) {
-      return [];
-    }
-    const flattenedChildren = flattenJsonObject(nestedData, basePath);
-
-    for (const key in flattenedChildren) {
-      if (key.startsWith(basePath + '.') && key.split('.').length > basePath.split('.').length) {
-        relevantKeys.push(key);
-      }
-    }
-    return relevantKeys;
-  }, [worldState]);
-
-
-  const isAnyChildPinned = useCallback((parentPath: string, type: 'entity' | 'category') => {
-    const allChildKeys = getAllChildVariableKeys(parentPath, type);
-    return allChildKeys.some(key => worldStatePinnedKeys.includes(key));
-  }, [getAllChildVariableKeys, worldStatePinnedKeys]);
-
-  const areAllChildrenPinned = useCallback((parentPath: string, type: 'entity' | 'category') => {
-    const allChildKeys = getAllChildVariableKeys(parentPath, type);
-    if (allChildKeys.length === 0) return false; // No children to be pinned
-    return allChildKeys.every(key => worldStatePinnedKeys.includes(key));
-  }, [getAllChildVariableKeys, worldStatePinnedKeys]);
-
-
-  const handleToggleCategoryPin = (category: string) => {
-    const allVarsInCat = getAllChildVariableKeys(category, 'category');
-    const currentlyAllPinned = areAllChildrenPinned(category, 'category');
-    const currentlyAnyPinned = isAnyChildPinned(category, 'category');
-
-    // If all are pinned, unpin all. If none or some are pinned, pin all.
+  const handleToggleCategoryPin = useCallback((category: string) => {
+    const allVarsInCat = getAllChildVariableKeys(category);
+    const currentlyAllPinned = areAllChildrenPinned(category);
+    
+    // If all are currently pinned, unpin all. Otherwise, pin all.
     const shouldPin = !currentlyAllPinned;
 
     allVarsInCat.forEach(key => {
-      if (shouldPin && !worldStatePinnedKeys.includes(key)) {
-        toggleWorldStatePin(key, 'variable'); // Pin individual variable
-      } else if (!shouldPin && worldStatePinnedKeys.includes(key)) {
-        toggleWorldStatePin(key, 'variable'); // Unpin individual variable
-      }
+        toggleWorldStatePin(key, 'variable'); // `toggleWorldStatePin` handles adding/removing based on its internal logic
     });
-  };
+  }, [getAllChildVariableKeys, areAllChildrenPinned, toggleWorldStatePin]);
 
-  const handleToggleEntityPin = (category: string, entity: string) => {
+  const handleToggleEntityPin = useCallback((category: string, entity: string) => {
     const entityPath = `${category}.${entity}`;
-    const allVarsInEntity = getAllChildVariableKeys(entityPath, 'entity');
-    const currentlyAllPinned = areAllChildrenPinned(entityPath, 'entity');
+    const allVarsInEntity = getAllChildVariableKeys(entityPath);
+    const currentlyAllPinned = areAllChildrenPinned(entityPath);
 
     const shouldPin = !currentlyAllPinned;
 
     allVarsInEntity.forEach(key => {
-      if (shouldPin && !worldStatePinnedKeys.includes(key)) {
         toggleWorldStatePin(key, 'variable');
-      } else if (!shouldPin && worldStatePinnedKeys.includes(key)) {
-        toggleWorldStatePin(key, 'variable');
-      }
     });
-  };
+  }, [getAllChildVariableKeys, areAllChildrenPinned, toggleWorldStatePin]);
 
 
-  const handleToggleCategoryExpand = (category: string) => {
+  const handleToggleCategoryExpand = useCallback((category: string) => {
     setExpandedCategories((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(category)) {
@@ -192,9 +192,9 @@ const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
       }
       return newSet;
     });
-  };
+  }, []);
 
-  const handleToggleEntityExpand = (category: string, entity: string) => {
+  const handleToggleEntityExpand = useCallback((category: string, entity: string) => {
     const key = `${category}.${entity}`;
     setExpandedEntities((prev) => {
       const newSet = new Set(prev);
@@ -205,31 +205,32 @@ const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
       }
       return newSet;
     });
-  };
+  }, []);
 
-  const handleStartRenameCategory = (category: string) => {
+  const handleStartRenameCategory = useCallback((category: string) => {
     setEditingCategory(category);
     setNewCategoryName(category);
-  };
+  }, []);
 
-  const handleConfirmRenameCategory = async () => {
+  const handleConfirmRenameCategory = useCallback(async () => {
     if (editingCategory && newCategoryName.trim() !== '' && newCategoryName !== editingCategory) {
       await renameWorldCategory(editingCategory, newCategoryName);
     }
     setEditingCategory(null);
-  };
+  }, [editingCategory, newCategoryName, renameWorldCategory]);
 
-  const handleStartRenameEntity = (category: string, entity: string) => {
+  const handleStartRenameEntity = useCallback((category: string, entity: string) => {
     setEditingEntity([category, entity]);
     setNewEntityName(entity);
-  };
+  }, []);
 
-  const handleConfirmRenameEntity = async () => {
+  const handleConfirmRenameEntity = useCallback(async () => {
     if (editingEntity && newEntityName.trim() !== '' && newEntityName !== editingEntity[1]) {
       await renameWorldEntity(editingEntity[0], editingEntity[1], newEntityName);
     }
     setEditingEntity(null);
-  };
+  }, [editingEntity, newEntityName, renameWorldEntity]);
+
 
   if (gameLoading) {
     return (
@@ -270,8 +271,8 @@ const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
         <Paper elevation={1} sx={{ flexGrow: 1, m: 2, p: 2, overflowY: 'auto' }}>
           {Object.entries(groupedByCategory).map(([category, entities]) => {
             const isCategoryExpanded = expandedCategories.has(category);
-            const categoryAllPinned = areAllChildrenPinned(category, 'category');
-            const categoryAnyPinned = isAnyChildPinned(category, 'category');
+            const categoryAllPinned = areAllChildrenPinned(category);
+            const categoryAnyPinned = isAnyChildPinned(category);
 
             return (
               <Box key={category} sx={{ mb: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
@@ -305,9 +306,8 @@ const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
                   <Divider />
                   <List component="div" disablePadding sx={{ pl: 2 }}>
                     {Object.entries(entities).map(([entity, variables]) => {
-                      // Skip the dummy '@@_direct' entity for display purposes
+                      // Handle the '@@_direct' special entity for direct category variables
                       if (entity === '@@_direct') {
-                        // Render direct category variables
                         return Object.entries(variables).map(([varName, value]) => (
                           <WorldStateItemRow
                             key={`${category}.${varName}`}
@@ -323,11 +323,12 @@ const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
 
                       const isEntityExpanded = expandedEntities.has(`${category}.${entity}`);
                       const entityPath = `${category}.${entity}`;
-                      const entityAllPinned = areAllChildrenPinned(entityPath, 'entity');
-                      const entityAnyPinned = isAnyChildPinned(entityPath, 'entity');
+                      const entityAllPinned = areAllChildrenPinned(entityPath);
+                      const entityAnyPinned = isAnyChildPinned(entityPath);
 
-                      // Extract tag for display/editing
-                      const tagValue = (variables.tag as any)?.jsonPrimitive?.contentOrNull || (typeof variables.tag === 'string' ? variables.tag : '');
+                      // Extract tag for display/editing if it exists as a direct property of the entity object
+                      // The tag might be directly on the entity object itself, or be a nested field (less common for "tag")
+                      const tagValue = (variables as any).tag; // Assuming 'tag' is a direct property
 
                       return (
                         <Box key={entity} sx={{ mb: 1, border: '1px dashed', borderColor: 'divider', borderRadius: 1, mt: 1 }}>
@@ -360,13 +361,12 @@ const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
                           <Collapse in={isEntityExpanded}>
                             <Divider />
                             <Box sx={{ p: 1.5 }}>
-                              {/* Tag Editor */}
-                              {/* Only show tag editor if the entity name suggests it's a tagged entity */}
+                              {/* Tag Editor: Only show tag editor if the entity name suggests it's a tagged entity */}
                               {(entity.startsWith('#') || entity.startsWith('@') || entity.startsWith('$')) && (
                                 <TextField
                                   fullWidth
                                   label="Tag"
-                                  value={tagValue}
+                                  value={tagValue || ''} // Display current tag value
                                   onChange={(e) => {
                                     const raw = e.target.value.trim();
                                     // Basic validation for tags

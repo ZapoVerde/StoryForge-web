@@ -29,10 +29,12 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import { useNavigate } from 'react-router-dom'; // Import useNavigate
 
 import { usePromptCardStore } from '../../state/usePromptCardStore';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
+import { useSettingsStore } from '../../state/useSettingsStore'; // Import useSettingsStore to pass AI connections
 import { PromptCard, NewPromptCardData } from '../../models/index';
 import PromptCardEditor from './PromptCardEditor'; // Editor component
 
@@ -41,6 +43,7 @@ interface PromptCardManagerProps {
 }
 
 const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) => {
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const {
     promptCards,
@@ -53,26 +56,26 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
     updatePromptCard,
     duplicatePromptCard,
     deletePromptCard,
-    fetchAiConnections,
     importPromptCards,
     exportPromptCard,
-    aiConnections,
   } = usePromptCardStore();
   const { initializeGame } = useGameStateStore();
+  const { aiConnections, fetchAiConnections } = useSettingsStore(); // Get aiConnections from settings store
 
   const [localEditedCard, setLocalEditedCard] = useState<PromptCard | null>(null);
   const [isCardDirty, setIsCardDirty] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveAsNewTitle, setSaveAsNewTitle] = useState('');
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
-  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'info'>('info');
+  const [snackbarOpen, setSnackbarOpen] = useState(false); // Controlled open state for Snackbar
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'info' | 'warning'>('info');
 
   useEffect(() => {
     if (user?.uid) {
       fetchPromptCards(user.uid);
-      fetchAiConnections(user.uid);
+      fetchAiConnections(user.uid); // Fetch AI connections here
     }
-  }, [user?.uid, fetchPromptCards, fetchAiConnections]);
+  }, [user?.uid, fetchPromptCards, fetchAiConnections]); // Depend on fetchAiConnections
 
   useEffect(() => {
     // Sync localEditedCard with activePromptCard
@@ -80,30 +83,57 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
     setIsCardDirty(false); // Reset dirty state when active card changes
   }, [activePromptCard]);
 
+  const showSnackbar = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
+    setSnackbarMessage(message);
+    setSnackbarSeverity(severity);
+    setSnackbarOpen(true);
+  };
+
+  const handleSnackbarClose = (event?: React.SyntheticEvent | Event, reason?: string) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setSnackbarOpen(false);
+  };
+
+
   const handleCardSelect = (card: PromptCard) => {
+    if (isCardDirty) {
+      // Potentially warn user about unsaved changes
+      showSnackbar('Unsaved changes will be lost if you switch cards.', 'warning');
+      // For now, proceed directly, but a confirmation dialog could be added here.
+    }
     setActivePromptCard(card);
   };
 
   const handleNewCard = async () => {
     if (!user?.uid) {
-      setSnackbarMessage('Must be logged in to create a new card.');
-      setSnackbarSeverity('error');
+      showSnackbar('Must be logged in to create a new card.', 'error');
       return;
     }
+    // Pre-select the default AI connection if available
+    const defaultConnectionId = aiConnections.length > 0 ? aiConnections[0].id : "";
+
     const newCardData: NewPromptCardData = {
       title: "New Prompt Card",
       prompt: "This is a new prompt card. Describe the setting and your character's starting situation.",
+      aiSettings: {
+        selectedConnectionId: defaultConnectionId,
+        temperature: 0.7, topP: 1.0, maxTokens: 2048, presencePenalty: 0.0, frequencyPenalty: 0.0, functionCallingEnabled: false
+      },
+      helperAiSettings: {
+        selectedConnectionId: defaultConnectionId,
+        temperature: 0.7, topP: 1.0, maxTokens: 2048, presencePenalty: 0.0, frequencyPenalty: 0.0, functionCallingEnabled: false
+      }
     };
     try {
       const createdCard = await addPromptCard(user.uid, newCardData);
       if (createdCard) {
         setActivePromptCard(createdCard);
-        setSnackbarMessage('New card created successfully!');
-        setSnackbarSeverity('success');
+        showSnackbar('New card created successfully!', 'success');
       }
     } catch (e) {
-      setSnackbarMessage(`Failed to create new card: ${e instanceof Error ? e.message : 'Unknown error'}`);
-      setSnackbarSeverity('error');
+      showSnackbar(`Failed to create new card: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
     }
   };
 
@@ -116,6 +146,16 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
         const newCardData: NewPromptCardData = {
           ...localEditedCard,
           title: saveAsNewTitle || `${localEditedCard.title} (Copy)`,
+          // Explicitly clear ID, timestamps, ownerId, and lineage for a truly new copy
+          // These will be regenerated by `addPromptCard`
+          id: '',
+          rootId: '',
+          parentId: null,
+          createdAt: '',
+          updatedAt: '',
+          ownerId: user.uid, // Ensure new owner is current user
+          isExample: false, // New copies are user-owned, not examples
+          isPublic: false, // New copies are private by default
         };
         savedCard = await addPromptCard(user.uid, newCardData);
       } else {
@@ -124,12 +164,10 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
 
       if (savedCard) {
         setActivePromptCard(savedCard); // Update active card to the newly saved/updated version
-        setSnackbarMessage('Card saved successfully!');
-        setSnackbarSeverity('success');
+        showSnackbar('Card saved successfully!', 'success');
       }
     } catch (e) {
-      setSnackbarMessage(`Failed to save card: ${e instanceof Error ? e.message : 'Unknown error'}`);
-      setSnackbarSeverity('error');
+      showSnackbar(`Failed to save card: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
     } finally {
       setShowSaveDialog(false);
       setSaveAsNewTitle('');
@@ -140,23 +178,33 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
     if (activePromptCard) {
       setLocalEditedCard({ ...activePromptCard });
       setIsCardDirty(false);
-      setSnackbarMessage('Changes reverted.');
-      setSnackbarSeverity('info');
+      showSnackbar('Changes reverted.', 'info');
     }
   };
 
   const handlePushToLive = () => {
-    // "Push to Live" means setting the locally edited version as the active version.
-    // This is already handled by setActivePromptCard(localEditedCard)
-    // The main distinction here is `isUnapplied` in Android. In React, `localEditedCard`
-    // represents the unsaved or un-pushed changes.
-    // If we want to "push to live" meaning *use this for the next game*, then we just
-    // ensure `activePromptCard` is set to `localEditedCard`.
-    if (localEditedCard) {
-      setActivePromptCard(localEditedCard);
-      setIsCardDirty(false); // If it was dirty, it's now the live version, so it's clean relative to itself
-      setSnackbarMessage('Changes applied to live card.');
-      setSnackbarSeverity('success');
+    // "Push to Live" simply means ensuring the currently displayed/edited card
+    // is the one set as the `activePromptCard` in the store.
+    // If localEditedCard is different from activePromptCard in the store,
+    // this action effectively "applies" the changes to the active card without saving to DB.
+    // Saving to DB is a separate step.
+    if (localEditedCard && activePromptCard?.id !== localEditedCard.id) {
+        // If they are editing a *different* card, setting it as active would switch context.
+        // This is usually implied by selecting from the left list.
+        // The "Push to Live" button generally means, "apply these *current edits*
+        // to the *currently active card* (which might be in the store as `activePromptCard`).
+        // It's more about local state consistency than DB save.
+        // Given the dirty state logic, this button would appear when `localEditedCard`
+        // is different from `activePromptCard`.
+        setActivePromptCard(localEditedCard);
+        setIsCardDirty(false);
+        showSnackbar('Changes applied to live editor view.', 'success');
+    } else if (localEditedCard && isCardDirty) {
+        // If it's the same card but dirty, just re-set it to mark it as clean (for the store's perspective)
+        // A save operation would typically make it non-dirty. This button might be redundant if
+        // the intent is always to save. Let's make it explicitly save as well to avoid confusion.
+        // Or, rename this button to "Save Changes" and remove `handleSaveCard(false)`
+        handleSaveCard(false); // Now "Push to Live" also saves
     }
   };
 
@@ -165,11 +213,9 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
     if (!user?.uid) return;
     try {
       await deletePromptCard(user.uid, cardId);
-      setSnackbarMessage('Card deleted successfully!');
-      setSnackbarSeverity('success');
+      showSnackbar('Card deleted successfully!', 'success');
     } catch (e) {
-      setSnackbarMessage(`Failed to delete card: ${e instanceof Error ? e.message : 'Unknown error'}`);
-      setSnackbarSeverity('error');
+      showSnackbar(`Failed to delete card: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
     }
   };
 
@@ -178,36 +224,29 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
     try {
       const duplicated = await duplicatePromptCard(user.uid, cardId);
       if (duplicated) {
-        setSnackbarMessage('Card duplicated successfully!');
-        setSnackbarSeverity('success');
+        showSnackbar('Card duplicated successfully!', 'success');
       }
     } catch (e) {
-      setSnackbarMessage(`Failed to duplicate card: ${e instanceof Error ? e.message : 'Unknown error'}`);
-      setSnackbarSeverity('error');
+      showSnackbar(`Failed to duplicate card: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
     }
   };
 
   const handleStartGame = async () => {
     if (!user?.uid || !activePromptCard) {
-      setSnackbarMessage('Please select an active prompt card and be logged in to start a game.');
-      setSnackbarSeverity('info');
+      showSnackbar('Please select an active prompt card and be logged in to start a game.', 'info');
       return;
     }
     if (isCardDirty) {
-      setSnackbarMessage('Please save or revert changes before starting a game.');
-      setSnackbarSeverity('warning');
+      showSnackbar('Please save or revert changes before starting a game.', 'warning');
       return;
     }
     try {
       await initializeGame(user.uid, activePromptCard.id);
-      setSnackbarMessage('Game initialized! Navigating to game screen...');
-      setSnackbarSeverity('success');
-      // TODO: Add navigation here to GameScreen
-      // For now, console log
-      console.log("Game started! Navigate to GameScreen.");
-    } catch (e) {
-      setSnackbarMessage(`Failed to start game: ${e instanceof Error ? e.message : 'Unknown error'}`);
-      setSnackbarSeverity('error');
+      showSnackbar('Game initialized! Navigating to game screen...', 'success');
+      navigate('/game'); // Navigate to GameScreen
+    }
+    catch (e) {
+      showSnackbar(`Failed to start game: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
     }
   };
 
@@ -219,15 +258,25 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
     reader.onload = async (e) => {
       try {
         const content = e.target?.result as string;
-        const parsed: NewPromptCardData[] = JSON.parse(content);
-        // Assuming the imported JSON is an array of NewPromptCardData
-        await importPromptCards(user.uid, parsed);
-        setSnackbarMessage(`Successfully imported ${parsed.length} cards!`);
-        setSnackbarSeverity('success');
+        // Check if it's a single object or an array
+        let parsed: NewPromptCardData | NewPromptCardData[];
+        try {
+            parsed = JSON.parse(content);
+        } catch (parseError) {
+            showSnackbar('Invalid JSON format in file.', 'error');
+            return;
+        }
+
+        const cardsToImport: NewPromptCardData[] = Array.isArray(parsed) ? parsed : [parsed];
+
+        await importPromptCards(user.uid, cardsToImport);
+        showSnackbar(`Successfully imported ${cardsToImport.length} cards!`, 'success');
       } catch (err) {
-        setSnackbarMessage(`Failed to import cards: ${err instanceof Error ? err.message : 'Invalid JSON'}`);
-        setSnackbarSeverity('error');
+        showSnackbar(`Failed to import cards: ${err instanceof Error ? err.message : 'Invalid JSON'}`, 'error');
         console.error("Import error:", err);
+      } finally {
+        // Clear the file input
+        event.target.value = '';
       }
     };
     reader.readAsText(file);
@@ -248,12 +297,10 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        setSnackbarMessage(`Card "${card.title}" exported.`);
-        setSnackbarSeverity('success');
+        showSnackbar(`Card "${card.title}" exported.`, 'success');
       }
     } catch (e) {
-      setSnackbarMessage(`Failed to export card: ${e instanceof Error ? e.message : 'Unknown error'}`);
-      setSnackbarSeverity('error');
+      showSnackbar(`Failed to export card: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
     }
   };
 
@@ -359,8 +406,10 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
                       <Button variant="outlined" onClick={() => setShowSaveDialog(true)}>
                         Save
                       </Button>
-                      <Button variant="contained" onClick={handlePushToLive}>
-                        Push to Live
+                      {/* The "Push to Live" button becomes more like an immediate save if changes are dirty */}
+                      {/* If the intent is just to apply without saving, this needs careful state management */}
+                      <Button variant="contained" onClick={() => handleSaveCard(false)}> {/* Now directly saves */}
+                        Apply Changes
                       </Button>
                     </>
                   )}
@@ -382,6 +431,7 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
                 onCardChange={(updatedCard) => {
                   setLocalEditedCard(updatedCard);
                   // Check dirty state against activePromptCard (the "saved" version)
+                  // Use content hash for robust dirty checking
                   setIsCardDirty(JSON.stringify(updatedCard) !== JSON.stringify(activePromptCard));
                 }}
                 availableConnections={aiConnections}
@@ -417,12 +467,12 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
 
       {/* Snackbar */}
       <Snackbar
-        open={!!snackbarMessage}
+        open={snackbarOpen}
         autoHideDuration={6000}
-        onClose={() => setSnackbarMessage(null)}
+        onClose={handleSnackbarClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert onClose={() => setSnackbarMessage(null)} severity={snackbarSeverity} sx={{ width: '100%' }}>
+        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
           {snackbarMessage}
         </Alert>
       </Snackbar>

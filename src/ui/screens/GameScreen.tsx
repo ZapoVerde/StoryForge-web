@@ -1,6 +1,7 @@
 // src/ui/screens/GameScreen.tsx
 
 import React, { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom'; // Import useNavigate hook
 import {
   Box,
   Typography,
@@ -21,10 +22,10 @@ import CasinoIcon from '@mui/icons-material/Casino';
 import MenuIcon from '@mui/icons-material/Menu';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
-import { LogView } from '../components/LogView'; // For chat log
-import { PinnedItemsView } from '../components/PinnedItemsView'; // For pinned items
+import { LogView } from '../components/LogView';
+import { PinnedItemsView } from '../components/PinnedItemsView';
 import { GameState, LogEntry, Message } from '../../models/index';
-import { DiceRoller } from '../../utils/diceRoller'; // Will need to create this utility
+import { DiceRoller } from '../../utils/diceRoller';
 
 interface GameScreenProps {
   onNavToggle: () => void; // Callback to open/close side menu
@@ -32,6 +33,7 @@ interface GameScreenProps {
 
 const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
   const { user } = useAuthStore();
+  const navigate = useNavigate(); // Initialize useNavigate
   const {
     currentSnapshot,
     currentGameState,
@@ -48,6 +50,8 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
   const [showRollDialog, setShowRollDialog] = React.useState(false);
   const [rollFormula, setRollFormula] = React.useState("2d6");
   const [snackbarMessage, setSnackbarMessage] = React.useState<string | null>(null);
+  const [snackbarSeverity, setSnackbarSeverity] = React.useState<'success' | 'error' | 'info' | 'warning'>('info');
+
 
   const logRef = useRef<HTMLDivElement>(null);
 
@@ -56,7 +60,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
-  }, [gameLogs]); // Depends on gameLogs
+  }, [gameLogs]);
 
   // Effect to restore scroll position from store (on component mount/unmount)
   useEffect(() => {
@@ -69,42 +73,50 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
         updateNarratorScrollPosition(logRef.current.scrollTop);
       }
     };
-  }, []); // Only runs on mount/unmount
-
-  // Handle world change message snackbar
-  useEffect(() => {
-    // This assumes worldChangeMessage would come from GameStateStore or be triggered there
-    // For now, let's assume it's directly passed or derived later.
-    // If we want a snackbar for world changes, the store needs to provide that string.
-    // Example: const worldChangeMsg = useGameStateStore(state => state.worldChangeMessage);
-    // if (worldChangeMsg) { setSnackbarMessage(worldChangeMsg); }
   }, []);
+
 
   const handleSendAction = async () => {
     if (narratorInputText.trim() === '') return;
     try {
       await processPlayerAction(narratorInputText);
+      setSnackbarSeverity('success');
+      setSnackbarMessage('Action sent!');
     } catch (e) {
+      setSnackbarSeverity('error');
       setSnackbarMessage(`Failed to process action: ${e instanceof Error ? e.message : 'Unknown error'}`);
     }
   };
 
   const handleRollDice = async () => {
-    const result = DiceRoller.roll(rollFormula);
-    const summary = DiceRoller.format(result);
     try {
+      const result = DiceRoller.roll(rollFormula);
+      const summary = DiceRoller.format(result);
       await processPlayerAction(`Roll: ${rollFormula}\n${summary}`);
+      setSnackbarSeverity('success');
+      setSnackbarMessage(`Rolled ${rollFormula}: ${summary}`);
     } catch (e) {
-      setSnackbarMessage(`Failed to roll dice: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      setSnackbarSeverity('error');
+      setSnackbarMessage(`Failed to roll dice: ${e instanceof Error ? e.message : 'Invalid formula or error'}`);
     }
   };
 
   const handleRollDialogConfirm = () => {
-    // Validate rollFormula if necessary
+    // Basic validation for dice formula
+    if (!rollFormula.match(/^(\d*)d(\d+)([\+\-]\d+)?$/i)) {
+        setSnackbarSeverity('warning');
+        setSnackbarMessage('Invalid dice formula format. Please use NdN[+M|-M].');
+        return;
+    }
     setShowRollDialog(false);
   };
 
-  if (gameLoading && !currentSnapshot) { // Show full screen loading only if no snapshot is loaded yet
+  // Correct navigation to LoginScreen
+  const handleGoToLogin = () => {
+    navigate('/login');
+  };
+
+  if (gameLoading && !currentSnapshot) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
@@ -113,11 +125,13 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
     );
   }
 
+  // Changed to check for `user` first for proper redirection from App.tsx.
+  // This screen only truly renders its content if user and snapshot are present.
   if (!user || !currentSnapshot || !currentGameState) {
     return (
       <Box sx={{ p: 3, textAlign: 'center' }}>
         <Typography variant="h6" color="error">Game not initialized or user not logged in.</Typography>
-        <Button onClick={() => window.location.reload()}>Go to Login</Button> {/* Simple reload for now */}
+        <Button onClick={handleGoToLogin}>Go to Login</Button> {/* Corrected navigation */}
       </Box>
     );
   }
@@ -135,7 +149,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
       </Box>
 
       {/* Pinned Items Section */}
-      <PinnedItemsView gameState={currentGameState} /> {/* Will fetch pinned keys from store internally */}
+      <PinnedItemsView gameState={currentGameState} />
 
       {/* Log/Chat View */}
       <Paper
@@ -147,10 +161,10 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
           p: 2,
           overflowY: 'auto',
           backgroundColor: (theme) => theme.palette.background.paper,
-          position: 'relative', // For dice button
+          position: 'relative',
         }}
       >
-        <LogView logEntries={gameLogs} /> {/* Will render individual turns */}
+        <LogView logEntries={gameLogs} />
 
         {/* Dice Roller Button (Floating) */}
         <IconButton
@@ -165,8 +179,8 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
             },
           }}
           onClick={handleRollDice}
-          onContextMenu={(e) => { // Using onContextMenu for right-click/long press
-            e.preventDefault();
+          onContextMenu={(e) => {
+            e.preventDefault(); // Prevent native context menu
             setShowRollDialog(true);
           }}
           aria-label="roll dice"
@@ -186,7 +200,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
           value={narratorInputText}
           onChange={(e) => updateNarratorInputText(e.target.value)}
           onKeyPress={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) { // Send on Enter, new line on Shift+Enter
+            if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               handleSendAction();
             }
@@ -232,7 +246,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
         onClose={() => setSnackbarMessage(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert onClose={() => setSnackbarMessage(null)} severity={gameError ? "error" : "info"} sx={{ width: '100%' }}>
+        <Alert onClose={() => setSnackbarMessage(null)} severity={snackbarSeverity} sx={{ width: '100%' }}>
           {snackbarMessage || gameError}
         </Alert>
       </Snackbar>

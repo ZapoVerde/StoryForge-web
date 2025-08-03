@@ -11,9 +11,16 @@
     "test": "vitest"
   },
   "dependencies": {
-    "firebase": "^12.0.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^7.2.0",
+    "@mui/material": "^7.2.0",
+    "firebase": "^11.10.0",
+    "immer": "^10.1.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-router-dom": "^7.7.1",
+    "react-virtualized": "^9.22.6",
     "uuid": "^11.1.0",
     "zustand": "^5.0.7"
   },
@@ -21,6 +28,7 @@
     "@eslint/js": "^9.30.1",
     "@types/react": "^19.1.9",
     "@types/react-dom": "^19.1.7",
+    "@types/react-router-dom": "^5.3.3",
     "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react-swc": "^3.10.2",
     "c8": "^10.1.3",

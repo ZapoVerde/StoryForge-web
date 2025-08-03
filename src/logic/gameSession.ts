@@ -1,17 +1,51 @@
 // src/logic/gameSession.ts
 
+// Updated import paths for interfaces as well for clarity.
 import { PromptCard } from '../models/PromptCard';
 import { GameSnapshot } from '../models/GameSnapshot';
 import { LogEntry } from '../models/LogEntry';
-import { GameState, SceneState } from '../models/GameState'; // Import SceneState too
-import { Message } from '../models/Message'; // Import Message model
-import { DeltaInstruction, DeltaMap } from '../models/DeltaInstruction'; // Import DeltaInstruction and DeltaMap
+import { GameState, SceneState } from '../models/GameState';
+import { Message } from '../models/Message';
+import { DeltaInstruction, DeltaMap } from '../models/DeltaInstruction';
+import { AiSettings } from '../models/PromptCard'; // For DummyAiClient
+import { AiConnection } from '../models/AiConnection'; // For DummyAiClient
 
-import { promptBuilder, IPromptBuilder } from './promptBuilder';
-import { aiClient, IAiClient } from './aiClient'; // Import AI client
-import { logManager, ILogManager } from './logManager'; // Import Log Manager
-import { promptCardRepository, IPromptCardRepository } from '../data/repositories/promptCardRepository';
-import { gameRepository, IGameRepository } from '../data/repositories/gameRepository'; // Will be created next
+import { IPromptBuilder } from './promptBuilder';
+import { IAiClient } from './aiClient';
+import { ILogManager } from './logManager';
+import { IPromptCardRepository } from '../data/repositories/promptCardRepository';
+import { IGameRepository } from '../data/repositories/gameRepository';
+import { generateUuid } from '../utils/uuid'; // Import generateUuid
+
+// Define a simple DummyAiClient for testing and dev
+class DummyAiClient implements IAiClient {
+  async generateCompletion(
+    connection: AiConnection,
+    messages: Message[],
+    settings: AiSettings
+  ): Promise<string> {
+    console.log("Dummy Narrator: Simulating AI response...");
+    const lastUserMessage = messages.find(m => m.role === 'user')?.content || 'No user input.';
+    const dummyResponse = {
+      choices: [{
+        message: {
+          content: `@delta\n{"=player.hp": 99, "+player.gold": 1}\n@digest\n{"text": "A dummy event occurred.", "importance": 3}\n{"text": "Your input was: '${lastUserMessage}'.", "importance": 1}\n@scene\n{"location": "dummy_location", "present": []}\n` +
+          `The dummy narrator responds to your action: "${lastUserMessage}". A gentle breeze rustles through the imaginary trees, and you feel slightly less real. Your health is now 99, and you found 1 gold coin.`
+        }
+      }],
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 50,
+        total_tokens: 60,
+      }
+    };
+    return Promise.resolve(JSON.stringify(dummyResponse)); // Return as stringified JSON
+  }
+
+  async testConnection(connection: AiConnection): Promise<boolean> {
+    return Promise.resolve(true); // Dummy always passes test
+  }
+}
 
 /**
  * Interface defining the contract for the Game Session manager.
@@ -30,9 +64,10 @@ export interface IGameSession {
   /**
    * Processes a player's action, generates an AI response, and updates the game state.
    * @param action The player's input string.
+   * @param useDummyNarrator Flag to indicate if dummy AI should be used.
    * @returns A Promise resolving with the AI's response and any state changes.
    */
-  processPlayerAction(action: string): Promise<{ aiProse: string; newLogEntries: LogEntry[]; updatedSnapshot: GameSnapshot }>;
+  processPlayerAction(action: string, useDummyNarrator: boolean): Promise<{ aiProse: string; newLogEntries: LogEntry[]; updatedSnapshot: GameSnapshot }>;
 
   /**
    * Retrieves the current game state.
@@ -72,17 +107,24 @@ export interface IGameSession {
 /**
  * Concrete implementation of IGameSession.
  */
-export class GameSession implements IGameSession {
+export class GameSession implements IGameSession { // Export the class
   private currentUserId: string | null = null;
   private currentSnapshot: GameSnapshot | null = null;
+  private currentPromptCard: PromptCard | null = null; // Store active card to avoid re-fetching
+
+  // Store the real AI client and a dummy one
+  private realAiClient: IAiClient;
+  private dummyAiClient: IAiClient = new DummyAiClient(); // Instantiate dummy client
 
   constructor(
     private cardRepo: IPromptCardRepository,
-    private gameRepo: IGameRepository, // Now injecting gameRepo
+    private gameRepo: IGameRepository,
     private builder: IPromptBuilder,
-    private aiClient: IAiClient, // Now injecting aiClient
-    private logManager: ILogManager, // Now injecting logManager
-  ) {}
+    aiClientInstance: IAiClient, // Receive the real AI client here
+    private logManager: ILogManager,
+  ) {
+    this.realAiClient = aiClientInstance;
+  }
 
   async initializeGame(userId: string, cardId: string, existingSnapshotId?: string): Promise<void> {
     this.currentUserId = userId;
@@ -90,6 +132,7 @@ export class GameSession implements IGameSession {
     if (!card) {
       throw new Error(`PromptCard with ID ${cardId} not found for user ${userId}. Cannot start game.`);
     }
+    this.currentPromptCard = card; // Set the active card
 
     if (existingSnapshotId) {
       const snapshot = await this.gameRepo.getGameSnapshot(userId, existingSnapshotId);
@@ -100,7 +143,7 @@ export class GameSession implements IGameSession {
       console.log(`Loaded existing game: ${snapshot.id}`);
     } else {
       // Start a new game
-      const newSnapshotId = new Date().getTime().toString(); // Simple ID for new snapshot, replace with UUID for robust solution
+      const newSnapshotId = generateUuid(); // Use UUID
       const now = new Date().toISOString();
 
       const initialGameState: GameState = {
@@ -134,6 +177,7 @@ export class GameSession implements IGameSession {
         gameState: initialGameState,
         conversationHistory: [], // Start with empty history
         logs: [],
+        worldStatePinnedKeys: [], // Add this for persistence of pinning.
       };
       console.log(`Initialized new game with card: ${card.title}, Snapshot ID: ${newSnapshotId}`);
 
@@ -145,17 +189,13 @@ export class GameSession implements IGameSession {
     }
   }
 
-  async processPlayerAction(action: string): Promise<{ aiProse: string; newLogEntries: LogEntry[]; updatedSnapshot: GameSnapshot }> {
-    if (!this.currentSnapshot || !this.currentUserId || !this.currentSnapshot.promptCardId) {
+  async processPlayerAction(action: string, useDummyNarrator: boolean): Promise<{ aiProse: string; newLogEntries: LogEntry[]; updatedSnapshot: GameSnapshot }> { // Added useDummyNarrator
+    if (!this.currentSnapshot || !this.currentUserId || !this.currentPromptCard) {
       throw new Error("Game not initialized. Call initializeGame first.");
     }
     const userId = this.currentUserId;
     const currentSnapshot = this.currentSnapshot;
-    const promptCard = await this.cardRepo.getPromptCard(userId, currentSnapshot.promptCardId);
-
-    if (!promptCard) {
-      throw new Error(`Active PromptCard with ID ${currentSnapshot.promptCardId} not found.`);
-    }
+    const promptCard = this.currentPromptCard; // Use the stored prompt card
 
     const nextTurnNumber = currentSnapshot.currentTurn + 1;
 
@@ -169,36 +209,66 @@ export class GameSession implements IGameSession {
       nextTurnNumber // Pass current turn number
     );
 
-    const apiRequestBody = JSON.stringify({
-        model: promptCard.aiSettings.selectedConnectionId, // Placeholder; actual model slug comes from AiConnection
-        messages: messagesToSend.map(m => ({ role: m.role, content: m.content })) // Simplified for logging
-    });
-
     let aiRawOutput: string = "";
     let aiResponseLatencyMs: number | null = null;
     let aiModelSlugUsed: string = "";
     let aiApiUrl: string | null = null;
+    let aiApiRequestBody: string | null = JSON.stringify({ // Capture request body
+        model: promptCard.aiSettings.selectedConnectionId, // Placeholder; actual model slug comes from AiConnection
+        messages: messagesToSend.map(m => ({ role: m.role, content: m.content })) // Simplified for logging
+    });
     let aiApiResponseBody: string | null = null;
     let aiTokenUsage: any = null; // TokenSummary from AI not implemented yet
 
     try {
-        const connection = (await this.gameRepo.getAiConnections(userId)).find(c => c.id === promptCard.aiSettings.selectedConnectionId);
-        if (!connection) {
-            throw new Error(`AI connection ${promptCard.aiSettings.selectedConnectionId} not found.`);
+        const activeAiClient = useDummyNarrator ? this.dummyAiClient : this.realAiClient; // Choose AI client
+        let connection: AiConnection | undefined;
+
+        if (!useDummyNarrator) { // Only fetch real connection for real AI
+            connection = (await this.gameRepo.getAiConnections(userId)).find(c => c.id === promptCard.aiSettings.selectedConnectionId);
+            if (!connection) {
+                throw new Error(`AI connection ${promptCard.aiSettings.selectedConnectionId} not found.`);
+            }
+            aiModelSlugUsed = connection.modelSlug;
+            aiApiUrl = new URL("chat/completions", connection.apiUrl).href;
+        } else {
+            // Dummy connection details for logging
+            connection = {
+                id: 'dummy', displayName: 'Dummy Narrator', modelName: 'Dummy', modelSlug: 'dummy',
+                apiUrl: 'n/a', apiToken: 'n/a', functionCallingEnabled: false, createdAt: '', lastUpdated: ''
+            };
+            aiModelSlugUsed = 'dummy-narrator';
+            aiApiUrl = 'local-dummy-url';
+            aiApiRequestBody = "Dummy Request";
         }
-        aiModelSlugUsed = connection.modelSlug;
-        aiApiUrl = new URL("chat/completions", connection.apiUrl).href; // Full URL for logging
 
         const startTime = performance.now();
-        aiRawOutput = await this.aiClient.generateCompletion(
-            connection,
+        // CALL TO AI CLIENT - will now return full response with token usage
+        const fullAiResponse = await activeAiClient.generateCompletion(
+            connection, // Pass the connection (even dummy one)
             messagesToSend,
             promptCard.aiSettings
         );
         aiResponseLatencyMs = Math.round(performance.now() - startTime);
 
-        // TODO: Extract actual token usage from AI response if available in the future.
-        // For now, it's null in LogEntry.
+        let parsedAiJson;
+        try {
+            parsedAiJson = JSON.parse(fullAiResponse); // Attempt to parse if it's JSON string
+            aiRawOutput = parsedAiJson.choices?.[0]?.message?.content?.trim() || "";
+            // Extract token usage if available in the parsed JSON
+            aiTokenUsage = parsedAiJson.usage ? {
+                inputTokens: parsedAiJson.usage.prompt_tokens || 0,
+                outputTokens: parsedAiJson.usage.completion_tokens || 0,
+                totalTokens: parsedAiJson.usage.total_tokens || 0,
+                // cachedTokens: ... if your API provides this
+            } : null;
+            aiApiResponseBody = fullAiResponse; // Store raw response body
+        } catch (parseError) {
+            // If it's not JSON, assume it's just the content string directly
+            aiRawOutput = fullAiResponse;
+            aiApiResponseBody = fullAiResponse; // Store raw response body
+            console.warn("AI Client returned non-JSON string or malformed JSON. Assuming raw content.", parseError);
+        }
 
         // Update conversation history with user message
         currentSnapshot.conversationHistory.push({ role: 'user', content: action });
@@ -213,7 +283,7 @@ export class GameSession implements IGameSession {
     }
 
     // 2. Process AI output with deltaParser
-    const parsedAiOutput = this.builder.parseNarratorOutput(aiRawOutput); // PromptBuilder now also contains parsing
+    const parsedAiOutput = this.builder.parseNarratorOutput(aiRawOutput);
 
     // Update conversation history with AI assistant response
     currentSnapshot.conversationHistory.push({ role: 'assistant', content: parsedAiOutput.prose });
@@ -237,8 +307,8 @@ export class GameSession implements IGameSession {
       contextSnapshot: JSON.stringify(messagesToSend), // Stringify the full messages array for context log
       tokenUsage: aiTokenUsage,
       aiSettings: promptCard.aiSettings,
-      apiRequestBody: apiRequestBody,
-      apiResponseBody: aiApiResponseBody, // Placeholder, actual response body needed from aiClient
+      apiRequestBody: aiApiRequestBody,
+      apiResponseBody: aiApiResponseBody, // Use captured response body
       apiUrl: aiApiUrl,
       latencyMs: aiResponseLatencyMs,
       modelSlugUsed: aiModelSlugUsed,
@@ -265,9 +335,7 @@ export class GameSession implements IGameSession {
   }
 
   getCurrentPromptCard(): PromptCard | null {
-    return this.currentSnapshot ?
-        (this.cardRepo.getPromptCard(this.currentUserId!, this.currentSnapshot.promptCardId) || null)
-        : null; // Fetch from repo to ensure it's up to date. Or, consider storing card directly in snapshot.
+    return this.currentPromptCard; // Return the stored active card
   }
 
   getCurrentGameState(): GameState | null {
@@ -296,6 +364,15 @@ export class GameSession implements IGameSession {
       throw new Error(`Game snapshot ${snapshotId} not found for user ${this.currentUserId}.`);
     }
     this.currentSnapshot = snapshot;
+    // Also load the associated PromptCard when a game is loaded
+    const card = await this.cardRepo.getPromptCard(this.currentUserId, snapshot.promptCardId);
+    if (!card) {
+        console.warn(`PromptCard ${snapshot.promptCardId} for loaded game ${snapshotId} not found.`);
+        this.currentPromptCard = null;
+    } else {
+        this.currentPromptCard = card;
+    }
+
     console.log(`Game snapshot ${snapshotId} loaded.`);
   }
 
@@ -395,16 +472,5 @@ export class GameSession implements IGameSession {
   }
 }
 
-// Export a singleton instance of the GameSession, injecting all required dependencies.
-// We will create `gameRepository` in the next step.
-import { gameRepository } from '../data/repositories/gameRepository.ts'; 
-export const gameSession = new GameSession(
-  promptCardRepository,
-  gameRepository,
-  // Placeholder for gameRepository. You'll replace this with the actual instance later.
-  // This is a common pattern to avoid circular dependencies during initial setup.
-  {} as IGameRepository, // TEMP: Placeholder until gameRepository is created
-  promptBuilder,
-  aiClient,
-  logManager
-);
+// Export the GameSession class to be instantiated in main.tsx
+// REMOVED: export const gameSession = new GameSession(...);

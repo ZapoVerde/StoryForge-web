@@ -13,13 +13,20 @@ export interface IAiClient {
    * @param connection The AiConnection details (URL, API key).
    * @param messages The array of messages forming the conversation context.
    * @param settings The AI settings for this specific call (temperature, etc.).
-   * @returns A Promise that resolves with the raw text content of the AI's response.
+   * @returns A Promise that resolves with the raw text content of the AI's response (or stringified JSON if full response).
    */
   generateCompletion(
     connection: AiConnection,
     messages: Message[],
     settings: AiSettings
-  ): Promise<string>;
+  ): Promise<string>; // Changed return type to string to hold raw JSON or content
+
+  /**
+   * Tests an AI connection by making a minimal API call.
+   * @param connection The AiConnection details to test.
+   * @returns A Promise that resolves to true if the connection is successful, false otherwise.
+   */
+  testConnection(connection: AiConnection): Promise<boolean>;
 }
 
 /**
@@ -31,9 +38,9 @@ class AiClient implements IAiClient {
     connection: AiConnection,
     messages: Message[],
     settings: AiSettings
-  ): Promise<string> {
-    if (!connection.apiToken || connection.apiToken === "MISSING_API_KEY") {
-      throw new Error("AI API key is missing or not configured.");
+  ): Promise<string> { // Now returns raw string, expecting JSON from most APIs
+    if (!connection.apiToken || connection.apiToken === "YOUR_DEEPSEEK_API_KEY_HERE" || connection.apiToken === "MISSING_API_KEY") {
+      throw new Error("AI API key is missing or not configured. Please set it in Settings.");
     }
 
     const apiUrl = new URL("chat/completions", connection.apiUrl).href;
@@ -46,7 +53,7 @@ class AiClient implements IAiClient {
       max_tokens: settings.maxTokens,
       presence_penalty: settings.presencePenalty,
       frequency_penalty: settings.frequencyPenalty,
-      stream: false,
+      stream: false, // For now, we're not streaming
     };
 
     try {
@@ -55,6 +62,8 @@ class AiClient implements IAiClient {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${connection.apiToken}`,
+          // User-Agent if provided
+          ...(connection.userAgent && { 'User-Agent': connection.userAgent }),
         },
         body: JSON.stringify(requestBody),
       });
@@ -62,18 +71,12 @@ class AiClient implements IAiClient {
       if (!response.ok) {
         const errorBody = await response.text();
         console.error("AI API Error Response:", errorBody);
-        throw new Error(`AI API request failed with status ${response.status}: ${response.statusText}`);
+        throw new Error(`AI API request failed with status ${response.status}: ${response.statusText}. Details: ${errorBody.substring(0, 200)}...`);
       }
 
       const responseJson = await response.json();
-      const content = responseJson.choices?.[0]?.message?.content?.trim();
-
-      if (!content) {
-        console.error("Malformed AI response:", responseJson);
-        throw new Error("Received an empty or malformed response from the AI API.");
-      }
-
-      return content;
+      // Return the full stringified JSON response for gameSession to parse token usage etc.
+      return JSON.stringify(responseJson);
     } catch (error: unknown) {
         let errorMessage = "An unknown error occurred";
         if (error instanceof Error) {
@@ -81,6 +84,50 @@ class AiClient implements IAiClient {
         }
         console.error("Failed to make AI API call:", error);
         throw new Error(`Network error or AI API failure: ${errorMessage}`);
+    }
+  }
+
+  async testConnection(connection: AiConnection): Promise<boolean> {
+    if (!connection.apiToken || connection.apiToken === "YOUR_DEEPSEEK_API_KEY_HERE" || connection.apiToken === "MISSING_API_KEY") {
+      return false; // Cannot test without a valid key
+    }
+
+    const apiUrl = new URL("chat/completions", connection.apiUrl).href;
+    const testMessage: Message[] = [{ role: 'user', content: 'hello' }];
+
+    const requestBody = {
+      model: connection.modelSlug,
+      messages: testMessage,
+      max_tokens: 10, // Smallest possible request
+      temperature: 0.1,
+    };
+
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${connection.apiToken}`,
+          ...(connection.userAgent && { 'User-Agent': connection.userAgent }),
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      // A 2xx status code indicates success, even if the response content is minimal
+      if (response.ok) {
+        const responseJson = await response.json();
+        // Optionally, check for expected content in the response.
+        // For a basic test, just success status is enough.
+        console.log("AI Connection Test Success:", responseJson);
+        return true;
+      } else {
+        const errorBody = await response.text();
+        console.warn(`AI Connection Test Failed (Status: ${response.status}):`, errorBody);
+        return false;
+      }
+    } catch (error) {
+      console.error("AI Connection Test Network Error:", error);
+      return false;
     }
   }
 }

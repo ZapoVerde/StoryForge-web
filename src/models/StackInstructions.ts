@@ -4,13 +4,29 @@
  * Defines the mode for including a stack element.
  * Corresponds to the `StackMode` enum.
  */
-export type StackMode = 'always' | 'firstN' | 'afterN' | 'never' | 'filtered';
+// export type StackMode = 'always' | 'firstN' | 'afterN' | 'never' | 'filtered'; // OLD
+export const StackModes = {
+  ALWAYS: 'always',
+  FIRST_N: 'firstN',
+  AFTER_N: 'afterN',
+  NEVER: 'never',
+  FILTERED: 'filtered' // Added 'filtered' from your type alias
+} as const;
+export type StackMode = typeof StackModes[keyof typeof StackModes];
+
 
 /**
  * Defines the filtering strategy for a stack element.
  * Corresponds to the `FilterMode` enum.
  */
-export type FilterMode = 'none' | 'sceneOnly' | 'tagged';
+// export type FilterMode = 'none' | 'sceneOnly' | 'tagged'; // OLD
+export const FilterModes = {
+  NONE: 'none',
+  SCENE_ONLY: 'sceneOnly',
+  TAGGED: 'tagged'
+} as const;
+export type FilterMode = typeof FilterModes[keyof typeof FilterModes];
+
 
 /**
  * Defines a policy for including prose or other list-based context.
