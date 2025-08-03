@@ -45,7 +45,7 @@ const AppContent: React.FC = () => {
   // Effect to handle navigation redirection based on auth state
   // This hook is now called unconditionally on every render.
 React.useEffect(() => {
-  const publicPaths = ['/login', '/source-dump'];
+  const publicPaths = ['/login', '/sourcedump'];
 
   if (!user && !publicPaths.includes(window.location.pathname)) {
     navigate('/login');
@@ -147,7 +147,7 @@ React.useEffect(() => {
       </Drawer>
       <Box component="main" sx={{ flexGrow: 1, p: 0, width: { sm: `calc(100% - ${drawerWidth}px)` }, height: '100%' }}>
         <Routes>
-          <Route path="/source-dump" element={<SourceDump />} />
+          <Route path="/sourcedump" element={<SourceDump />} />
           <Route path="/login" element={<LoginScreen />} />
           {user ? (
             // Authenticated routes
