@@ -16,7 +16,8 @@ import {
   CircularProgress,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
-import { useLogStore, LogViewMode } from '../../state/useLogStore';
+import { useLogStore } from '../../state/useLogStore';
+import { LogViewMode } from '../../utils/types';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { LogEntryDisplay } from '../components/LogEntryDisplay'; // Component to render individual log parts
 import { AutoSizer, List } from 'react-virtualized'; // For efficient list rendering
