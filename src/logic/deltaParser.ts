@@ -1,8 +1,8 @@
 // src/logic/deltaParser.ts
 
-import { DeltaInstruction, DeltaMap } from '../models/DeltaInstruction';
-import { DigestLine } from '../models/LogEntryElements';
-import { ParsedNarrationOutput } from '../models/ParsedNarrationOutput';
+import type { DeltaInstruction, DeltaMap } from '../models/DeltaInstruction.ts';
+import type { DigestLine } from '../models/LogEntryElements.ts';
+import type { ParsedNarrationOutput } from '../models/ParsedNarrationOutput.ts';
 
 const DELTA_MARKER = "@delta";
 const DIGEST_MARKER = "@digest";
@@ -13,12 +13,13 @@ const SCENE_MARKER = "@scene";
  * @param lines The lines of text containing the JSON.
  * @returns A JSON object, or an empty object on error.
  */
-function extractJsonObject(lines: string[]): Record<string, any> {
+function extractJsonObject(lines: string[]): Record<string, unknown> {
   const text = lines.join('\n').trim();
   if (!text) return {};
   try {
-    return JSON.parse(text);
-  } catch (e) {
+    const parsed = JSON.parse(text);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : {};
+  } catch (e: unknown) {
     console.error("Failed to parse JSON object:", e, "\nText:", text);
     return {};
   }
@@ -29,12 +30,13 @@ function extractJsonObject(lines: string[]): Record<string, any> {
  * @param lines The lines of text containing the JSON array.
  * @returns A JSON array, or an empty array on error.
  */
-function extractJsonArray(lines: string[]): any[] {
+function extractJsonArray(lines: string[]): unknown[] {
   const text = lines.join('\n').trim();
   if (!text) return [];
   try {
-    return JSON.parse(text);
-  } catch (e) {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e: unknown) {
     console.error("Failed to parse JSON array:", e, "\nText:", text);
     return [];
   }
