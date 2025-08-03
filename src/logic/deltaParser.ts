@@ -50,7 +50,7 @@ function extractJsonArray(lines: string[]): unknown[] {
  * @param value The JSON value associated with the key.
  * @returns A DeltaInstruction object or null if parsing fails.
  */
-function parseSingleDelta(rawKey: string, value: any): DeltaInstruction | null {
+function parseSingleDelta(rawKey: string, value: unknown): DeltaInstruction | null {
   const op = rawKey.charAt(0);
   const path = rawKey.substring(1); // The rest of the key, e.g., "player.gold"
 
@@ -106,13 +106,13 @@ export function parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput 
   }
 
   // --- Parse Digest Lines ---
-  const digestLines: DigestLine[] = digestJson.map((item: any, index: number) => {
-    const text = item.text || '';
-    const importance = typeof item.importance === 'number' ? item.importance : 3;
+  const digestLines: DigestLine[] = digestJson.map((item) => {
+    const { text = '', importance } = item as { text?: string; importance?: number };
+    const finalImportance = typeof importance === 'number' ? importance : 3;
     // Extract tags from text using regex, as in original NarrationParser
     const tagPattern = /[#@$][a-zA-Z0-9_]+/g;
     const tags = text.match(tagPattern) || [];
-    return { text, importance, tags };
+    return { text, importance: finalImportance, tags };
   }).filter(line => line.text); // Filter out empty lines
 
   return {

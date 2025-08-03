@@ -1,16 +1,17 @@
 // src/logic/gameSession.ts
 
 import { PromptCard } from '../models/PromptCard';
-// We will import GameSnapshot and LogEntry when they are defined
-// import { GameSnapshot } from '../models/GameSnapshot';
-// import { LogEntry } from '../models/LogEntry';
+import { GameSnapshot } from '../models/GameSnapshot';
+import { LogEntry } from '../models/LogEntry';
+import { GameState, SceneState } from '../models/GameState'; // Import SceneState too
+import { Message } from '../models/Message'; // Import Message model
+import { DeltaInstruction, DeltaMap } from '../models/DeltaInstruction'; // Import DeltaInstruction and DeltaMap
 
-import { promptBuilder, IPromptBuilder } from './promptBuilder'; // Import our prompt builder
-import { promptCardRepository, IPromptCardRepository } from '../data/repositories/promptCardRepository'; // Used for initial setup/loading
-
-// Placeholder types for now until defined by user
-type GameSnapshot = any;
-type LogEntry = any;
+import { promptBuilder, IPromptBuilder } from './promptBuilder';
+import { aiClient, IAiClient } from './aiClient'; // Import AI client
+import { logManager, ILogManager } from './logManager'; // Import Log Manager
+import { promptCardRepository, IPromptCardRepository } from '../data/repositories/promptCardRepository';
+import { gameRepository, IGameRepository } from '../data/repositories/gameRepository'; // Will be created next
 
 /**
  * Interface defining the contract for the Game Session manager.
@@ -28,44 +29,44 @@ export interface IGameSession {
 
   /**
    * Processes a player's action, generates an AI response, and updates the game state.
-   * Corresponds to StoryForgeViewModel.processAction.
    * @param action The player's input string.
    * @returns A Promise resolving with the AI's response and any state changes.
    */
-  processPlayerAction(action: string): Promise<{ aiResponse: string; newLogEntries: LogEntry[]; updatedSnapshot: GameSnapshot }>;
+  processPlayerAction(action: string): Promise<{ aiProse: string; newLogEntries: LogEntry[]; updatedSnapshot: GameSnapshot }>;
 
   /**
    * Retrieves the current game state.
-   * @returns The current GameSnapshot (placeholder).
+   * @returns The current GameSnapshot or null if not initialized.
    */
-  getCurrentGameState(): GameSnapshot | null;
-
-  /**
-   * Retrieves the current game logs.
-   * @returns An array of LogEntry (placeholder).
-   */
-  getGameLogs(): LogEntry[];
-
-  /**
-   * Retrieves the PromptCard associated with the current session.
-   * @returns The PromptCard for the session.
-   */
-  getCurrentPromptCard(): PromptCard | null;
+  getCurrentGameSnapshot(): GameSnapshot | null;
 
   /**
    * Saves the current game state.
-   * Corresponds to StoryForgeViewModel.save flow.
    * @returns A Promise resolving when the game is saved.
    */
   saveGame(): Promise<void>;
 
   /**
    * Loads a game snapshot.
-   * Corresponds to StoryForgeViewModel.load flow.
    * @param snapshotId The ID of the snapshot to load.
    * @returns A Promise resolving when the game is loaded.
    */
   loadGame(snapshotId: string): Promise<void>;
+
+  /**
+   * Provides access to the current PromptCard for UI purposes.
+   */
+  getCurrentPromptCard(): PromptCard | null;
+
+  /**
+   * Provides access to the current GameState for UI purposes.
+   */
+  getCurrentGameState(): GameState | null;
+
+  /**
+   * Provides access to the current LogEntries for UI purposes.
+   */
+  getGameLogs(): LogEntry[];
 }
 
 /**
@@ -73,16 +74,14 @@ export interface IGameSession {
  */
 export class GameSession implements IGameSession {
   private currentUserId: string | null = null;
-  private currentPromptCard: PromptCard | null = null;
-  private currentGameState: GameSnapshot | null = null; // Placeholder
-  private currentLogEntries: LogEntry[] = []; // Placeholder
+  private currentSnapshot: GameSnapshot | null = null;
 
   constructor(
     private cardRepo: IPromptCardRepository,
+    private gameRepo: IGameRepository, // Now injecting gameRepo
     private builder: IPromptBuilder,
-    // When logManager and gameRepository are defined, they will be injected here.
-    // private logManager: ILogManager,
-    // private gameRepo: IGameRepository,
+    private aiClient: IAiClient, // Now injecting aiClient
+    private logManager: ILogManager, // Now injecting logManager
   ) {}
 
   async initializeGame(userId: string, cardId: string, existingSnapshotId?: string): Promise<void> {
@@ -91,132 +90,321 @@ export class GameSession implements IGameSession {
     if (!card) {
       throw new Error(`PromptCard with ID ${cardId} not found for user ${userId}. Cannot start game.`);
     }
-    this.currentPromptCard = card;
 
     if (existingSnapshotId) {
-      // TODO: Implement actual loading logic using gameRepository
-      console.log(`Loading existing game snapshot: ${existingSnapshotId} (NOT YET IMPLEMENTED)`);
-      // const snapshot = await this.gameRepo.loadSnapshot(userId, existingSnapshotId);
-      // if (snapshot) {
-      //   this.currentGameState = snapshot;
-      //   this.currentLogEntries = snapshot.logs;
-      // }
+      const snapshot = await this.gameRepo.getGameSnapshot(userId, existingSnapshotId);
+      if (!snapshot) {
+        throw new Error(`Game snapshot with ID ${existingSnapshotId} not found for user ${userId}.`);
+      }
+      this.currentSnapshot = snapshot;
+      console.log(`Loaded existing game: ${snapshot.id}`);
     } else {
       // Start a new game
-      this.currentGameState = {
-        // Initial game state from card.worldStateInit or defaults.
-        // This will be parsed and structured properly later.
-        turnCount: 0,
-        scene: "A new adventure begins...",
-        // other initial state properties
+      const newSnapshotId = new Date().getTime().toString(); // Simple ID for new snapshot, replace with UUID for robust solution
+      const now = new Date().toISOString();
+
+      const initialGameState: GameState = {
+        narration: "A new adventure begins...",
+        worldState: {}, // Initialize as empty, `worldStateInit` from card will populate this
+        scene: { location: null, present: [] }, // Initialize empty scene
       };
-      this.currentLogEntries = [];
-      console.log(`Initialized new game with card: ${card.title}`);
-      // Generate first turn prompt to show to user initially
-      const firstTurnPrompt = this.builder.buildFirstTurnPrompt(this.currentPromptCard);
+
+      // Apply initial worldState from PromptCard (similar to ViewModel's setActivePromptCard logic)
+      if (card.worldStateInit && card.worldStateInit.trim().length > 0) {
+        try {
+          const parsedInit = JSON.parse(card.worldStateInit);
+          // Simple validation: ensure it's a top-level object
+          if (typeof parsedInit === 'object' && parsedInit !== null && !Array.isArray(parsedInit)) {
+            initialGameState.worldState = parsedInit;
+          } else {
+            console.warn("PromptCard worldStateInit is not a valid JSON object, ignoring:", card.worldStateInit);
+          }
+        } catch (e) {
+          console.error("Failed to parse PromptCard worldStateInit JSON:", e);
+        }
+      }
+
+      this.currentSnapshot = {
+        id: newSnapshotId,
+        userId: userId,
+        promptCardId: card.id,
+        createdAt: now,
+        updatedAt: now,
+        currentTurn: 0,
+        gameState: initialGameState,
+        conversationHistory: [], // Start with empty history
+        logs: [],
+      };
+      console.log(`Initialized new game with card: ${card.title}, Snapshot ID: ${newSnapshotId}`);
+
+      // First turn prompt (for AI)
+      const firstTurnPrompt = this.builder.buildFirstTurnPrompt(card);
       console.log("First Turn Prompt (for AI):", firstTurnPrompt);
-      // In a real scenario, this would be sent to the AI and its response processed.
-      // For now, it's just for display/logging.
+      // Note: No AI call here. The first actual AI call happens on the first player action.
+      // This initial prompt is for building the session's context for the first turn.
     }
   }
 
-  async processPlayerAction(action: string): Promise<{ aiResponse: string; newLogEntries: LogEntry[]; updatedSnapshot: GameSnapshot }> {
-    if (!this.currentPromptCard || !this.currentUserId) {
+  async processPlayerAction(action: string): Promise<{ aiProse: string; newLogEntries: LogEntry[]; updatedSnapshot: GameSnapshot }> {
+    if (!this.currentSnapshot || !this.currentUserId || !this.currentSnapshot.promptCardId) {
       throw new Error("Game not initialized. Call initializeGame first.");
     }
+    const userId = this.currentUserId;
+    const currentSnapshot = this.currentSnapshot;
+    const promptCard = await this.cardRepo.getPromptCard(userId, currentSnapshot.promptCardId);
+
+    if (!promptCard) {
+      throw new Error(`Active PromptCard with ID ${currentSnapshot.promptCardId} not found.`);
+    }
+
+    const nextTurnNumber = currentSnapshot.currentTurn + 1;
 
     // 1. Build prompt for AI (including dynamic context)
-    const fullPrompt = this.builder.buildEveryTurnPrompt(
-      this.currentPromptCard,
-      this.currentGameState, // Placeholder
-      this.currentLogEntries // Placeholder
+    const messagesToSend: Message[] = this.builder.buildEveryTurnPrompt(
+      promptCard,
+      currentSnapshot.gameState,
+      currentSnapshot.logs,
+      currentSnapshot.conversationHistory, // Pass conversation history
+      action, // Pass current user action
+      nextTurnNumber // Pass current turn number
     );
-    console.log("Full prompt for AI:", fullPrompt);
-    console.log("Player action:", action);
 
-    // 2. Call AI (Placeholder)
-    // In a real scenario, this would involve an API call to an LLM.
-    const aiRawOutput = `Narrator: You take a step forward. The air grows colder.
-    {"delta": "The goblin recoils."}`; // Mock AI response
+    const apiRequestBody = JSON.stringify({
+        model: promptCard.aiSettings.selectedConnectionId, // Placeholder; actual model slug comes from AiConnection
+        messages: messagesToSend.map(m => ({ role: m.role, content: m.content })) // Simplified for logging
+    });
 
-    // 3. Process AI output with deltaParser (Placeholder)
-    // TODO: Implement deltaParser.ts
-    const processedAiOutput: { prose: string; deltas: any[]; tags: string[] } = {
-        prose: aiRawOutput.split('{"delta":')[0].trim(),
-        deltas: [{ type: 'mock', value: 'The goblin recoils.' }],
-        tags: ['goblin']
-    };
-    console.log("Processed AI Output:", processedAiOutput);
+    let aiRawOutput: string = "";
+    let aiResponseLatencyMs: number | null = null;
+    let aiModelSlugUsed: string = "";
+    let aiApiUrl: string | null = null;
+    let aiApiResponseBody: string | null = null;
+    let aiTokenUsage: any = null; // TokenSummary from AI not implemented yet
 
-    // 4. Update Game State & Logs (Placeholder for LogManager)
-    // TODO: Implement logManager.ts to add new log entry
-    // TODO: Apply deltas to currentGameState
-    const newLogEntry: LogEntry = {
-        type: 'narrator',
-        timestamp: new Date().toISOString(),
-        prose: processedAiOutput.prose,
-        deltas: processedAiOutput.deltas,
-        tags: processedAiOutput.tags,
-        // ... more properties as per LogEntry model
-    };
-    this.currentLogEntries.push(newLogEntry);
-    this.currentGameState.turnCount++; // Increment turn count
-    this.currentGameState.scene = "The path ahead is misty."; // Mock scene update
+    try {
+        const connection = (await this.gameRepo.getAiConnections(userId)).find(c => c.id === promptCard.aiSettings.selectedConnectionId);
+        if (!connection) {
+            throw new Error(`AI connection ${promptCard.aiSettings.selectedConnectionId} not found.`);
+        }
+        aiModelSlugUsed = connection.modelSlug;
+        aiApiUrl = new URL("chat/completions", connection.apiUrl).href; // Full URL for logging
 
-    console.log("Updated Game State (Mock):", this.currentGameState);
-    console.log("New Log Entry (Mock):", newLogEntry);
+        const startTime = performance.now();
+        aiRawOutput = await this.aiClient.generateCompletion(
+            connection,
+            messagesToSend,
+            promptCard.aiSettings
+        );
+        aiResponseLatencyMs = Math.round(performance.now() - startTime);
+
+        // TODO: Extract actual token usage from AI response if available in the future.
+        // For now, it's null in LogEntry.
+
+        // Update conversation history with user message
+        currentSnapshot.conversationHistory.push({ role: 'user', content: action });
+
+    } catch (e: any) {
+        console.error("AI call failed:", e);
+        // Fallback or error handling
+        aiRawOutput = `AI system error: ${e.message}. Please try again or check settings.`;
+        // Update conversation history with assistant error message
+        currentSnapshot.conversationHistory.push({ role: 'assistant', content: aiRawOutput });
+        throw e; // Re-throw to indicate failure
+    }
+
+    // 2. Process AI output with deltaParser
+    const parsedAiOutput = this.builder.parseNarratorOutput(aiRawOutput); // PromptBuilder now also contains parsing
+
+    // Update conversation history with AI assistant response
+    currentSnapshot.conversationHistory.push({ role: 'assistant', content: parsedAiOutput.prose });
 
 
-    // 5. Save Game State (Placeholder)
-    // TODO: Call gameRepository.saveGame(this.currentUserId, this.currentGameState);
-    await this.saveGame(); // For now, just calls the placeholder saveGame
+    // 3. Update Game State with deltas (Replicates GameState.applyDeltas)
+    const updatedGameState: GameState = { ...currentSnapshot.gameState };
+    if (parsedAiOutput.deltas) {
+      this.applyDeltasToGameState(updatedGameState, parsedAiOutput.deltas);
+    }
+    // Update SceneState based on parsed @scene block or deltas (Replicates SceneManager)
+    this.updateSceneState(updatedGameState.scene, parsedAiOutput.scene, parsedAiOutput.deltas, updatedGameState.worldState);
+
+
+    // 4. Create new LogEntry (Replicates TurnLogAssembler & DigestManager.addParsedLines)
+    const newLogEntry: LogEntry = this.logManager.assembleTurnLogEntry({
+      turnNumber: nextTurnNumber,
+      userInput: action,
+      rawNarratorOutput: aiRawOutput,
+      parsedOutput: parsedAiOutput,
+      contextSnapshot: JSON.stringify(messagesToSend), // Stringify the full messages array for context log
+      tokenUsage: aiTokenUsage,
+      aiSettings: promptCard.aiSettings,
+      apiRequestBody: apiRequestBody,
+      apiResponseBody: aiApiResponseBody, // Placeholder, actual response body needed from aiClient
+      apiUrl: aiApiUrl,
+      latencyMs: aiResponseLatencyMs,
+      modelSlugUsed: aiModelSlugUsed,
+    });
+    currentSnapshot.logs.push(newLogEntry);
+
+
+    // 5. Update snapshot metadata and save
+    currentSnapshot.gameState = updatedGameState;
+    currentSnapshot.currentTurn = nextTurnNumber;
+    currentSnapshot.updatedAt = new Date().toISOString();
+
+    await this.saveGame(); // Save the full snapshot
 
     return {
-      aiResponse: processedAiOutput.prose,
-      newLogEntries: [newLogEntry],
-      updatedSnapshot: this.currentGameState,
+      aiProse: parsedAiOutput.prose,
+      newLogEntries: [newLogEntry], // Return just the new one for UI, but snapshot has all
+      updatedSnapshot: this.currentSnapshot,
     };
   }
 
-  getCurrentGameState(): GameSnapshot | null {
-    return this.currentGameState;
-  }
-
-  getGameLogs(): LogEntry[] {
-    return this.currentLogEntries;
+  getCurrentGameSnapshot(): GameSnapshot | null {
+    return this.currentSnapshot;
   }
 
   getCurrentPromptCard(): PromptCard | null {
-    return this.currentPromptCard;
+    return this.currentSnapshot ?
+        (this.cardRepo.getPromptCard(this.currentUserId!, this.currentSnapshot.promptCardId) || null)
+        : null; // Fetch from repo to ensure it's up to date. Or, consider storing card directly in snapshot.
+  }
+
+  getCurrentGameState(): GameState | null {
+    return this.currentSnapshot ? this.currentSnapshot.gameState : null;
+  }
+
+  getGameLogs(): LogEntry[] {
+    return this.currentSnapshot ? this.currentSnapshot.logs : [];
   }
 
   async saveGame(): Promise<void> {
-    if (!this.currentUserId || !this.currentGameState) {
-      console.warn("Cannot save game: user or game state not initialized.");
+    if (!this.currentUserId || !this.currentSnapshot) {
+      console.warn("Cannot save game: user or game snapshot not initialized.");
       return;
     }
-    // TODO: Implement actual save logic using gameRepository
-    console.log(`Saving game for user ${this.currentUserId}... (NOT YET IMPLEMENTED)`);
-    // await this.gameRepo.saveGame(this.currentUserId, this.currentGameState);
+    await this.gameRepo.saveGameSnapshot(this.currentUserId, this.currentSnapshot);
+    console.log(`Game snapshot ${this.currentSnapshot.id} saved for user ${this.currentUserId}.`);
   }
 
   async loadGame(snapshotId: string): Promise<void> {
     if (!this.currentUserId) {
       throw new Error("Cannot load game: user not initialized.");
     }
-    // TODO: Implement actual load logic using gameRepository
-    console.log(`Loading game snapshot: ${snapshotId} for user ${this.currentUserId}... (NOT YET IMPLEMENTED)`);
-    // const snapshot = await this.gameRepo.loadGame(this.currentUserId, snapshotId);
-    // if (snapshot) {
-    //   this.currentGameState = snapshot;
-    //   this.currentLogEntries = snapshot.logs;
-    //   // Rehydrate prompt card if stored in snapshot or fetch it.
-    // } else {
-    //   throw new Error(`Game snapshot ${snapshotId} not found.`);
-    // }
+    const snapshot = await this.gameRepo.getGameSnapshot(this.currentUserId, snapshotId);
+    if (!snapshot) {
+      throw new Error(`Game snapshot ${snapshotId} not found for user ${this.currentUserId}.`);
+    }
+    this.currentSnapshot = snapshot;
+    console.log(`Game snapshot ${snapshotId} loaded.`);
+  }
+
+  /**
+   * Applies DeltaInstruction objects to the game's worldState.
+   * This is a direct translation and simplification of GameState.applyDeltas.
+   * Assumes 'player' fields like hp/gold/narration are now part of worldState.
+   * This logic now lives here, or could be a private helper in deltaParser if desired.
+   */
+  private applyDeltasToGameState(gameState: GameState, deltas: DeltaMap): void {
+    const updatedWorld = { ...gameState.worldState }; // Create a mutable copy of worldState
+
+    for (const fullKey in deltas) {
+      const instruction = deltas[fullKey];
+      const parts = instruction.key.split('.'); // instruction.key now holds the path like "player.hp"
+
+      // Traverse or create path
+      let currentLevel: Record<string, any> = updatedWorld;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        if (!currentLevel[part] || typeof currentLevel[part] !== 'object' || Array.isArray(currentLevel[part])) {
+          currentLevel[part] = {}; // Create if non-existent or not an object
+        }
+        currentLevel = currentLevel[part];
+      }
+
+      const lastPart = parts[parts.length - 1];
+
+      switch (instruction.op) {
+        case 'add':
+          // Assuming 'add' is primarily for numbers or arrays
+          const prevAddValue = typeof currentLevel[lastPart] === 'number' ? currentLevel[lastPart] : 0;
+          const addValue = typeof instruction.value === 'number' ? instruction.value : 0;
+          currentLevel[lastPart] = prevAddValue + addValue;
+          break;
+        case 'assign':
+          currentLevel[lastPart] = instruction.value;
+          break;
+        case 'declare':
+          if (!(lastPart in currentLevel)) { // Only declare if not already present
+            currentLevel[lastPart] = instruction.value;
+          }
+          break;
+        case 'delete':
+          delete currentLevel[lastPart];
+          break;
+      }
+    }
+    gameState.worldState = updatedWorld; // Assign the updated worldState back
+  }
+
+  /**
+   * Updates the SceneState based on parsed AI output or infers from deltas.
+   * Replicates logic from SceneManager.
+   */
+  private updateSceneState(currentScene: SceneState, parsedScene: Record<string, any> | null | undefined, deltas: DeltaMap, worldState: Record<string, any>): void {
+    let newLocation: string | null = currentScene.location;
+    let newPresent: string[] = currentScene.present;
+
+    // Prioritize explicit @scene block
+    if (parsedScene) {
+      if (parsedScene.location !== undefined) {
+        newLocation = typeof parsedScene.location === 'string' ? parsedScene.location : null;
+      }
+      if (Array.isArray(parsedScene.present)) {
+        newPresent = parsedScene.present.filter((item: any) => typeof item === 'string');
+      }
+    } else {
+      // Fallback: Infer from deltas if scene was not explicitly provided by AI
+      // Only infer if current scene is empty or not yet set
+      if (!newLocation && newPresent.length === 0 && deltas) {
+        const inferredPresent = new Set<string>();
+        for (const fullKey in deltas) {
+          const instruction = deltas[fullKey];
+          if (instruction.op === 'declare') { // Only 'declare' deltas suggest new entities
+            const parts = instruction.key.split('.');
+            if (parts.length >= 2) {
+              const category = parts[0];
+              const entity = parts[1];
+              // Check if the declared value has a 'tag' property indicative of character/location
+              const valueObj = instruction.value as Record<string, any>;
+              if (valueObj && (valueObj.tag === 'character' || valueObj.tag === 'location')) {
+                inferredPresent.add(`${category}.${entity}`);
+              }
+            }
+            if (instruction.key === "world.location" && typeof instruction.value === 'string') {
+              newLocation = instruction.value;
+            }
+          }
+        }
+        newPresent = Array.from(inferredPresent);
+      }
+    }
+
+    currentScene.location = newLocation;
+    currentScene.present = newPresent;
   }
 }
 
-// Export a singleton instance of the GameSession
-// It injects the necessary dependencies (repositories, builders).
-export const gameSession = new GameSession(promptCardRepository, promptBuilder);
+// Export a singleton instance of the GameSession, injecting all required dependencies.
+// We will create `gameRepository` in the next step.
+import { gameRepository } from '../data/repositories/gameRepository.ts'; 
+export const gameSession = new GameSession(
+  promptCardRepository,
+  gameRepository,
+  // Placeholder for gameRepository. You'll replace this with the actual instance later.
+  // This is a common pattern to avoid circular dependencies during initial setup.
+  {} as IGameRepository, // TEMP: Placeholder until gameRepository is created
+  promptBuilder,
+  aiClient,
+  logManager
+);
