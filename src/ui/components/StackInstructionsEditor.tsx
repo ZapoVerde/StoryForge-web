@@ -19,7 +19,7 @@ import {
 } from '@mui/material';
 import { CollapsibleSection } from './CollapsibleSection';
 // Import StackModes and FilterModes as values
-import { StackInstructions, StackModes, FilterModes, EmissionRule, ProsePolicy } from '../../models/StackInstructions';
+import { StackInstructions, StackMode, FilterMode, EmissionRule, ProsePolicy } from '../../models/StackInstructions';
 import type { StackMode, FilterMode } from '../../models/StackInstructions'; // Keep type imports for type usage
 
 interface StackInstructionsEditorProps {

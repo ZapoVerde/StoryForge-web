@@ -2,40 +2,34 @@
 
 /**
  * Defines the mode for including a stack element.
- * Corresponds to the `StackMode` enum.
+ * Now an enum to allow runtime access (e.g., Object.values).
  */
-// export type StackMode = 'always' | 'firstN' | 'afterN' | 'never' | 'filtered'; // OLD
-export const StackModes = {
-  ALWAYS: 'always',
-  FIRST_N: 'firstN',
-  AFTER_N: 'afterN',
-  NEVER: 'never',
-  FILTERED: 'filtered' // Added 'filtered' from your type alias
-} as const;
-export type StackMode = typeof StackModes[keyof typeof StackModes];
-
+export enum StackMode {
+  ALWAYS = 'always',
+  FIRST_N = 'firstN',
+  AFTER_N = 'afterN',
+  NEVER = 'never',
+  FILTERED = 'filtered', // Added if 'filtered' applies to modes
+}
 
 /**
  * Defines the filtering strategy for a stack element.
- * Corresponds to the `FilterMode` enum.
+ * Now an enum to allow runtime access.
  */
-// export type FilterMode = 'none' | 'sceneOnly' | 'tagged'; // OLD
-export const FilterModes = {
-  NONE: 'none',
-  SCENE_ONLY: 'sceneOnly',
-  TAGGED: 'tagged'
-} as const;
-export type FilterMode = typeof FilterModes[keyof typeof FilterModes];
-
+export enum FilterMode {
+  NONE = 'none',
+  SCENE_ONLY = 'sceneOnly',
+  TAGGED = 'tagged',
+}
 
 /**
  * Defines a policy for including prose or other list-based context.
  * Corresponds to `ProsePolicy`.
  */
 export interface ProsePolicy {
-  mode: StackMode;
+  mode: StackMode; // Use the enum
   n: number;
-  filtering: FilterMode;
+  filtering: FilterMode; // Use the enum
 }
 
 /**
@@ -43,7 +37,7 @@ export interface ProsePolicy {
  * Corresponds to `EmissionRule`.
  */
 export interface EmissionRule {
-  mode: StackMode;
+  mode: StackMode; // Use the enum
   n: number;
 }
 
@@ -52,7 +46,7 @@ export interface EmissionRule {
  * Corresponds to `DigestFilterPolicy`.
  */
 export interface DigestFilterPolicy {
-  filtering: FilterMode;
+  filtering: FilterMode; // Use the enum
 }
 
 /**

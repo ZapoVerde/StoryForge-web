@@ -1,13 +1,14 @@
 // src/logic/promptBuilder.ts
 
-import { PromptCard, AiSettings } from '../models/PromptCard';
-import { GameState, SceneState } from '../models/GameState';
-import { LogEntry } from '../models/LogEntry';
-import { Message } from '../models/Message';
-import { StackMode, FilterMode, StackInstructions, EmissionRule, ProsePolicy } from '../models/StackInstructions'; // Import all specific types
-import { DeltaMap, DeltaInstruction } from '../models/DeltaInstruction'; // Used for parsing
-import { DigestLine } from '../models/LogEntryElements'; // For DigestLine type
-import { ParsedNarrationOutput } from '../models/ParsedNarrationOutput'; // The output type for parsing
+import type { PromptCard, AiSettings } from '../models/PromptCard';
+import type { GameState, SceneState } from '../models/GameState';
+import type { LogEntry } from '../models/LogEntry';
+import type { Message } from '../models/Message';
+// Changed to regular import for runtime access to enum members
+import { StackMode, FilterMode, StackInstructions, EmissionRule, ProsePolicy } from '../models/StackInstructions';
+import type { DeltaMap, DeltaInstruction } from '../models/DeltaInstruction';
+import type { DigestLine } from '../models/LogEntryElements';
+import type { ParsedNarrationOutput } from '../models/ParsedNarrationOutput';
 
 // Marker constants for parsing AI output (from NarrationParser.kt)
 const DELTA_MARKER = "@delta";

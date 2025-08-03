@@ -1,4 +1,4 @@
-// src/ui/screens/App.tsx
+// src/App.tsx
 
 import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
@@ -27,18 +27,31 @@ import PromptCardManager from './ui/screens/PromptCardManager';
 import GameScreen from './ui/screens/GameScreen';
 import WorldStateScreen from './ui/screens/WorldStateScreen';
 import LogViewerScreen from './ui/screens/LogViewerScreen';
-import SettingsScreen from './ui/screens/SettingsScreen'; // NEW
-import { useAuthStore } from '../../state/useAuthStore';
-import { useTheme, ThemeProvider, createTheme } from '@mui/material/styles'; // For theme toggling
-import { useSettingsStore } from '../../state/useSettingsStore'; // For theme state
+import SettingsScreen from './ui/screens/SettingsScreen';
+import { useAuthStore } from './state/useAuthStore';
+import { useTheme, ThemeProvider, createTheme } from '@mui/material/styles';
+import { useSettingsStore } from './state/useSettingsStore';
 
 const drawerWidth = 240;
 
 const AppContent: React.FC = () => {
+  // ALL HOOKS MUST BE CALLED AT THE TOP LEVEL, UNCONDITIONALLY
   const { user, isLoading: authLoading, signOut } = useAuthStore();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
-  // const { themeMode } = useSettingsStore(); // Get theme mode from settings store (moved to App wrapper)
+
+  // Effect to handle navigation redirection based on auth state
+  // This hook is now called unconditionally on every render.
+  React.useEffect(() => {
+    // Only navigate if user is not authenticated AND the current path is not already '/login'
+    if (!user && window.location.pathname !== '/login') {
+      navigate('/login');
+    }
+    // If user is authenticated and currently on '/login', redirect to '/library'
+    else if (user && window.location.pathname === '/login') {
+        navigate('/library');
+    }
+  }, [user, navigate]); // Dependencies: user and navigate
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -56,10 +69,10 @@ const AppContent: React.FC = () => {
     { text: 'Game Session', icon: <TravelExploreIcon />, path: '/game', requiresAuth: true },
     { text: 'World State', icon: <TravelExploreIcon />, path: '/world-state', requiresAuth: true },
     { text: 'Log Viewer', icon: <HistoryIcon />, path: '/logs', requiresAuth: true },
-    { text: 'Settings', icon: <SettingsIcon />, path: '/settings', requiresAuth: true }, // NEW
-    // The login/logout button will be handled conditionally outside this loop
+    { text: 'Settings', icon: <SettingsIcon />, path: '/settings', requiresAuth: true },
   ];
 
+  // Now, the loading check happens AFTER all hooks are called.
   if (authLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -68,16 +81,6 @@ const AppContent: React.FC = () => {
       </Box>
     );
   }
-
-  // Redirect to login if not authenticated and trying to access protected routes
-  // This should happen in a useEffect in the top-level App.tsx or a routing wrapper
-  // For now, it's fine here, but be aware of render cycles.
-  React.useEffect(() => {
-    if (!user && window.location.pathname !== '/login') {
-      navigate('/login');
-    }
-  }, [user, navigate]);
-
 
   const drawer = (
     <Box onClick={handleDrawerToggle} sx={{ textAlign: 'center' }}>
@@ -144,18 +147,20 @@ const AppContent: React.FC = () => {
         <Routes>
           <Route path="/login" element={<LoginScreen />} />
           {user ? (
+            // Authenticated routes
             <>
               <Route path="/library" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
               <Route path="/cards" element={<PromptCardManager onNavToggle={handleDrawerToggle} />} />
               <Route path="/game" element={<GameScreen onNavToggle={handleDrawerToggle} />} />
               <Route path="/world-state" element={<WorldStateScreen onNavToggle={handleDrawerToggle} />} />
               <Route path="/logs" element={<LogViewerScreen onNavToggle={handleDrawerToggle} />} />
-              <Route path="/settings" element={<SettingsScreen onNavToggle={handleDrawerToggle} />} /> {/* NEW ROUTE */}
+              <Route path="/settings" element={<SettingsScreen onNavToggle={handleDrawerToggle} />} />
               <Route path="/" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} /> {/* Default route */}
               <Route path="*" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} /> {/* Catch-all for logged in */}
             </>
           ) : (
-            <Route path="*" element={<LoginScreen />} /> // Fallback for unauthenticated users
+            // Unauthenticated routes redirect to login
+            <Route path="*" element={<LoginScreen />} />
           )}
         </Routes>
       </Box>
@@ -182,7 +187,6 @@ const App: React.FC = () => {
           },
         },
         typography: {
-            // Add custom typography settings if desired
             h6: {
                 fontWeight: 600,
             },
@@ -192,7 +196,6 @@ const App: React.FC = () => {
                 styleOverrides: {
                     root: ({ theme }) => ({
                         backgroundColor: theme.palette.background.paper,
-                        // Add border for consistency and distinction in dark mode
                         border: `1px solid ${theme.palette.divider}`,
                     }),
                 },
@@ -216,8 +219,7 @@ const App: React.FC = () => {
             MuiButton: {
                 styleOverrides: {
                     root: ({ theme }) => ({
-                        // textTransform: 'none', // Optional: keep button text as is
-                        borderRadius: '8px', // Slightly more rounded buttons
+                        borderRadius: '8px',
                     }),
                 },
             },
@@ -259,7 +261,7 @@ const App: React.FC = () => {
                     }),
                 },
             },
-            MuiAlert: { // Added for consistent alert styling
+            MuiAlert: {
                 styleOverrides: {
                     root: ({ theme }) => ({
                         borderRadius: '8px',
@@ -268,11 +270,11 @@ const App: React.FC = () => {
                     }),
                 },
             },
-            MuiSnackbarContent: { // For Snackbar content background
+            MuiSnackbarContent: {
                 styleOverrides: {
                     root: ({ theme }) => ({
-                        backgroundColor: theme.palette.background.paper, // Use paper background
-                        color: theme.palette.text.primary, // Use primary text color
+                        backgroundColor: theme.palette.background.paper,
+                        color: theme.palette.text.primary,
                         border: `1px solid ${theme.palette.divider}`,
                     }),
                 },
