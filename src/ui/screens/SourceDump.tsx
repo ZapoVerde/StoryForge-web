@@ -10,7 +10,7 @@ const SourceDump: React.FC = () => {
   const fetchDump = async () => {
     try {
       // Cache-buster so browser doesn't reuse an old copy
-      const res = await fetch(`/source-dump.txt?_=${Date.now()}`);
+      const res = await fetch(`/sourcedump.txt?_=${Date.now()}`);
       const text = await res.text();
 
       // Quick fingerprint to detect if content changed

@@ -3,7 +3,7 @@ import path from 'path';
 import chokidar from 'chokidar';
 
 const srcDir = path.join(process.cwd(), 'src');
-const outputFile = path.join(process.cwd(), 'public', 'source-dump.txt');
+const outputFile = path.join(process.cwd(), 'public', 'sourcedump.txt');
 
 // ✅ Whitelisted extra files that are safe to expose
 const safeExtraFiles = [
