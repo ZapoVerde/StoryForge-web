@@ -1,60 +1,47 @@
 // src/models/StackInstructions.ts
 
 /**
- * Defines the policy for how narrator prose is emitted.
+ * Defines the mode for including a stack element.
+ * Corresponds to the `StackMode` enum.
  */
-export interface NarratorProseEmissionPolicy {
-  mode: "firstN" | "always" | "never";
-  n?: number;
-  filtering: "sceneOnly" | "tagged" | "none";
+export type StackMode = 'always' | 'firstN' | 'afterN' | 'never' | 'filtered';
+
+/**
+ * Defines the filtering strategy for a stack element.
+ * Corresponds to the `FilterMode` enum.
+ */
+export type FilterMode = 'none' | 'sceneOnly' | 'tagged';
+
+/**
+ * Defines a policy for including prose or other list-based context.
+ * Corresponds to `ProsePolicy`.
+ */
+export interface ProsePolicy {
+  mode: StackMode;
+  n: number;
+  filtering: FilterMode;
 }
 
 /**
- * Defines the policy for how digest summaries are handled.
+ * Defines a rule for emitting digest lines based on their importance score.
+ * Corresponds to `EmissionRule`.
  */
-export interface DigestPolicy {
-  filtering: "tagged" | "none";
+export interface EmissionRule {
+  mode: StackMode;
+  n: number;
 }
 
 /**
- * Defines how digest emissions (summaries) are handled based on importance score.
- * Keys are importance scores (1-5), values define the mode for that score.
+ * Defines the policy for filtering digest lines.
+ * Corresponds to `DigestFilterPolicy`.
  */
-export interface DigestEmissionPolicy {
-  "1": { mode: "never" | "always" | "firstN" | "afterN"; n?: number };
-  "2": { mode: "never" | "always" | "firstN" | "afterN"; n?: number };
-  "3": { mode: "never" | "always" | "firstN" | "afterN"; n?: number };
-  "4": { mode: "never" | "always" | "firstN" | "afterN"; n?: number };
-  "5": { mode: "never" | "always" | "firstN" | "afterN"; n?: number };
+export interface DigestFilterPolicy {
+  filtering: FilterMode;
 }
 
 /**
- * Defines the policy for how expression logs are handled.
- */
-export interface ExpressionLogPolicy {
-  mode: "always" | "never";
-  filtering: "sceneOnly" | "tagged" | "none";
-}
-
-/**
- * Defines the policy for how world state is handled.
- */
-export interface WorldStatePolicy {
-  mode: "filtered" | "none";
-  filtering: "sceneOnly" | "tagged" | "none";
-}
-
-/**
- * Defines the policy for how known entities are handled.
- */
-export interface KnownEntitiesPolicy {
-  mode: "firstN" | "always" | "never";
-  n?: number;
-  filtering: "tagged" | "none";
-}
-
-/**
- * Defines the policy for token usage, including fallbacks.
+ * Defines the policy for token usage and fallback strategies.
+ * Corresponds to `TokenPolicy`.
  */
 export interface TokenPolicy {
   minTokens: number;
@@ -63,19 +50,21 @@ export interface TokenPolicy {
 }
 
 /**
- * Represents the structured "stack instructions" JSON for a PromptCard.
- * This guides how the AI context and output are managed.
- * This is a pure data definition, with no default values or logic.
+ * The full, structured stack instructions for a PromptCard.
+ * Corresponds to `StackInstructions.kt`.
  */
 export interface StackInstructions {
-  narratorProseEmission: NarratorProseEmissionPolicy;
-  digestPolicy: DigestPolicy;
-  digestEmission: DigestEmissionPolicy;
-  expressionLogPolicy: ExpressionLogPolicy;
+  narratorProseEmission: ProsePolicy;
+  digestPolicy: DigestFilterPolicy;
+  digestEmission: Record<number, EmissionRule>; // Map<Int, EmissionRule> -> Record<number, EmissionRule>
+
+  expressionLogPolicy: ProsePolicy;
   expressionLinesPerCharacter: number;
   emotionWeighting: boolean;
-  worldStatePolicy: WorldStatePolicy;
-  knownEntitiesPolicy: KnownEntitiesPolicy;
+
+  worldStatePolicy: ProsePolicy;
+  knownEntitiesPolicy: ProsePolicy;
+
   outputFormat: string;
   tokenPolicy: TokenPolicy;
 }

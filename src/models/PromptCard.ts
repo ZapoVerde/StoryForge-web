@@ -7,7 +7,7 @@ import { StackInstructions } from './StackInstructions'; // Import the new Stack
  * These fields are embedded directly within PromptCard.
  * This is a pure data definition, with no default values.
  */
-export interface AiSettingsInCard {
+export interface AiSettings {
   selectedConnectionId: string;
   temperature: number;
   topP: number;
@@ -38,8 +38,8 @@ export interface PromptCard {
   emitSkeleton: string;      // JSON string
   worldStateInit: string;    // JSON string
   gameRules: string;
-  aiSettings: AiSettingsInCard;
-  helperAiSettings: AiSettingsInCard;
+  aiSettings: AiSettings;
+  helperAiSettings: AiSettings;
   tags: string[];            // Kotlin `List<String>` maps to `string[]`
   isExample: boolean;        // From Kotlin `isExample`
   functionDefs: string;      // JSON string

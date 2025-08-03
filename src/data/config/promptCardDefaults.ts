@@ -1,8 +1,8 @@
 // src/data/promptCardDefaults.ts
 
 // In src/data/config/promptCardDefaults.ts
-import { AiSettingsInCard } from '../models/PromptCard'; // AiSettingsInCard is defined in PromptCard.ts
-import { StackInstructions } from '../models/StackInstructions'; // StackInstructions is defined in StackInstructions.ts
+import { AiSettingsInCard } from '../../models/PromptCard'; // Corrected path
+import { StackInstructions } from '../../models/StackInstructions'; // Corrected path
 
 /**
  * Default AI settings to be used for PromptCards if not specified.
