@@ -31,6 +31,8 @@ import SettingsScreen from './ui/screens/SettingsScreen';
 import { useAuthStore } from './state/useAuthStore';
 import { useTheme, ThemeProvider, createTheme } from '@mui/material/styles';
 import { useSettingsStore } from './state/useSettingsStore';
+import SourceDump from './ui/screens/SourceDump';
+
 
 const drawerWidth = 240;
 
@@ -42,16 +44,16 @@ const AppContent: React.FC = () => {
 
   // Effect to handle navigation redirection based on auth state
   // This hook is now called unconditionally on every render.
-  React.useEffect(() => {
-    // Only navigate if user is not authenticated AND the current path is not already '/login'
-    if (!user && window.location.pathname !== '/login') {
-      navigate('/login');
-    }
-    // If user is authenticated and currently on '/login', redirect to '/library'
-    else if (user && window.location.pathname === '/login') {
-        navigate('/library');
-    }
-  }, [user, navigate]); // Dependencies: user and navigate
+React.useEffect(() => {
+  const publicPaths = ['/login', '/source-dump'];
+
+  if (!user && !publicPaths.includes(window.location.pathname)) {
+    navigate('/login');
+  } else if (user && window.location.pathname === '/login') {
+    navigate('/library');
+  }
+}, [user, navigate]);
+ // Dependencies: user and navigate
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -145,6 +147,7 @@ const AppContent: React.FC = () => {
       </Drawer>
       <Box component="main" sx={{ flexGrow: 1, p: 0, width: { sm: `calc(100% - ${drawerWidth}px)` }, height: '100%' }}>
         <Routes>
+          <Route path="/source-dump" element={<SourceDump />} />
           <Route path="/login" element={<LoginScreen />} />
           {user ? (
             // Authenticated routes
