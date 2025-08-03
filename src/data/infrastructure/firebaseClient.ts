@@ -1,7 +1,13 @@
 // src/data/firebaseClient.ts
+
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import {
+  getFirestore,
+  // Removed deprecated enableIndexedDbPersistence
+  initializeFirestore, // Use this for custom settings before any other Firestore call
+  PersistentLocalCache, // New import for the recommended local cache
+} from 'firebase/firestore';
 
 // Your Firebase configuration
 // IMPORTANT: Replace with your actual Firebase project configuration
@@ -23,38 +29,35 @@ const firebaseConfig = {
   appId: getEnvVar('VITE_FIREBASE_APP_ID'),
 };
 
-// Initialize Firebase
+// Initialize Firebase App
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+
+// Initialize Firestore with persistent cache
+// This must be done BEFORE getFirestore() if it's the first Firestore instance created.
+// Use try-catch for strict mode or multiple initializations, similar to the old persistence method.
+let firestoreInstance;
+try {
+  firestoreInstance = initializeFirestore(app, {
+    localCache: PersistentLocalCache.getEmptyCache(),
+  });
+  console.log("Firestore persistent local cache initialized.");
+} catch (e: any) {
+  // Check for 'already-exists' error if initializeFirestore is called multiple times
+  if (e.code === 'already-exists') {
+    firestoreInstance = getFirestore(app); // Get the existing instance
+    console.warn("Firestore was already initialized. Using existing instance.", e.message);
+  } else {
+    // Other errors, e.g., browser not supporting persistence or other initialization issues
+    firestoreInstance = getFirestore(app); // Fallback to non-persistent if persistent fails
+    console.error("Error initializing Firestore with persistent cache, falling back to non-persistent:", e);
+    // You might want to notify the user about offline limitations here.
+  }
+}
+export const db = firestoreInstance; // Export the initialized Firestore instance
+
+
 // Get Firebase services
 export const auth = getAuth(app);
-export const db = getFirestore(app);
-
-// Enable Firestore offline persistence
-// This allows the app to work offline and sync data when online.
-// It should be called once, after initializing Firestore.
-// Note: This might cause an error in React StrictMode if not handled carefully,
-// as StrictMode renders components twice. A try-catch block is good practice.
-try {
-  enableIndexedDbPersistence(db)
-    .then(() => {
-      console.log("Firestore offline persistence enabled.");
-    })
-    .catch((err) => {
-      if (err.code === 'failed-precondition') {
-        // Multiple tabs open, persistence can only be enabled in one.
-        console.warn("Firestore persistence could not be enabled (multiple tabs open or already enabled):", err.message);
-      } else if (err.code === 'unimplemented') {
-        // The current browser does not support all of the
-        // features required to enable persistence.
-        console.warn("Firestore persistence not supported by browser:", err.message);
-      } else {
-        console.error("Error enabling Firestore persistence:", err);
-      }
-    });
-} catch (e) {
-  console.error("Error calling enableIndexedDbPersistence:", e);
-}
-
 
 // You can add other services here if needed later, e.g.,
 // export const storage = getStorage(app);
