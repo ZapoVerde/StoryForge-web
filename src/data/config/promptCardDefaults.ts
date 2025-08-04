@@ -2,7 +2,7 @@
 
 // In src/data/config/promptCardDefaults.ts
 import { AiSettingsInCard } from '../../models/PromptCard'; // Corrected path
-import { StackInstructions } from '../../models/StackInstructions'; // Corrected path
+import { StackInstructions, StackMode, FilterMode } from '../../models/StackInstructions'; // Corrected path
 
 /**
  * Default AI settings to be used for PromptCards if not specified.
@@ -23,20 +23,20 @@ export const defaultAiSettingsInCard: AiSettingsInCard = {
  * This is the parsed object version of the default JSON string from PromptCardDefaults.kt.
  */
 export const defaultStackInstructions: StackInstructions = {
-  narratorProseEmission: { mode: "firstN", n: 3, filtering: "sceneOnly" },
-  digestPolicy: { filtering: "tagged" },
+  narratorProseEmission: { mode: StackMode.FIRST_N, n: 3, filtering: FilterMode.SCENE_ONLY, enabled: true }, // NEW: enabled: true
+  digestPolicy: { filtering: FilterMode.TAGGED, enabled: true }, // NEW: enabled: true
   digestEmission: {
-    "5": { mode: "always" },
-    "4": { mode: "afterN", n: 1 },
-    "3": { mode: "firstN", n: 6 },
-    "2": { mode: "firstN", n: 3 },
-    "1": { mode: "never" },
+    "5": { mode: StackMode.ALWAYS },
+    "4": { mode: StackMode.AFTER_N, n: 1 },
+    "3": { mode: StackMode.FIRST_N, n: 6 },
+    "2": { mode: StackMode.FIRST_N, n: 3 },
+    "1": { mode: StackMode.NEVER },
   },
-  expressionLogPolicy: { mode: "always", filtering: "sceneOnly" },
+  expressionLogPolicy: { mode: StackMode.ALWAYS, filtering: FilterMode.SCENE_ONLY, enabled: true }, // NEW: enabled: true
   expressionLinesPerCharacter: 3,
   emotionWeighting: true,
-  worldStatePolicy: { mode: "filtered", filtering: "sceneOnly" },
-  knownEntitiesPolicy: { mode: "firstN", n: 2, filtering: "tagged" },
+  worldStatePolicy: { mode: StackMode.FILTERED, filtering: FilterMode.SCENE_ONLY, enabled: true }, // NEW: enabled: true
+  knownEntitiesPolicy: { mode: StackMode.FIRST_N, n: 2, filtering: FilterMode.TAGGED, enabled: true }, // NEW: enabled: true
   outputFormat: "prose_digest_emit",
   tokenPolicy: {
     minTokens: 1000,

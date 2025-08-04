@@ -30,6 +30,7 @@ export interface ProsePolicy {
   mode: StackMode; // Use the enum
   n: number;
   filtering: FilterMode; // Use the enum
+  enabled?: boolean; // NEW: Added for toggling the entire section
 }
 
 /**
@@ -47,6 +48,7 @@ export interface EmissionRule {
  */
 export interface DigestFilterPolicy {
   filtering: FilterMode; // Use the enum
+  enabled?: boolean; // NEW: Added for toggling the entire section
 }
 
 /**

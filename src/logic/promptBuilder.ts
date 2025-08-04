@@ -5,7 +5,7 @@ import type { GameState, SceneState } from '../models/GameState';
 import type { LogEntry } from '../models/LogEntry';
 import type { Message } from '../models/Message';
 // Changed to regular import for runtime access to enum members
-import { StackMode, FilterMode, StackInstructions, EmissionRule, ProsePolicy } from '../models/StackInstructions';
+import { StackMode, FilterMode, StackInstructions, EmissionRule, ProsePolicy, DigestFilterPolicy } from '../models/StackInstructions';
 import type { DeltaMap, DeltaInstruction } from '../models/DeltaInstruction';
 import type { DigestLine } from '../models/LogEntryElements';
 import type { ParsedNarrationOutput } from '../models/ParsedNarrationOutput';
@@ -180,6 +180,10 @@ export class PromptBuilder implements IPromptBuilder {
   private buildCommonPromptParts(card: PromptCard): Message[] {
     const messages: Message[] = [];
 
+    // NEW: System message about stack order
+    messages.push({ role: "system", content: `## Context Stack Order Guidance
+The following information is provided to you in a specific order to help you prioritize and integrate details. Focus on the most critical and structured information first, then dynamic elements, and finally conversational history. Adhere to this structure for optimal performance.` });
+
     messages.push({ role: "system", content: `## Core Scenario / Persona\n${card.prompt}` });
 
     if (card.gameRules) {
@@ -226,20 +230,18 @@ export class PromptBuilder implements IPromptBuilder {
     turnNumber: number
   ): Message[] {
     const messages = this.buildCommonPromptParts(card);
-    const stackInstructions = card.stackInstructions; // Use the structured object
+    const stackInstructions = card.stackInstructions;
 
     // === Dynamic Context Stack Assembly (Replicates StackAssembler.kt logic) ===
 
     // 1. World State Context (from worldStatePolicy)
-    if (stackInstructions.worldStatePolicy.mode !== StackMode.NEVER) {
+    if (stackInstructions.worldStatePolicy.enabled && stackInstructions.worldStatePolicy.mode !== StackMode.NEVER) { // NEW: Check enabled flag
       const worldStateJson = JSON.stringify(currentGameState.worldState, null, 2); // Pretty print for readability
       messages.push({ role: "system", content: `\n## Current World State\n\`\`\`json\n${worldStateJson}\n\`\`\`` });
     }
 
     // 2. Known Entities (from knownEntitiesPolicy)
-    // This requires flattening worldState and extracting tagged entities,
-    // similar to SceneManager.getSceneTags but for all known entities.
-    if (stackInstructions.knownEntitiesPolicy.mode !== StackMode.NEVER) {
+    if (stackInstructions.knownEntitiesPolicy.enabled && stackInstructions.knownEntitiesPolicy.mode !== StackMode.NEVER) { // NEW: Check enabled flag
         const knownEntitiesList: string[] = this.extractKnownEntities(
             currentGameState.worldState,
             stackInstructions.knownEntitiesPolicy.filtering,
@@ -251,15 +253,14 @@ export class PromptBuilder implements IPromptBuilder {
         }
     }
 
-
     // 3. Digest Context (from digestEmission and digestPolicy)
-    // This logic replicates DigestManager.getContextBlock and filtering.
-    if (stackInstructions.digestEmission[5]?.mode !== StackMode.NEVER ||
+    if (stackInstructions.digestPolicy.enabled && ( // NEW: Check enabled flag for digestPolicy
+        stackInstructions.digestEmission[5]?.mode !== StackMode.NEVER ||
         stackInstructions.digestEmission[4]?.mode !== StackMode.NEVER ||
         stackInstructions.digestEmission[3]?.mode !== StackMode.NEVER ||
         stackInstructions.digestEmission[2]?.mode !== StackMode.NEVER ||
         stackInstructions.digestEmission[1]?.mode !== StackMode.NEVER
-    ) {
+    )) {
       const relevantDigests: DigestLine[] = [];
       const eligibleLogs = logEntries.filter(log => log.digestLines && log.digestLines.length > 0);
       const sceneTags = this.getSceneTagsFromState(currentGameState.scene, currentGameState.worldState);
@@ -277,13 +278,10 @@ export class PromptBuilder implements IPromptBuilder {
             if (meetsCondition) {
               let includeDigest = true;
               if (stackInstructions.digestPolicy.filtering === FilterMode.SCENE_ONLY) {
-                // Corrected logic: include if digest has ANY tags that are also in the current scene.
-                // If the digest has no tags, it won't be included in SCENE_ONLY.
                 if (!digestLine.tags || digestLine.tags.length === 0 || !digestLine.tags.some(tag => sceneTags.includes(tag))) {
                   includeDigest = false;
                 }
               } else if (stackInstructions.digestPolicy.filtering === FilterMode.TAGGED) {
-                // If filtering by tagged, ensure digest has tags
                 if (!digestLine.tags || digestLine.tags.length === 0) {
                     includeDigest = false;
                 }
@@ -297,8 +295,7 @@ export class PromptBuilder implements IPromptBuilder {
         });
       });
 
-      // Sort digests by turn number for chronological order in context
-      relevantDigests.sort((a, b) => a.turnNumber - b.turnNumber); // Assuming digestLine also has turnNumber
+      relevantDigests.sort((a, b) => a.turnNumber - b.turnNumber);
 
       if (relevantDigests.length > 0) {
         messages.push({ role: "system", content: `\n## Game Summary Digest\n${relevantDigests.map(d => d.text).join('\n')}` });
@@ -306,10 +303,9 @@ export class PromptBuilder implements IPromptBuilder {
     }
 
     // 4. Expression Log (from expressionLogPolicy)
-    if (stackInstructions.expressionLogPolicy.mode !== StackMode.NEVER) {
+    if (stackInstructions.expressionLogPolicy.enabled && stackInstructions.expressionLogPolicy.mode !== StackMode.NEVER) { // NEW: Check enabled flag
         const expressionLogContent: string[] = [];
         const filteredLogs = logEntries.filter(log => {
-            // Placeholder: Assuming 'sceneOnly' or 'tagged' filtering means looking for tags within the narrator output
             if (stackInstructions.expressionLogPolicy.filtering === FilterMode.SCENE_ONLY) {
                 const tagsInNarratorOutput = this.extractTags(log.narratorOutput);
                 const sceneTags = this.getSceneTagsFromState(currentGameState.scene, currentGameState.worldState);
@@ -317,10 +313,9 @@ export class PromptBuilder implements IPromptBuilder {
             } else if (stackInstructions.expressionLogPolicy.filtering === FilterMode.TAGGED) {
                 return this.extractTags(log.narratorOutput).length > 0;
             }
-            return true; // FilterMode.NONE or others
+            return true;
         });
 
-        // Apply mode (FIRST_N, AFTER_N)
         let eligibleExpressionLogs = filteredLogs;
         if (stackInstructions.expressionLogPolicy.mode === StackMode.FIRST_N) {
             eligibleExpressionLogs = eligibleExpressionLogs.filter(log => log.turnNumber <= stackInstructions.expressionLogPolicy.n);
@@ -328,12 +323,9 @@ export class PromptBuilder implements IPromptBuilder {
             eligibleExpressionLogs = eligibleExpressionLogs.filter(log => log.turnNumber >= stackInstructions.expressionLogPolicy.n);
         }
 
-        // For simplicity in MVP, we'll take a portion of the narrator's prose as "expression".
-        // A more robust solution would require explicit "expression" fields in LogEntry.
         eligibleExpressionLogs.forEach(log => {
-            // Attempt to get the first X lines or a summary of the narrator's output
             const lines = log.narratorOutput.split('\n').filter(line => line.trim().length > 0);
-            const numLines = Math.min(lines.length, stackInstructions.expressionLinesPerCharacter || 3); // Default to 3 lines
+            const numLines = Math.min(lines.length, stackInstructions.expressionLinesPerCharacter || 3);
             if (numLines > 0) {
                 expressionLogContent.push(`Turn ${log.turnNumber} Expression: ${lines.slice(0, numLines).join(' ')}`);
             }
@@ -392,7 +384,6 @@ export class PromptBuilder implements IPromptBuilder {
   ): string[] {
     const knownEntities: { tag: string; path: string; fullObject: any }[] = [];
 
-    // Recursive helper to traverse world state and find tagged entities
     const traverse = (obj: any, currentPath: string) => {
       if (typeof obj !== 'object' || obj === null) return;
 
@@ -407,27 +398,22 @@ export class PromptBuilder implements IPromptBuilder {
       }
     };
 
-    traverse(worldState, ''); // Start traversal from the root of worldState
+    traverse(worldState, '');
 
     let filteredEntities = knownEntities;
 
     if (filterMode === FilterMode.SCENE_ONLY) {
         const sceneTags = this.getSceneTagsFromState(
-            { location: null, present: [] }, // Dummy scene state, we need tags from the overall world state and actual scene.
+            { location: null, present: [] },
             worldState
         );
-        // This is a simplification. A true 'sceneOnly' filter for known entities
-        // would require knowing which entities are *currently* in the scene based on GameState.scene.present.
-        // For now, let's filter by if the entity has *any* tag that's a known scene tag, or if its path is in scene.present
-        // A more robust implementation would match paths in scene.present
-        const currentPresentEntities = new Set(this.getCurrentGameState()?.scene.present || []); // Assuming GameSession or similar can provide this.
+
+        const currentPresentEntities = new Set(this.getCurrentGameState()?.scene.present || []);
 
         filteredEntities = filteredEntities.filter(entity => {
-            // Check if the entity's path is explicitly in scene.present
             if (currentPresentEntities.has(entity.path)) {
                 return true;
             }
-            // Or if its tag is among the scene's inferred tags
             if (entity.tag && sceneTags.includes(entity.tag)) {
                 return true;
             }
@@ -437,23 +423,18 @@ export class PromptBuilder implements IPromptBuilder {
       filteredEntities = filteredEntities.filter(entity => entity.tag && (entity.tag.startsWith('#') || entity.tag.startsWith('@') || entity.tag.startsWith('$')));
     }
 
-    // Apply limit
     if (limit > 0) {
       filteredEntities = filteredEntities.slice(0, limit);
     }
 
-    // Format output string
     return filteredEntities.map(entity => {
-        // Format as: "category.entity (tag: #tag)" or similar, as per Android's format.
         const parts = entity.path.split('.');
         const entityDisplayName = parts[parts.length - 1].replace(/^[#@$]/, '');
         const parentCategory = parts.length > 1 ? parts[parts.length - 2] : null;
 
-        // Example: "npcs.#fox (tag: #character)" or "locations.@forest (tag: @location)"
         return `${parentCategory ? `${parentCategory}.` : ''}${entityDisplayName} (tag: ${entity.tag})`;
     });
   }
 }
 
-// Export a singleton instance of the prompt builder.
 export const promptBuilder = new PromptBuilder();

@@ -35,36 +35,27 @@ import SourceDump from './ui/screens/SourceDump';
 
 
 const drawerWidth = 240;
-
 const AppContent: React.FC = () => {
-  // ALL HOOKS MUST BE CALLED AT THE TOP LEVEL, UNCONDITIONALLY
   const { user, isLoading: authLoading, signOut } = useAuthStore();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Effect to handle navigation redirection based on auth state
-  // This hook is now called unconditionally on every render.
-React.useEffect(() => {
-  const publicPaths = ['/login', '/sourcedump'];
+  React.useEffect(() => {
+    const publicPaths = ['/login', '/sourcedump'];
+    if (!user && !publicPaths.includes(window.location.pathname)) {
+      navigate('/login');
+    } else if (user && window.location.pathname === '/login') {
+      navigate('/library');
+    }
+  }, [user, navigate]);
 
-  if (!user && !publicPaths.includes(window.location.pathname)) {
-    navigate('/login');
-  } else if (user && window.location.pathname === '/login') {
-    navigate('/library');
-  }
-}, [user, navigate]);
- // Dependencies: user and navigate
-
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
+  const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
 
   const handleSignOut = async () => {
     await signOut();
     navigate('/login');
   };
 
-  // Define navigation items
   const navItems = [
     { text: 'Game Library', icon: <LibraryBooksIcon />, path: '/library', requiresAuth: true },
     { text: 'Prompt Cards', icon: <DashboardIcon />, path: '/cards', requiresAuth: true },
@@ -74,7 +65,6 @@ React.useEffect(() => {
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings', requiresAuth: true },
   ];
 
-  // Now, the loading check happens AFTER all hooks are called.
   if (authLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -86,9 +76,7 @@ React.useEffect(() => {
 
   const drawer = (
     <Box onClick={handleDrawerToggle} sx={{ textAlign: 'center' }}>
-      <Typography variant="h6" sx={{ my: 2 }}>
-        StoryForge
-      </Typography>
+      <Typography variant="h6" sx={{ my: 2 }}>StoryForge</Typography>
       <Divider />
       <List>
         {navItems.filter(item => user ? true : !item.requiresAuth).map((item) => (
@@ -109,7 +97,7 @@ React.useEffect(() => {
         ) : (
           <ListItem disablePadding>
             <ListItemButton onClick={() => navigate('/login')}>
-              <ListItemIcon><LogoutIcon /></ListItemIcon> {/* Using LogoutIcon for 'Login' also */}
+              <ListItemIcon><LogoutIcon /></ListItemIcon>
               <ListItemText primary="Login" />
             </ListItemButton>
           </ListItem>
@@ -121,13 +109,13 @@ React.useEffect(() => {
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}>
       <CssBaseline />
+
+      {/* Temporary Drawer for mobile */}
       <Drawer
         variant="temporary"
         open={mobileOpen}
         onClose={handleDrawerToggle}
-        ModalProps={{
-          keepMounted: true, // Better open performance on mobile.
-        }}
+        ModalProps={{ keepMounted: true }}
         sx={{
           display: { xs: 'block', sm: 'none' },
           '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
@@ -135,6 +123,8 @@ React.useEffect(() => {
       >
         {drawer}
       </Drawer>
+
+      {/* Permanent Drawer for desktop */}
       <Drawer
         variant="permanent"
         sx={{
@@ -145,12 +135,23 @@ React.useEffect(() => {
       >
         {drawer}
       </Drawer>
-      <Box component="main" sx={{ flexGrow: 1, p: 0, width: { sm: `calc(100% - ${drawerWidth}px)` }, height: '100%' }}>
+
+      {/* Main content area */}
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          p: 0,
+          transition: 'margin .3s ease-out, width .3s ease-out',
+          marginLeft: { sm: `${drawerWidth}px` },
+          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          height: '100%',
+        }}
+      >
         <Routes>
           <Route path="/sourcedump" element={<SourceDump />} />
           <Route path="/login" element={<LoginScreen />} />
           {user ? (
-            // Authenticated routes
             <>
               <Route path="/library" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
               <Route path="/cards" element={<PromptCardManager onNavToggle={handleDrawerToggle} />} />
@@ -158,11 +159,10 @@ React.useEffect(() => {
               <Route path="/world-state" element={<WorldStateScreen onNavToggle={handleDrawerToggle} />} />
               <Route path="/logs" element={<LogViewerScreen onNavToggle={handleDrawerToggle} />} />
               <Route path="/settings" element={<SettingsScreen onNavToggle={handleDrawerToggle} />} />
-              <Route path="/" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} /> {/* Default route */}
-              <Route path="*" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} /> {/* Catch-all for logged in */}
+              <Route path="/" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
+              <Route path="*" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
             </>
           ) : (
-            // Unauthenticated routes redirect to login
             <Route path="*" element={<LoginScreen />} />
           )}
         </Routes>
@@ -170,6 +170,7 @@ React.useEffect(() => {
     </Box>
   );
 };
+
 
 const App: React.FC = () => {
   const { themeMode } = useSettingsStore(); // Get theme mode from settings store

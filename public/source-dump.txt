@@ -1,7 +1,4 @@
-
-
-// ===== src/App.css =====
-
+@@FILE: src/App.css
 #root {
   max-width: 1280px;
   margin: 0 auto;
@@ -45,10 +42,7 @@
   color: #888;
 }
 
-
-
-// ===== src/App.tsx =====
-
+@@FILE: src/App.tsx
 // src/App.tsx
 
 import React, { useState } from 'react';
@@ -86,36 +80,27 @@ import SourceDump from './ui/screens/SourceDump';
 
 
 const drawerWidth = 240;
-
 const AppContent: React.FC = () => {
-  // ALL HOOKS MUST BE CALLED AT THE TOP LEVEL, UNCONDITIONALLY
   const { user, isLoading: authLoading, signOut } = useAuthStore();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Effect to handle navigation redirection based on auth state
-  // This hook is now called unconditionally on every render.
-React.useEffect(() => {
-  const publicPaths = ['/login', '/sourcedump'];
+  React.useEffect(() => {
+    const publicPaths = ['/login', '/sourcedump'];
+    if (!user && !publicPaths.includes(window.location.pathname)) {
+      navigate('/login');
+    } else if (user && window.location.pathname === '/login') {
+      navigate('/library');
+    }
+  }, [user, navigate]);
 
-  if (!user && !publicPaths.includes(window.location.pathname)) {
-    navigate('/login');
-  } else if (user && window.location.pathname === '/login') {
-    navigate('/library');
-  }
-}, [user, navigate]);
- // Dependencies: user and navigate
-
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
+  const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
 
   const handleSignOut = async () => {
     await signOut();
     navigate('/login');
   };
 
-  // Define navigation items
   const navItems = [
     { text: 'Game Library', icon: <LibraryBooksIcon />, path: '/library', requiresAuth: true },
     { text: 'Prompt Cards', icon: <DashboardIcon />, path: '/cards', requiresAuth: true },
@@ -125,7 +110,6 @@ React.useEffect(() => {
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings', requiresAuth: true },
   ];
 
-  // Now, the loading check happens AFTER all hooks are called.
   if (authLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -137,9 +121,7 @@ React.useEffect(() => {
 
   const drawer = (
     <Box onClick={handleDrawerToggle} sx={{ textAlign: 'center' }}>
-      <Typography variant="h6" sx={{ my: 2 }}>
-        StoryForge
-      </Typography>
+      <Typography variant="h6" sx={{ my: 2 }}>StoryForge</Typography>
       <Divider />
       <List>
         {navItems.filter(item => user ? true : !item.requiresAuth).map((item) => (
@@ -160,7 +142,7 @@ React.useEffect(() => {
         ) : (
           <ListItem disablePadding>
             <ListItemButton onClick={() => navigate('/login')}>
-              <ListItemIcon><LogoutIcon /></ListItemIcon> {/* Using LogoutIcon for 'Login' also */}
+              <ListItemIcon><LogoutIcon /></ListItemIcon>
               <ListItemText primary="Login" />
             </ListItemButton>
           </ListItem>
@@ -172,13 +154,13 @@ React.useEffect(() => {
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}>
       <CssBaseline />
+
+      {/* Temporary Drawer for mobile */}
       <Drawer
         variant="temporary"
         open={mobileOpen}
         onClose={handleDrawerToggle}
-        ModalProps={{
-          keepMounted: true, // Better open performance on mobile.
-        }}
+        ModalProps={{ keepMounted: true }}
         sx={{
           display: { xs: 'block', sm: 'none' },
           '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
@@ -186,6 +168,8 @@ React.useEffect(() => {
       >
         {drawer}
       </Drawer>
+
+      {/* Permanent Drawer for desktop */}
       <Drawer
         variant="permanent"
         sx={{
@@ -196,12 +180,23 @@ React.useEffect(() => {
       >
         {drawer}
       </Drawer>
-      <Box component="main" sx={{ flexGrow: 1, p: 0, width: { sm: `calc(100% - ${drawerWidth}px)` }, height: '100%' }}>
+
+      {/* Main content area */}
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          p: 0,
+          transition: 'margin .3s ease-out, width .3s ease-out',
+          marginLeft: { sm: `${drawerWidth}px` },
+          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          height: '100%',
+        }}
+      >
         <Routes>
           <Route path="/sourcedump" element={<SourceDump />} />
           <Route path="/login" element={<LoginScreen />} />
           {user ? (
-            // Authenticated routes
             <>
               <Route path="/library" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
               <Route path="/cards" element={<PromptCardManager onNavToggle={handleDrawerToggle} />} />
@@ -209,11 +204,10 @@ React.useEffect(() => {
               <Route path="/world-state" element={<WorldStateScreen onNavToggle={handleDrawerToggle} />} />
               <Route path="/logs" element={<LogViewerScreen onNavToggle={handleDrawerToggle} />} />
               <Route path="/settings" element={<SettingsScreen onNavToggle={handleDrawerToggle} />} />
-              <Route path="/" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} /> {/* Default route */}
-              <Route path="*" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} /> {/* Catch-all for logged in */}
+              <Route path="/" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
+              <Route path="*" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
             </>
           ) : (
-            // Unauthenticated routes redirect to login
             <Route path="*" element={<LoginScreen />} />
           )}
         </Routes>
@@ -221,6 +215,7 @@ React.useEffect(() => {
     </Box>
   );
 };
+
 
 const App: React.FC = () => {
   const { themeMode } = useSettingsStore(); // Get theme mode from settings store
@@ -348,15 +343,17 @@ const App: React.FC = () => {
 };
 
 export default App;
-
-
-// ===== src/data/config/promptCardDefaults.ts =====
-
+@@FOLDER: src/assets
+@@FILE: src/assets/react.svg
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" class="iconify iconify--logos" width="35.93" height="32" preserveAspectRatio="xMidYMid meet" viewBox="0 0 256 228"><path fill="#00D8FF" d="M210.483 73.824a171.49 171.49 0 0 0-8.24-2.597c.465-1.9.893-3.777 1.273-5.621c6.238-30.281 2.16-54.676-11.769-62.708c-13.355-7.7-35.196.329-57.254 19.526a171.23 171.23 0 0 0-6.375 5.848a155.866 155.866 0 0 0-4.241-3.917C100.759 3.829 77.587-4.822 63.673 3.233C50.33 10.957 46.379 33.89 51.995 62.588a170.974 170.974 0 0 0 1.892 8.48c-3.28.932-6.445 1.924-9.474 2.98C17.309 83.498 0 98.307 0 113.668c0 15.865 18.582 31.778 46.812 41.427a145.52 145.52 0 0 0 6.921 2.165a167.467 167.467 0 0 0-2.01 9.138c-5.354 28.2-1.173 50.591 12.134 58.266c13.744 7.926 36.812-.22 59.273-19.855a145.567 145.567 0 0 0 5.342-4.923a168.064 168.064 0 0 0 6.92 6.314c21.758 18.722 43.246 26.282 56.54 18.586c13.731-7.949 18.194-32.003 12.4-61.268a145.016 145.016 0 0 0-1.535-6.842c1.62-.48 3.21-.974 4.76-1.488c29.348-9.723 48.443-25.443 48.443-41.52c0-15.417-17.868-30.326-45.517-39.844Zm-6.365 70.984c-1.4.463-2.836.91-4.3 1.345c-3.24-10.257-7.612-21.163-12.963-32.432c5.106-11 9.31-21.767 12.459-31.957c2.619.758 5.16 1.557 7.61 2.4c23.69 8.156 38.14 20.213 38.14 29.504c0 9.896-15.606 22.743-40.946 31.14Zm-10.514 20.834c2.562 12.94 2.927 24.64 1.23 33.787c-1.524 8.219-4.59 13.698-8.382 15.893c-8.067 4.67-25.32-1.4-43.927-17.412a156.726 156.726 0 0 1-6.437-5.87c7.214-7.889 14.423-17.06 21.459-27.246c12.376-1.098 24.068-2.894 34.671-5.345a134.17 134.17 0 0 1 1.386 6.193ZM87.276 214.515c-7.882 2.783-14.16 2.863-17.955.675c-8.075-4.657-11.432-22.636-6.853-46.752a156.923 156.923 0 0 1 1.869-8.499c10.486 2.32 22.093 3.988 34.498 4.994c7.084 9.967 14.501 19.128 21.976 27.15a134.668 134.668 0 0 1-4.877 4.492c-9.933 8.682-19.886 14.842-28.658 17.94ZM50.35 144.747c-12.483-4.267-22.792-9.812-29.858-15.863c-6.35-5.437-9.555-10.836-9.555-15.216c0-9.322 13.897-21.212 37.076-29.293c2.813-.98 5.757-1.905 8.812-2.773c3.204 10.42 7.406 21.315 12.477 32.332c-5.137 11.18-9.399 22.249-12.634 32.792a134.718 134.718 0 0 1-6.318-1.979Zm12.378-84.26c-4.811-24.587-1.616-43.134 6.425-47.789c8.564-4.958 27.502 2.111 47.463 19.835a144.318 144.318 0 0 1 3.841 3.545c-7.438 7.987-14.787 17.08-21.808 26.988c-12.04 1.116-23.565 2.908-34.161 5.309a160.342 160.342 0 0 1-1.76-7.887Zm110.427 27.268a347.8 347.8 0 0 0-7.785-12.803c8.168 1.033 15.994 2.404 23.343 4.08c-2.206 7.072-4.956 14.465-8.193 22.045a381.151 381.151 0 0 0-7.365-13.322Zm-45.032-43.861c5.044 5.465 10.096 11.566 15.065 18.186a322.04 322.04 0 0 0-30.257-.006c4.974-6.559 10.069-12.652 15.192-18.18ZM82.802 87.83a323.167 323.167 0 0 0-7.227 13.238c-3.184-7.553-5.909-14.98-8.134-22.152c7.304-1.634 15.093-2.97 23.209-3.984a321.524 321.524 0 0 0-7.848 12.897Zm8.081 65.352c-8.385-.936-16.291-2.203-23.593-3.793c2.26-7.3 5.045-14.885 8.298-22.6a321.187 321.187 0 0 0 7.257 13.246c2.594 4.48 5.28 8.868 8.038 13.147Zm37.542 31.03c-5.184-5.592-10.354-11.779-15.403-18.433c4.902.192 9.899.29 14.978.29c5.218 0 10.376-.117 15.453-.343c-4.985 6.774-10.018 12.97-15.028 18.486Zm52.198-57.817c3.422 7.8 6.306 15.345 8.596 22.52c-7.422 1.694-15.436 3.058-23.88 4.071a382.417 382.417 0 0 0 7.859-13.026a347.403 347.403 0 0 0 7.425-13.565Zm-16.898 8.101a358.557 358.557 0 0 1-12.281 19.815a329.4 329.4 0 0 1-23.444.823c-7.967 0-15.716-.248-23.178-.732a310.202 310.202 0 0 1-12.513-19.846h.001a307.41 307.41 0 0 1-10.923-20.627a310.278 310.278 0 0 1 10.89-20.637l-.001.001a307.318 307.318 0 0 1 12.413-19.761c7.613-.576 15.42-.876 23.31-.876H128c7.926 0 15.743.303 23.354.883a329.357 329.357 0 0 1 12.335 19.695a358.489 358.489 0 0 1 11.036 20.54a329.472 329.472 0 0 1-11 20.722Zm22.56-122.124c8.572 4.944 11.906 24.881 6.52 51.026c-.344 1.668-.73 3.367-1.15 5.09c-10.622-2.452-22.155-4.275-34.23-5.408c-7.034-10.017-14.323-19.124-21.64-27.008a160.789 160.789 0 0 1 5.888-5.4c18.9-16.447 36.564-22.941 44.612-18.3ZM128 90.808c12.625 0 22.86 10.235 22.86 22.86s-10.235 22.86-22.86 22.86s-22.86-10.235-22.86-22.86s10.235-22.86 22.86-22.86Z"></path></svg>
+@@FOLDER: src/data
+@@FOLDER: src/data/config
+@@FILE: src/data/config/promptCardDefaults.ts
 // src/data/promptCardDefaults.ts
 
 // In src/data/config/promptCardDefaults.ts
 import { AiSettingsInCard } from '../../models/PromptCard'; // Corrected path
-import { StackInstructions } from '../../models/StackInstructions'; // Corrected path
+import { StackInstructions, StackMode, FilterMode } from '../../models/StackInstructions'; // Corrected path
 
 /**
  * Default AI settings to be used for PromptCards if not specified.
@@ -377,20 +374,20 @@ export const defaultAiSettingsInCard: AiSettingsInCard = {
  * This is the parsed object version of the default JSON string from PromptCardDefaults.kt.
  */
 export const defaultStackInstructions: StackInstructions = {
-  narratorProseEmission: { mode: "firstN", n: 3, filtering: "sceneOnly" },
-  digestPolicy: { filtering: "tagged" },
+  narratorProseEmission: { mode: StackMode.FIRST_N, n: 3, filtering: FilterMode.SCENE_ONLY, enabled: true }, // NEW: enabled: true
+  digestPolicy: { filtering: FilterMode.TAGGED, enabled: true }, // NEW: enabled: true
   digestEmission: {
-    "5": { mode: "always" },
-    "4": { mode: "afterN", n: 1 },
-    "3": { mode: "firstN", n: 6 },
-    "2": { mode: "firstN", n: 3 },
-    "1": { mode: "never" },
+    "5": { mode: StackMode.ALWAYS },
+    "4": { mode: StackMode.AFTER_N, n: 1 },
+    "3": { mode: StackMode.FIRST_N, n: 6 },
+    "2": { mode: StackMode.FIRST_N, n: 3 },
+    "1": { mode: StackMode.NEVER },
   },
-  expressionLogPolicy: { mode: "always", filtering: "sceneOnly" },
+  expressionLogPolicy: { mode: StackMode.ALWAYS, filtering: FilterMode.SCENE_ONLY, enabled: true }, // NEW: enabled: true
   expressionLinesPerCharacter: 3,
   emotionWeighting: true,
-  worldStatePolicy: { mode: "filtered", filtering: "sceneOnly" },
-  knownEntitiesPolicy: { mode: "firstN", n: 2, filtering: "tagged" },
+  worldStatePolicy: { mode: StackMode.FILTERED, filtering: FilterMode.SCENE_ONLY, enabled: true }, // NEW: enabled: true
+  knownEntitiesPolicy: { mode: StackMode.FIRST_N, n: 2, filtering: FilterMode.TAGGED, enabled: true }, // NEW: enabled: true
   outputFormat: "prose_digest_emit",
   tokenPolicy: {
     minTokens: 1000,
@@ -514,10 +511,8 @@ Example:
 
 - Digest lines must follow narration output — never precede it
 `.trim();
-
-
-// ===== src/data/infrastructure/firebaseClient.ts =====
-
+@@FOLDER: src/data/infrastructure
+@@FILE: src/data/infrastructure/firebaseClient.ts
 // src/data/infrastructure/firebaseClient.ts
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
@@ -548,10 +543,8 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 // Get Firebase services (without offline persistence for MVP)
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-
-
-// ===== src/data/repositories/authRepository.ts =====
-
+@@FOLDER: src/data/repositories
+@@FILE: src/data/repositories/authRepository.ts
 // src/data/authRepository.ts
 
 import {
@@ -622,10 +615,7 @@ export function subscribeToAuthChanges(callback: (user: User | null) => void): (
 export function getCurrentUser(): User | null {
   return auth.currentUser;
 }
-
-
-// ===== src/data/repositories/gameRepository.ts =====
-
+@@FILE: src/data/repositories/gameRepository.ts
 // src/data/repositories/gameRepository.ts
 
 import {
@@ -823,10 +813,7 @@ class FirestoreGameRepository implements IGameRepository {
 
 // Export a singleton instance of the repository.
 export const gameRepository = new FirestoreGameRepository();
-
-
-// ===== src/data/repositories/promptCardRepository.ts =====
-
+@@FILE: src/data/repositories/promptCardRepository.ts
 // src/data/repositories/promptCardRepository.ts
 
 import {
@@ -1005,10 +992,7 @@ export class FirestorePromptCardRepository implements IPromptCardRepository {
 
 // Export a singleton instance of the repository for use throughout the application
 export const promptCardRepository = new FirestorePromptCardRepository();
-
-
-// ===== src/index.css =====
-
+@@FILE: src/index.css
 /* Reset and base styles */
 * {
   box-sizing: border-box;
@@ -1034,10 +1018,8 @@ html {
   scroll-behavior: smooth;
 }
 
-
-
-// ===== src/logic/aiClient.ts =====
-
+@@FOLDER: src/logic
+@@FILE: src/logic/aiClient.ts
 // src/logic/aiClient.ts
 
 import type { Message } from '../models/Message';
@@ -1174,10 +1156,7 @@ class AiClient implements IAiClient {
 
 // Export a singleton instance of the AI client.
 export const aiClient = new AiClient();
-
-
-// ===== src/logic/cardManager.ts =====
-
+@@FILE: src/logic/cardManager.ts
 // src/logic/cardManager.ts
 
 import { PromptCard, NewPromptCardData } from '../models/PromptCard';
@@ -1327,6 +1306,7 @@ export class PromptCardManager implements ICardManager {
       gameRules: data.gameRules ?? "",
       aiSettings: { ...defaultAiSettingsInCard, ...data.aiSettings },
       helperAiSettings: { ...defaultAiSettingsInCard, ...data.helperAiSettings },
+      isHelperAiEnabled: data.isHelperAiEnabled ?? false, // NEW: Initialize with default false
       tags: data.tags ?? [],
       isExample: data.isExample ?? false,
       functionDefs: data.functionDefs ?? "",
@@ -1384,6 +1364,7 @@ export class PromptCardManager implements ICardManager {
       updatedAt: now, // New update timestamp
       isExample: false, // Duplicates are user-owned, not examples
       isPublic: false, // Duplicates are private by default
+      // isHelperAiEnabled will be copied correctly from sourceCard by the spread operator
     };
 
     // Recalculate hash for the duplicated card in case any content fields were implicitly changed
@@ -1440,10 +1421,7 @@ export class PromptCardManager implements ICardManager {
 
 // Export a singleton instance of the manager
 export const promptCardManager = new PromptCardManager(promptCardRepository);
-
-
-// ===== src/logic/deltaParser.ts =====
-
+@@FILE: src/logic/deltaParser.ts
 // src/logic/deltaParser.ts
 
 import type { DeltaInstruction, DeltaMap } from '../models/DeltaInstruction.ts';
@@ -1568,10 +1546,7 @@ export function parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput 
     scene: sceneJson,
   };
 }
-
-
-// ===== src/logic/gameSession.ts =====
-
+@@FILE: src/logic/gameSession.ts
 // src/logic/gameSession.ts
 
 // Updated import paths for interfaces as well for clarity.
@@ -2048,10 +2023,7 @@ export class GameSession implements IGameSession { // Export the class
 
 // Export the GameSession class to be instantiated in main.tsx
 // REMOVED: export const gameSession = new GameSession(...);
-
-
-// ===== src/logic/logManager.ts =====
-
+@@FILE: src/logic/logManager.ts
 // src/logic/logManager.ts
 
 import type{ LogEntry } from '../models/LogEntry';
@@ -2238,10 +2210,7 @@ class LogManager implements ILogManager {
 }
 
 export const logManager = new LogManager();
-
-
-// ===== src/logic/promptBuilder.ts =====
-
+@@FILE: src/logic/promptBuilder.ts
 // src/logic/promptBuilder.ts
 
 import type { PromptCard, AiSettings } from '../models/PromptCard';
@@ -2249,7 +2218,7 @@ import type { GameState, SceneState } from '../models/GameState';
 import type { LogEntry } from '../models/LogEntry';
 import type { Message } from '../models/Message';
 // Changed to regular import for runtime access to enum members
-import { StackMode, FilterMode, StackInstructions, EmissionRule, ProsePolicy } from '../models/StackInstructions';
+import { StackMode, FilterMode, StackInstructions, EmissionRule, ProsePolicy, DigestFilterPolicy } from '../models/StackInstructions';
 import type { DeltaMap, DeltaInstruction } from '../models/DeltaInstruction';
 import type { DigestLine } from '../models/LogEntryElements';
 import type { ParsedNarrationOutput } from '../models/ParsedNarrationOutput';
@@ -2424,6 +2393,10 @@ export class PromptBuilder implements IPromptBuilder {
   private buildCommonPromptParts(card: PromptCard): Message[] {
     const messages: Message[] = [];
 
+    // NEW: System message about stack order
+    messages.push({ role: "system", content: `## Context Stack Order Guidance
+The following information is provided to you in a specific order to help you prioritize and integrate details. Focus on the most critical and structured information first, then dynamic elements, and finally conversational history. Adhere to this structure for optimal performance.` });
+
     messages.push({ role: "system", content: `## Core Scenario / Persona\n${card.prompt}` });
 
     if (card.gameRules) {
@@ -2470,20 +2443,18 @@ export class PromptBuilder implements IPromptBuilder {
     turnNumber: number
   ): Message[] {
     const messages = this.buildCommonPromptParts(card);
-    const stackInstructions = card.stackInstructions; // Use the structured object
+    const stackInstructions = card.stackInstructions;
 
     // === Dynamic Context Stack Assembly (Replicates StackAssembler.kt logic) ===
 
     // 1. World State Context (from worldStatePolicy)
-    if (stackInstructions.worldStatePolicy.mode !== StackMode.NEVER) {
+    if (stackInstructions.worldStatePolicy.enabled && stackInstructions.worldStatePolicy.mode !== StackMode.NEVER) { // NEW: Check enabled flag
       const worldStateJson = JSON.stringify(currentGameState.worldState, null, 2); // Pretty print for readability
       messages.push({ role: "system", content: `\n## Current World State\n\`\`\`json\n${worldStateJson}\n\`\`\`` });
     }
 
     // 2. Known Entities (from knownEntitiesPolicy)
-    // This requires flattening worldState and extracting tagged entities,
-    // similar to SceneManager.getSceneTags but for all known entities.
-    if (stackInstructions.knownEntitiesPolicy.mode !== StackMode.NEVER) {
+    if (stackInstructions.knownEntitiesPolicy.enabled && stackInstructions.knownEntitiesPolicy.mode !== StackMode.NEVER) { // NEW: Check enabled flag
         const knownEntitiesList: string[] = this.extractKnownEntities(
             currentGameState.worldState,
             stackInstructions.knownEntitiesPolicy.filtering,
@@ -2495,15 +2466,14 @@ export class PromptBuilder implements IPromptBuilder {
         }
     }
 
-
     // 3. Digest Context (from digestEmission and digestPolicy)
-    // This logic replicates DigestManager.getContextBlock and filtering.
-    if (stackInstructions.digestEmission[5]?.mode !== StackMode.NEVER ||
+    if (stackInstructions.digestPolicy.enabled && ( // NEW: Check enabled flag for digestPolicy
+        stackInstructions.digestEmission[5]?.mode !== StackMode.NEVER ||
         stackInstructions.digestEmission[4]?.mode !== StackMode.NEVER ||
         stackInstructions.digestEmission[3]?.mode !== StackMode.NEVER ||
         stackInstructions.digestEmission[2]?.mode !== StackMode.NEVER ||
         stackInstructions.digestEmission[1]?.mode !== StackMode.NEVER
-    ) {
+    )) {
       const relevantDigests: DigestLine[] = [];
       const eligibleLogs = logEntries.filter(log => log.digestLines && log.digestLines.length > 0);
       const sceneTags = this.getSceneTagsFromState(currentGameState.scene, currentGameState.worldState);
@@ -2521,13 +2491,10 @@ export class PromptBuilder implements IPromptBuilder {
             if (meetsCondition) {
               let includeDigest = true;
               if (stackInstructions.digestPolicy.filtering === FilterMode.SCENE_ONLY) {
-                // Corrected logic: include if digest has ANY tags that are also in the current scene.
-                // If the digest has no tags, it won't be included in SCENE_ONLY.
                 if (!digestLine.tags || digestLine.tags.length === 0 || !digestLine.tags.some(tag => sceneTags.includes(tag))) {
                   includeDigest = false;
                 }
               } else if (stackInstructions.digestPolicy.filtering === FilterMode.TAGGED) {
-                // If filtering by tagged, ensure digest has tags
                 if (!digestLine.tags || digestLine.tags.length === 0) {
                     includeDigest = false;
                 }
@@ -2541,8 +2508,7 @@ export class PromptBuilder implements IPromptBuilder {
         });
       });
 
-      // Sort digests by turn number for chronological order in context
-      relevantDigests.sort((a, b) => a.turnNumber - b.turnNumber); // Assuming digestLine also has turnNumber
+      relevantDigests.sort((a, b) => a.turnNumber - b.turnNumber);
 
       if (relevantDigests.length > 0) {
         messages.push({ role: "system", content: `\n## Game Summary Digest\n${relevantDigests.map(d => d.text).join('\n')}` });
@@ -2550,10 +2516,9 @@ export class PromptBuilder implements IPromptBuilder {
     }
 
     // 4. Expression Log (from expressionLogPolicy)
-    if (stackInstructions.expressionLogPolicy.mode !== StackMode.NEVER) {
+    if (stackInstructions.expressionLogPolicy.enabled && stackInstructions.expressionLogPolicy.mode !== StackMode.NEVER) { // NEW: Check enabled flag
         const expressionLogContent: string[] = [];
         const filteredLogs = logEntries.filter(log => {
-            // Placeholder: Assuming 'sceneOnly' or 'tagged' filtering means looking for tags within the narrator output
             if (stackInstructions.expressionLogPolicy.filtering === FilterMode.SCENE_ONLY) {
                 const tagsInNarratorOutput = this.extractTags(log.narratorOutput);
                 const sceneTags = this.getSceneTagsFromState(currentGameState.scene, currentGameState.worldState);
@@ -2561,10 +2526,9 @@ export class PromptBuilder implements IPromptBuilder {
             } else if (stackInstructions.expressionLogPolicy.filtering === FilterMode.TAGGED) {
                 return this.extractTags(log.narratorOutput).length > 0;
             }
-            return true; // FilterMode.NONE or others
+            return true;
         });
 
-        // Apply mode (FIRST_N, AFTER_N)
         let eligibleExpressionLogs = filteredLogs;
         if (stackInstructions.expressionLogPolicy.mode === StackMode.FIRST_N) {
             eligibleExpressionLogs = eligibleExpressionLogs.filter(log => log.turnNumber <= stackInstructions.expressionLogPolicy.n);
@@ -2572,12 +2536,9 @@ export class PromptBuilder implements IPromptBuilder {
             eligibleExpressionLogs = eligibleExpressionLogs.filter(log => log.turnNumber >= stackInstructions.expressionLogPolicy.n);
         }
 
-        // For simplicity in MVP, we'll take a portion of the narrator's prose as "expression".
-        // A more robust solution would require explicit "expression" fields in LogEntry.
         eligibleExpressionLogs.forEach(log => {
-            // Attempt to get the first X lines or a summary of the narrator's output
             const lines = log.narratorOutput.split('\n').filter(line => line.trim().length > 0);
-            const numLines = Math.min(lines.length, stackInstructions.expressionLinesPerCharacter || 3); // Default to 3 lines
+            const numLines = Math.min(lines.length, stackInstructions.expressionLinesPerCharacter || 3);
             if (numLines > 0) {
                 expressionLogContent.push(`Turn ${log.turnNumber} Expression: ${lines.slice(0, numLines).join(' ')}`);
             }
@@ -2636,7 +2597,6 @@ export class PromptBuilder implements IPromptBuilder {
   ): string[] {
     const knownEntities: { tag: string; path: string; fullObject: any }[] = [];
 
-    // Recursive helper to traverse world state and find tagged entities
     const traverse = (obj: any, currentPath: string) => {
       if (typeof obj !== 'object' || obj === null) return;
 
@@ -2651,27 +2611,22 @@ export class PromptBuilder implements IPromptBuilder {
       }
     };
 
-    traverse(worldState, ''); // Start traversal from the root of worldState
+    traverse(worldState, '');
 
     let filteredEntities = knownEntities;
 
     if (filterMode === FilterMode.SCENE_ONLY) {
         const sceneTags = this.getSceneTagsFromState(
-            { location: null, present: [] }, // Dummy scene state, we need tags from the overall world state and actual scene.
+            { location: null, present: [] },
             worldState
         );
-        // This is a simplification. A true 'sceneOnly' filter for known entities
-        // would require knowing which entities are *currently* in the scene based on GameState.scene.present.
-        // For now, let's filter by if the entity has *any* tag that's a known scene tag, or if its path is in scene.present
-        // A more robust implementation would match paths in scene.present
-        const currentPresentEntities = new Set(this.getCurrentGameState()?.scene.present || []); // Assuming GameSession or similar can provide this.
+
+        const currentPresentEntities = new Set(this.getCurrentGameState()?.scene.present || []);
 
         filteredEntities = filteredEntities.filter(entity => {
-            // Check if the entity's path is explicitly in scene.present
             if (currentPresentEntities.has(entity.path)) {
                 return true;
             }
-            // Or if its tag is among the scene's inferred tags
             if (entity.tag && sceneTags.includes(entity.tag)) {
                 return true;
             }
@@ -2681,30 +2636,22 @@ export class PromptBuilder implements IPromptBuilder {
       filteredEntities = filteredEntities.filter(entity => entity.tag && (entity.tag.startsWith('#') || entity.tag.startsWith('@') || entity.tag.startsWith('$')));
     }
 
-    // Apply limit
     if (limit > 0) {
       filteredEntities = filteredEntities.slice(0, limit);
     }
 
-    // Format output string
     return filteredEntities.map(entity => {
-        // Format as: "category.entity (tag: #tag)" or similar, as per Android's format.
         const parts = entity.path.split('.');
         const entityDisplayName = parts[parts.length - 1].replace(/^[#@$]/, '');
         const parentCategory = parts.length > 1 ? parts[parts.length - 2] : null;
 
-        // Example: "npcs.#fox (tag: #character)" or "locations.@forest (tag: @location)"
         return `${parentCategory ? `${parentCategory}.` : ''}${entityDisplayName} (tag: ${entity.tag})`;
     });
   }
 }
 
-// Export a singleton instance of the prompt builder.
 export const promptBuilder = new PromptBuilder();
-
-
-// ===== src/main.tsx =====
-
+@@FILE: src/main.tsx
 // src/main.tsx
 
 import React from 'react';
@@ -2745,10 +2692,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>,
 );
-
-
-// ===== src/models/AiConnection.ts =====
-
+@@FOLDER: src/models
+@@FILE: src/models/AiConnection.ts
 // src/models/AiConnection.ts
 
 /**
@@ -2769,10 +2714,7 @@ export interface AiConnection {
   createdAt: string; // ISO 8601 string
   lastUpdated: string; // ISO 8601 string
 }
-
-
-// ===== src/models/DeltaInstruction.ts =====
-
+@@FILE: src/models/DeltaInstruction.ts
 // src/models/DeltaInstruction.ts
 
 /**
@@ -2791,10 +2733,7 @@ export type DeltaInstruction =
 
 // Helper type for the map of deltas
 export type DeltaMap = { [fullKey: string]: DeltaInstruction };
-
-
-// ===== src/models/GameSnapshot.ts =====
-
+@@FILE: src/models/GameSnapshot.ts
 // src/models/GameSnapshot.ts
 
 import { GameState } from './GameState';
@@ -2830,10 +2769,7 @@ export interface GameSnapshot {
   // --- UI Preferences (Persisted with Snapshot) ---
   worldStatePinnedKeys: string[]; // Stores full variable paths, e.g., "npcs.#fox.hp"
 }
-
-
-// ===== src/models/GameState.ts =====
-
+@@FILE: src/models/GameState.ts
 // src/models/GameState.ts
 
 /**
@@ -2854,10 +2790,7 @@ export interface GameState {
   worldState: Record<string, any>; // The dynamic game world
   scene: SceneState; // The current scene state
 }
-
-
-// ===== src/models/LogEntry.ts =====
-
+@@FILE: src/models/LogEntry.ts
 // src/models/LogEntry.ts
 
 import { DeltaMap } from './DeltaInstruction';
@@ -2890,10 +2823,7 @@ export interface LogEntry {
   errorFlags: LogErrorFlag[];
   modelSlugUsed: string;
 }
-
-
-// ===== src/models/LogEntryElements.ts =====
-
+@@FILE: src/models/LogEntryElements.ts
 // src/models/LogEntryElements.ts
 
 /**
@@ -2930,10 +2860,7 @@ export type LogErrorFlag =
   | 'API_ERROR'
   | 'UNKNOWN_ERROR';
 // Add more flags as needed based on your LogErrorFlag enum/sealed class if it exists.
-
-
-// ===== src/models/Message.ts =====
-
+@@FILE: src/models/Message.ts
 // src/models/Message.ts
 
 /**
@@ -2944,10 +2871,7 @@ export interface Message {
   role: 'system' | 'user' | 'assistant';
   content: string;
 }
-
-
-// ===== src/models/ParsedNarrationOutput.ts =====
-
+@@FILE: src/models/ParsedNarrationOutput.ts
 // src/models/ParsedNarrationOutput.ts
 
 import { DeltaMap } from './DeltaInstruction';
@@ -2968,10 +2892,7 @@ export interface ParsedNarrationOutput {
   digestLines: DigestLine[];
   scene?: Record<string, any> | null; // Corresponds to the JsonObject? for the @scene block
 }
-
-
-// ===== src/models/PromptCard.ts =====
-
+@@FILE: src/models/PromptCard.ts
 // src/models/PromptCard.ts
 
 import { StackInstructions } from './StackInstructions'; // Import the new StackInstructions
@@ -3014,6 +2935,7 @@ export interface PromptCard {
   gameRules: string;
   aiSettings: AiSettings;
   helperAiSettings: AiSettings;
+  isHelperAiEnabled: boolean; // NEW: Controls whether helper AI is considered active
   tags: string[];            // Kotlin `List<String>` maps to `string[]`
   isExample: boolean;        // From Kotlin `isExample`
   functionDefs: string;      // JSON string
@@ -3041,17 +2963,15 @@ export interface NewPromptCardData {
   emitSkeleton?: string;
   worldStateInit?: string;
   gameRules?: string;
-  aiSettings?: AiSettingsInCard;
-  helperAiSettings?: AiSettingsInCard;
+  aiSettings?: AiSettings; // Changed from AiSettingsInCard to AiSettings for consistency
+  helperAiSettings?: AiSettings; // Changed from AiSettingsInCard to AiSettings for consistency
+  isHelperAiEnabled?: boolean; // NEW: Optional for new card data
   tags?: string[];
   isExample?: boolean;
   functionDefs?: string;
   isPublic?: boolean;
 }
-
-
-// ===== src/models/StackInstructions.ts =====
-
+@@FILE: src/models/StackInstructions.ts
 // src/models/StackInstructions.ts
 
 /**
@@ -3084,6 +3004,7 @@ export interface ProsePolicy {
   mode: StackMode; // Use the enum
   n: number;
   filtering: FilterMode; // Use the enum
+  enabled?: boolean; // NEW: Added for toggling the entire section
 }
 
 /**
@@ -3101,6 +3022,7 @@ export interface EmissionRule {
  */
 export interface DigestFilterPolicy {
   filtering: FilterMode; // Use the enum
+  enabled?: boolean; // NEW: Added for toggling the entire section
 }
 
 /**
@@ -3132,10 +3054,7 @@ export interface StackInstructions {
   outputFormat: string;
   tokenPolicy: TokenPolicy;
 }
-
-
-// ===== src/models/index.ts =====
-
+@@FILE: src/models/index.ts
 // src/models/index.ts
 
 // Re-export all models for easier importing
@@ -3149,10 +3068,8 @@ export * from './Message';
 export * from './ParsedNarrationOutput';
 export * from './PromptCard';
 export * from './StackInstructions';
-
-
-// ===== src/pages/SourceDump.tsx =====
-
+@@FOLDER: src/pages
+@@FILE: src/pages/SourceDump.tsx
 import React, { useEffect, useState } from 'react';
 
 const SourceDump: React.FC = () => {
@@ -3180,10 +3097,8 @@ const SourceDump: React.FC = () => {
 
 export default SourceDump;
 
-
-
-// ===== src/state/useAuthStore.ts =====
-
+@@FOLDER: src/state
+@@FILE: src/state/useAuthStore.ts
 // src/state/useAuthStore.ts
 
 import { create } from 'zustand';
@@ -3245,10 +3160,7 @@ const unsubscribe = subscribeToAuthChanges((user) => {
 // but for a core global store, it often lives for the app's lifetime.
 // If you were to integrate this into a React component's useEffect, you'd return the unsubscribe function.
 // For a global store, we typically let it live.
-
-
-// ===== src/state/useGameStateStore.ts =====
-
+@@FILE: src/state/useGameStateStore.ts
 // src/state/useGameStateStore.ts
 
 import { create } from 'zustand';
@@ -3616,10 +3528,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
     get().saveGame();
   },
 }));
-
-
-// ===== src/state/useLogStore.ts =====
-
+@@FILE: src/state/useLogStore.ts
 // src/state/useLogStore.ts
 
 import { create } from 'zustand';
@@ -3666,10 +3575,7 @@ export const useLogStore = create<LogState>((set, get) => ({
     }
   },
 }));
-
-
-// ===== src/state/usePromptCardStore.ts =====
-
+@@FILE: src/state/usePromptCardStore.ts
 // src/state/usePromptCardStore.ts
 
 import { create } from 'zustand';
@@ -3827,10 +3733,7 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
     }
   },
 }));
-
-
-// ===== src/state/useSettingsStore.ts =====
-
+@@FILE: src/state/useSettingsStore.ts
 // src/state/useSettingsStore.ts
 
 import { create } from 'zustand';
@@ -3988,10 +3891,9 @@ export const useSettingsStore = create<SettingsState>()(
     }
   )
 );
-
-
-// ===== src/ui/components/AiSettingsEditor.tsx =====
-
+@@FOLDER: src/ui
+@@FOLDER: src/ui/components
+@@FILE: src/ui/components/AiSettingsEditor.tsx
 // src/ui/components/AiSettingsEditor.tsx
 
 import React from 'react';
@@ -4148,10 +4050,7 @@ export const AiSettingsEditor: React.FC<AiSettingsEditorProps> = ({
     </CollapsibleSection>
   );
 };
-
-
-// ===== src/ui/components/CollapsibleSection.tsx =====
-
+@@FILE: src/ui/components/CollapsibleSection.tsx
 // src/ui/components/CollapsibleSection.tsx
 
 import React from 'react';
@@ -4215,10 +4114,58 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
     </Card>
   );
 };
+@@FILE: src/ui/components/InfoDialog.tsx
+// src/ui/components/InfoDialog.tsx
 
+import React, { useState } from 'react';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, IconButton, Tooltip, Box } from '@mui/material';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
-// ===== src/ui/components/LogEntryDisplay.tsx =====
+interface InfoDialogProps {
+  title: string;
+  content: string | React.ReactNode; // Can be a string or JSX
+  iconSize?: 'small' | 'medium' | 'large';
+  tooltipText?: string; // Optional text for the initial hover tooltip
+}
 
+export const InfoDialog: React.FC<InfoDialogProps> = ({ title, content, iconSize = 'small', tooltipText = "Click for more information" }) => {
+  const [open, setOpen] = useState(false);
+
+  const handleClickOpen = () => {
+    setOpen(true);
+  };
+
+  const handleClose = () => {
+    setOpen(false);
+  };
+
+  return (
+    <>
+      <Tooltip title={tooltipText}>
+        <IconButton size={iconSize} onClick={handleClickOpen} sx={{ ml: 0.5, p: 0 }}>
+          <InfoOutlinedIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Dialog
+        open={open}
+        onClose={handleClose}
+        aria-labelledby="info-dialog-title"
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle id="info-dialog-title">{title}</DialogTitle>
+        <DialogContent dividers>
+          {/* Use Box with pre-wrap to respect line breaks in string content */}
+          {typeof content === 'string' ? <Box sx={{ whiteSpace: 'pre-wrap' }}>{content}</Box> : content}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClose}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+};
+@@FILE: src/ui/components/LogEntryDisplay.tsx
 // src/ui/components/LogEntryDisplay.tsx
 
 import React from 'react';
@@ -4270,10 +4217,7 @@ export const LogEntryDisplay: React.FC<LogEntryDisplayProps> = ({ mode, entry })
     </Box>
   );
 };
-
-
-// ===== src/ui/components/LogView.tsx =====
-
+@@FILE: src/ui/components/LogView.tsx
 // src/ui/components/LogView.tsx
 
 import React from 'react';
@@ -4316,10 +4260,7 @@ export const LogView: React.FC<LogViewProps> = ({ logEntries }) => {
     </Box>
   );
 };
-
-
-// ===== src/ui/components/PinnedItemsView.tsx =====
-
+@@FILE: src/ui/components/PinnedItemsView.tsx
 // src/ui/components/PinnedItemsView.tsx
 
 import React from 'react';
@@ -4449,10 +4390,7 @@ export const PinnedItemsView: React.FC<PinnedItemsViewProps> = ({ gameState }) =
     </Paper>
   );
 };
-
-
-// ===== src/ui/components/StackInstructionsEditor.tsx =====
-
+@@FILE: src/ui/components/StackInstructionsEditor.tsx
 // src/ui/components/StackInstructionsEditor.tsx
 
 import React from 'react';
@@ -4471,11 +4409,11 @@ import {
   Grid,
   Checkbox,
   Divider,
+  Switch,
 } from '@mui/material';
 import { CollapsibleSection } from './CollapsibleSection';
-// Import StackModes and FilterModes as values
-import { StackInstructions, StackMode, FilterMode, EmissionRule, ProsePolicy } from '../../models/StackInstructions';
-import type { StackMode, FilterMode } from '../../models/StackInstructions'; // Keep type imports for type usage
+import { StackInstructions, StackMode, FilterMode, EmissionRule, ProsePolicy, DigestFilterPolicy } from '../../models/StackInstructions';
+import { InfoDialog } from './InfoDialog';
 
 interface StackInstructionsEditorProps {
   stackInstructions: StackInstructions;
@@ -4486,10 +4424,10 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
   stackInstructions,
   onStackInstructionsChange,
 }) => {
-  // Helper to update a ProsePolicy or EmissionRule (they share 'mode' and 'n')
+  // Helper to update a policy (ProsePolicy, DigestFilterPolicy, EmissionRule)
   const handlePolicyChange = (
-    policyKey: keyof StackInstructions, // Can be 'narratorProseEmission', 'expressionLogPolicy', etc.
-    field: keyof ProsePolicy | keyof EmissionRule, // 'mode', 'n', or 'filtering'
+    policyKey: keyof StackInstructions,
+    field: keyof ProsePolicy | keyof EmissionRule | keyof DigestFilterPolicy,
     value: any
   ) => {
     onStackInstructionsChange({
@@ -4503,20 +4441,13 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
     field: keyof EmissionRule,
     value: any
   ) => {
-    const currentRule = stackInstructions.digestEmission[score] || { mode: StackModes.NEVER, n: 0 }; // Use StackModes.NEVER
+    const currentRule = stackInstructions.digestEmission[score] || { mode: StackMode.NEVER, n: 0 };
     onStackInstructionsChange({
       ...stackInstructions,
       digestEmission: {
         ...stackInstructions.digestEmission,
         [score]: { ...currentRule, [field]: value },
       },
-    });
-  };
-
-  const handleDigestFilterPolicyChange = (filterMode: FilterMode) => { // FilterMode type used here
-    onStackInstructionsChange({
-      ...stackInstructions,
-      digestPolicy: { filtering: filterMode },
     });
   };
 
@@ -4530,275 +4461,522 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
     });
   };
 
+  // Generic toggle for enabled state of a policy
+  const handleToggleEnable = (policyName: keyof StackInstructions) => {
+    const currentPolicy = stackInstructions[policyName] as ProsePolicy | DigestFilterPolicy;
+    onStackInstructionsChange({
+      ...stackInstructions,
+      [policyName]: { ...currentPolicy, enabled: !currentPolicy.enabled },
+    });
+  };
+
   return (
     <CollapsibleSection title="🧠 Stack Instructions" initiallyExpanded={false}>
-      <Typography variant="h6" gutterBottom>
-        Narrator Prose Emission
-      </Typography>
-      <FormControl component="fieldset" fullWidth margin="normal">
-        <FormLabel component="legend">Mode</FormLabel>
-        <RadioGroup
-          row
-          value={stackInstructions.narratorProseEmission.mode}
-          onChange={(e) =>
-            handlePolicyChange('narratorProseEmission', 'mode', e.target.value as StackMode) // StackMode type used here
-          }
-        >
-          {/* Iterate over values of StackModes object */}
-          {Object.values(StackModes).map((mode) => (
-            <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
-          ))}
-        </RadioGroup>
-        {(stackInstructions.narratorProseEmission.mode === StackModes.FIRST_N || // Use StackModes.FIRST_N
-          stackInstructions.narratorProseEmission.mode === StackModes.AFTER_N) && ( // Use StackModes.AFTER_N
-          <TextField
-            label="N (Turns/Count)"
-            type="number"
-            value={stackInstructions.narratorProseEmission.n}
-            onChange={(e) => handlePolicyChange('narratorProseEmission', 'n', parseInt(e.target.value))}
-            sx={{ mt: 1, width: '150px' }}
-            inputProps={{ min: 0 }}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="body2" color="text.secondary">
+          These settings control how previous game information (the 'context stack') is assembled
+          and presented to the AI for each new turn.
+          <InfoDialog
+            title="Understanding the Context Stack"
+            content={`The AI's 'memory' for each turn is built from a 'context stack' of information. This stack is essentially a list of messages sent to the AI, preceding your current input.
+
+The **order** in which these elements are presented to the AI can significantly impact its responses and adherence to rules. Generally, more important and structured information (like world state and rules) should come earlier in the stack, followed by dynamic elements (like logs and conversation history).
+
+Each section below can be individually enabled/disabled using the toggle switches. If a section is disabled, it will not be included in the AI's prompt for subsequent turns, saving tokens but potentially reducing AI's context.`}
           />
-        )}
-        <FormControl fullWidth sx={{ mt: 2 }}>
-          <InputLabel id="narrator-filtering-label">Filtering</InputLabel>
-          <Select
-            labelId="narrator-filtering-label"
-            value={stackInstructions.narratorProseEmission.filtering}
-            label="Filtering"
-            onChange={(e) =>
-              handlePolicyChange('narratorProseEmission', 'filtering', e.target.value as FilterMode) // FilterMode type used here
+        </Typography>
+      </Box>
+
+      {/* Narrator Prose Emission */}
+      <Box sx={{ mb: 4, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Narrator Prose Emission
+          </Typography>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={stackInstructions.narratorProseEmission.enabled || false}
+                onChange={() => handleToggleEnable('narratorProseEmission')}
+              />
             }
-          >
-            {/* Iterate over values of FilterModes object */}
-            {Object.values(FilterModes).map((mode) => (
-              <MenuItem key={mode} value={mode}>
-                {mode}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </FormControl>
+            label="Enable"
+            labelPlacement="start"
+          />
+        </Box>
+        <Box sx={{ opacity: stackInstructions.narratorProseEmission.enabled ? 1 : 0.5, pointerEvents: stackInstructions.narratorProseEmission.enabled ? 'auto' : 'none' }}>
+          <Typography gutterBottom>
+            Mode
+            <InfoDialog
+              title="Narrator Prose Emission Mode"
+              content={`Controls how past narrator output (the main story text) is included in the AI's context.
+
+- ALWAYS: Include all past narrator prose.
+- FIRST_N: Include prose only from the first 'N' turns.
+- AFTER_N: Include prose only from turns after 'N'.
+- NEVER: Do not include any past narrator prose.`}
+            />
+          </Typography>
+          <FormControl component="fieldset" fullWidth margin="normal">
+            <RadioGroup
+              row
+              value={stackInstructions.narratorProseEmission.mode}
+              onChange={(e) =>
+                handlePolicyChange('narratorProseEmission', 'mode', e.target.value as StackMode)
+              }
+            >
+              {Object.values(StackMode).map((mode) => (
+                <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
+              ))}
+            </RadioGroup>
+            {(stackInstructions.narratorProseEmission.mode === StackMode.FIRST_N ||
+              stackInstructions.narratorProseEmission.mode === StackMode.AFTER_N) && (
+                <TextField
+                  label="N (Turns)"
+                  type="number"
+                  value={stackInstructions.narratorProseEmission.n}
+                  onChange={(e) => handlePolicyChange('narratorProseEmission', 'n', parseInt(e.target.value))}
+                  sx={{ mt: 1, width: '150px' }}
+                  inputProps={{ min: 0 }}
+                />
+              )}
+            <Typography gutterBottom sx={{ mt: 2 }}>
+              Filtering
+              <InfoDialog
+                title="Narrator Prose Filtering"
+                content={`Filters which narrator prose lines are included based on their content or associated tags.
+
+- NONE: Include all prose based on the selected mode.
+- SCENE_ONLY: Only include prose that contains tags (e.g., #character, @location) relevant to the current scene.
+- TAGGED: Only include prose that contains any recognized tags (any #, @, or $ tag).`}
+              />
+            </Typography>
+            <FormControl fullWidth>
+              <InputLabel id="narrator-filtering-label">Filtering</InputLabel>
+              <Select
+                labelId="narrator-filtering-label"
+                value={stackInstructions.narratorProseEmission.filtering}
+                label="Filtering"
+                onChange={(e) =>
+                  handlePolicyChange('narratorProseEmission', 'filtering', e.target.value as FilterMode)
+                }
+              >
+                {Object.values(FilterMode).map((mode) => (
+                  <MenuItem key={mode} value={mode}>
+                    {mode}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </FormControl>
+        </Box>
+      </Box>
 
       <Divider sx={{ my: 3 }} />
 
-      <Typography variant="h6" gutterBottom>
-        Digest Lines Emission & Policy
-      </Typography>
-      <FormControl component="fieldset" fullWidth margin="normal">
-        <FormLabel component="legend">Global Digest Filtering Policy</FormLabel>
-        <RadioGroup
-          row
-          value={stackInstructions.digestPolicy.filtering}
-          onChange={(e) => handleDigestFilterPolicyChange(e.target.value as FilterMode)}
-        >
-          {Object.values(FilterModes).map((mode) => (
-            <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
-          ))}
-        </RadioGroup>
-      </FormControl>
+      {/* Digest Lines Emission & Policy */}
+      <Box sx={{ mb: 4, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Digest Lines Emission & Policy
+          </Typography>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={stackInstructions.digestPolicy.enabled || false}
+                onChange={() => handleToggleEnable('digestPolicy')}
+              />
+            }
+            label="Enable"
+            labelPlacement="start"
+          />
+        </Box>
+        <Box sx={{ opacity: stackInstructions.digestPolicy.enabled ? 1 : 0.5, pointerEvents: stackInstructions.digestPolicy.enabled ? 'auto' : 'none' }}>
+          <Typography gutterBottom>
+            Global Digest Filtering Policy
+            <InfoDialog
+              title="Global Digest Filtering Policy"
+              content={`Applies a filter to ALL digest lines before their individual emission rules are checked.
 
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        {[5, 4, 3, 2, 1].map((score) => (
-          <Grid item xs={12} sm={6} md={4} key={score}>
-            <Box sx={{ border: '1px solid #ccc', p: 1.5, borderRadius: 1 }}>
-              <Typography variant="subtitle2">Importance {score} Digests</Typography>
-              <FormControl component="fieldset" fullWidth size="small">
-                <RadioGroup
-                  row
-                  value={stackInstructions.digestEmission[score]?.mode || StackModes.NEVER} // Use StackModes.NEVER
-                  onChange={(e) =>
-                    handleDigestEmissionChange(score, 'mode', e.target.value as StackMode)
-                  }
-                >
-                  {Object.values(StackModes).map((mode) => (
-                    <FormControlLabel key={mode} value={mode} control={<Radio size="small" />} label={mode} />
-                  ))}
-                </RadioGroup>
-                {(stackInstructions.digestEmission[score]?.mode === StackModes.FIRST_N || // Use StackModes.FIRST_N
-                  stackInstructions.digestEmission[score]?.mode === StackModes.AFTER_N) && ( // Use StackModes.AFTER_N
-                  <TextField
-                    label="N"
-                    type="number"
-                    value={stackInstructions.digestEmission[score]?.n || 0}
-                    onChange={(e) => handleDigestEmissionChange(score, 'n', parseInt(e.target.value))}
-                    size="small"
-                    sx={{ mt: 1, width: '100px' }}
-                    inputProps={{ min: 0 }}
-                  />
-                )}
-              </FormControl>
-            </Box>
+- NONE: No global filtering, all digests are considered.
+- SCENE_ONLY: Only consider digests that contain tags (e.g., #character, @location) relevant to the current scene.
+- TAGGED: Only consider digests that have any recognized tags.`}
+            />
+          </Typography>
+          <FormControl component="fieldset" fullWidth margin="normal">
+            <RadioGroup
+              row
+              value={stackInstructions.digestPolicy.filtering}
+              onChange={(e) => handlePolicyChange('digestPolicy', 'filtering', e.target.value as FilterMode)}
+            >
+              {Object.values(FilterMode).map((mode) => (
+                <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
+              ))}
+            </RadioGroup>
+          </FormControl>
+
+          <Grid container spacing={2} sx={{ mb: 2 }}>
+            {[5, 4, 3, 2, 1].map((score) => (
+              <Grid item xs={12} sm={6} md={4} key={score}>
+                <Box sx={{ border: '1px solid #ccc', p: 1.5, borderRadius: 1 }}>
+                  <Typography variant="subtitle2">
+                    Importance {score} Digests
+                    <InfoDialog
+                      title={`Digest Importance Score ${score} Rule`}
+                      content={`Determines how digest lines with an importance score of ${score} are included in the AI's context. Higher scores are more critical events.
+
+- ALWAYS: Include all digests of this score.
+- FIRST_N: Include digests of this score only from the first 'N' turns.
+- AFTER_N: Include digests of this score only from turns after 'N'.
+- NEVER: Do not include any digests of this score.`}
+                    />
+                  </Typography>
+                  <FormControl component="fieldset" fullWidth size="small">
+                    <RadioGroup
+                      row
+                      value={stackInstructions.digestEmission[score]?.mode || StackMode.NEVER}
+                      onChange={(e) =>
+                        handleDigestEmissionChange(score, 'mode', e.target.value as StackMode)
+                      }
+                    >
+                      {Object.values(StackMode).map((mode) => (
+                        <FormControlLabel key={mode} value={mode} control={<Radio size="small" />} label={mode} />
+                      ))}
+                    </RadioGroup>
+                    {(stackInstructions.digestEmission[score]?.mode === StackMode.FIRST_N ||
+                      stackInstructions.digestEmission[score]?.mode === StackMode.AFTER_N) && (
+                        <TextField
+                          label="N"
+                          type="number"
+                          value={stackInstructions.digestEmission[score]?.n || 0}
+                          onChange={(e) => handleDigestEmissionChange(score, 'n', parseInt(e.target.value))}
+                          size="small"
+                          sx={{ mt: 1, width: '100px' }}
+                          inputProps={{ min: 0 }}
+                        />
+                      )}
+                  </FormControl>
+                </Box>
+              </Grid>
+            ))}
           </Grid>
-        ))}
-      </Grid>
+        </Box>
+      </Box>
 
       <Divider sx={{ my: 3 }} />
 
-      <Typography variant="h6" gutterBottom>
-        Expression Log Policy
-      </Typography>
-      <FormControl component="fieldset" fullWidth margin="normal">
-        <FormLabel component="legend">Mode</FormLabel>
-        <RadioGroup
-          row
-          value={stackInstructions.expressionLogPolicy.mode}
-          onChange={(e) =>
-            handlePolicyChange('expressionLogPolicy', 'mode', e.target.value as StackMode)
-          }
-        >
-          {Object.values(StackModes).map((mode) => (
-            <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
-          ))}
-        </RadioGroup>
-        {(stackInstructions.expressionLogPolicy.mode === StackModes.FIRST_N ||
-          stackInstructions.expressionLogPolicy.mode === StackModes.AFTER_N) && (
+      {/* Expression Log Policy */}
+      <Box sx={{ mb: 4, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Expression Log Policy
+          </Typography>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={stackInstructions.expressionLogPolicy.enabled || false}
+                onChange={() => handleToggleEnable('expressionLogPolicy')}
+              />
+            }
+            label="Enable"
+            labelPlacement="start"
+          />
+        </Box>
+        <Box sx={{ opacity: stackInstructions.expressionLogPolicy.enabled ? 1 : 0.5, pointerEvents: stackInstructions.expressionLogPolicy.enabled ? 'auto' : 'none' }}>
+          <Typography gutterBottom>
+            Mode
+            <InfoDialog
+              title="Expression Log Mode"
+              content={`Controls how character 'expression' (portions of past narrator prose related to character actions/emotions) is included.
+
+- ALWAYS: Include all relevant expression logs.
+- FIRST_N: Include expression logs only from the first 'N' turns.
+- AFTER_N: Include expression logs only from turns after 'N'.
+- NEVER: Do not include any expression logs.`}
+            />
+          </Typography>
+          <FormControl component="fieldset" fullWidth margin="normal">
+            <RadioGroup
+              row
+              value={stackInstructions.expressionLogPolicy.mode}
+              onChange={(e) =>
+                handlePolicyChange('expressionLogPolicy', 'mode', e.target.value as StackMode)
+              }
+            >
+              {Object.values(StackMode).map((mode) => (
+                <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
+              ))}
+            </RadioGroup>
+            {(stackInstructions.expressionLogPolicy.mode === StackMode.FIRST_N ||
+              stackInstructions.expressionLogPolicy.mode === StackMode.AFTER_N) && (
+                <TextField
+                  label="N (Turns)"
+                  type="number"
+                  value={stackInstructions.expressionLogPolicy.n}
+                  onChange={(e) => handlePolicyChange('expressionLogPolicy', 'n', parseInt(e.target.value))}
+                  sx={{ mt: 1, width: '150px' }}
+                  inputProps={{ min: 0 }}
+                />
+              )}
+            <Typography gutterBottom sx={{ mt: 2 }}>
+              Filtering
+              <InfoDialog
+                title="Expression Log Filtering"
+                content={`Filters which expression logs are included based on their content or associated tags.
+
+- NONE: Include all expression logs based on the selected mode.
+- SCENE_ONLY: Only include expression logs that contain tags relevant to the current scene.
+- TAGGED: Only include expression logs that contain any recognized tags.`}
+              />
+            </Typography>
+            <FormControl fullWidth sx={{ mt: 2 }}>
+              <InputLabel id="expression-filtering-label">Filtering</InputLabel>
+              <Select
+                labelId="expression-filtering-label"
+                value={stackInstructions.expressionLogPolicy.filtering}
+                label="Filtering"
+                onChange={(e) =>
+                  handlePolicyChange('expressionLogPolicy', 'filtering', e.target.value as FilterMode)
+                }
+              >
+                {Object.values(FilterMode).map((mode) => (
+                  <MenuItem key={mode} value={mode}>
+                    {mode}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </FormControl>
           <TextField
-            label="N (Turns/Count)"
+            fullWidth
+            label={
+              <>
+                Expression Lines Per Character
+                <InfoDialog
+                  title="Expression Lines Per Character"
+                  content="The maximum number of lines of narrative prose to extract and summarize for character expressions. A higher number provides more detail but uses more tokens."
+                />
+              </>
+            }
             type="number"
-            value={stackInstructions.expressionLogPolicy.n}
-            onChange={(e) => handlePolicyChange('expressionLogPolicy', 'n', parseInt(e.target.value))}
-            sx={{ mt: 1, width: '150px' }}
+            value={stackInstructions.expressionLinesPerCharacter}
+            onChange={(e) => onStackInstructionsChange({ ...stackInstructions, expressionLinesPerCharacter: parseInt(e.target.value) })}
+            sx={{ mb: 2, width: '250px' }}
             inputProps={{ min: 0 }}
           />
-        )}
-        <FormControl fullWidth sx={{ mt: 2 }}>
-          <InputLabel id="expression-filtering-label">Filtering</InputLabel>
-          <Select
-            labelId="expression-filtering-label"
-            value={stackInstructions.expressionLogPolicy.filtering}
-            label="Filtering"
-            onChange={(e) =>
-              handlePolicyChange('expressionLogPolicy', 'filtering', e.target.value as FilterMode)
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={stackInstructions.emotionWeighting}
+                onChange={(e) => onStackInstructionsChange({ ...stackInstructions, emotionWeighting: e.target.checked })}
+              />
             }
-          >
-            {Object.values(FilterModes).map((mode) => (
-              <MenuItem key={mode} value={mode}>
-                {mode}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </FormControl>
-      <TextField
-        fullWidth
-        label="Expression Lines Per Character"
-        type="number"
-        value={stackInstructions.expressionLinesPerCharacter}
-        onChange={(e) => onStackInstructionsChange({ ...stackInstructions, expressionLinesPerCharacter: parseInt(e.target.value) })}
-        sx={{ mb: 2, width: '250px' }}
-        inputProps={{ min: 0 }}
-      />
-      <FormControlLabel
-        control={
-          <Checkbox
-            checked={stackInstructions.emotionWeighting}
-            onChange={(e) => onStackInstructionsChange({ ...stackInstructions, emotionWeighting: e.target.checked })}
+            label={
+              <>
+                Emotion Weighting
+                <InfoDialog
+                  title="Emotion Weighting"
+                  content="If enabled, the system attempts to prioritize or emphasize narrative elements related to character emotions when building the context, potentially influencing AI's empathetic responses."
+                />
+              </>
+            }
           />
-        }
-        label="Emotion Weighting"
-      />
+        </Box>
+      </Box>
 
       <Divider sx={{ my: 3 }} />
 
-      <Typography variant="h6" gutterBottom>
-        World State Policy
-      </Typography>
-      <FormControl component="fieldset" fullWidth margin="normal">
-        <FormLabel component="legend">Mode</FormLabel>
-        <RadioGroup
-          row
-          value={stackInstructions.worldStatePolicy.mode}
-          onChange={(e) =>
-            handlePolicyChange('worldStatePolicy', 'mode', e.target.value as StackMode)
-          }
-        >
-          {Object.values(StackModes).map((mode) => (
-            <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
-          ))}
-        </RadioGroup>
-        {(stackInstructions.worldStatePolicy.mode === StackModes.FIRST_N ||
-          stackInstructions.worldStatePolicy.mode === StackModes.AFTER_N) && (
-          <TextField
-            label="N (Items/Count)"
-            type="number"
-            value={stackInstructions.worldStatePolicy.n}
-            onChange={(e) => handlePolicyChange('worldStatePolicy', 'n', parseInt(e.target.value))}
-            sx={{ mt: 1, width: '150px' }}
-            inputProps={{ min: 0 }}
-          />
-        )}
-        <FormControl fullWidth sx={{ mt: 2 }}>
-          <InputLabel id="worldstate-filtering-label">Filtering</InputLabel>
-          <Select
-            labelId="worldstate-filtering-label"
-            value={stackInstructions.worldStatePolicy.filtering}
-            label="Filtering"
-            onChange={(e) =>
-              handlePolicyChange('worldStatePolicy', 'filtering', e.target.value as FilterMode)
+      {/* World State Policy */}
+      <Box sx={{ mb: 4, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            World State Policy
+          </Typography>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={stackInstructions.worldStatePolicy.enabled || false}
+                onChange={() => handleToggleEnable('worldStatePolicy')}
+              />
             }
-          >
-            {Object.values(FilterModes).map((mode) => (
-              <MenuItem key={mode} value={mode}>
-                {mode}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </FormControl>
+            label="Enable"
+            labelPlacement="start"
+          />
+        </Box>
+        <Box sx={{ opacity: stackInstructions.worldStatePolicy.enabled ? 1 : 0.5, pointerEvents: stackInstructions.worldStatePolicy.enabled ? 'auto' : 'none' }}>
+          <Typography gutterBottom>
+            Mode
+            <InfoDialog
+              title="World State Policy Mode"
+              content={`Controls how the current world state JSON is included in the AI's context.
+
+- ALWAYS: Include the full current world state.
+- FILTERED: Include only parts of the world state (e.g., pinned items or scene-relevant data). This requires proper filtering logic in the system.
+- NEVER: Do not include any world state.`}
+            />
+          </Typography>
+          <FormControl component="fieldset" fullWidth margin="normal">
+            <RadioGroup
+              row
+              value={stackInstructions.worldStatePolicy.mode}
+              onChange={(e) =>
+                handlePolicyChange('worldStatePolicy', 'mode', e.target.value as StackMode)
+              }
+            >
+              {Object.values(StackMode).map((mode) => (
+                <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
+              ))}
+            </RadioGroup>
+            {(stackInstructions.worldStatePolicy.mode === StackMode.FIRST_N ||
+              stackInstructions.worldStatePolicy.mode === StackMode.AFTER_N) && (
+                <TextField
+                  label="N (Items/Count)"
+                  type="number"
+                  value={stackInstructions.worldStatePolicy.n}
+                  onChange={(e) => handlePolicyChange('worldStatePolicy', 'n', parseInt(e.target.value))}
+                  sx={{ mt: 1, width: '150px' }}
+                  inputProps={{ min: 0 }}
+                />
+              )}
+            <Typography gutterBottom sx={{ mt: 2 }}>
+              Filtering
+              <InfoDialog
+                title="World State Filtering"
+                content={`Filters which parts of the world state are included.
+
+- NONE: Include all world state data based on the selected mode.
+- SCENE_ONLY: Include only world state data directly related to entities present in the current scene.
+- TAGGED: Include only world state data for entities that have tags.`}
+              />
+            </Typography>
+            <FormControl fullWidth sx={{ mt: 2 }}>
+              <InputLabel id="worldstate-filtering-label">Filtering</InputLabel>
+              <Select
+                labelId="worldstate-filtering-label"
+                value={stackInstructions.worldStatePolicy.filtering}
+                label="Filtering"
+                onChange={(e) =>
+                  handlePolicyChange('worldStatePolicy', 'filtering', e.target.value as FilterMode)
+                }
+              >
+                {Object.values(FilterMode).map((mode) => (
+                  <MenuItem key={mode} value={mode}>
+                    {mode}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </FormControl>
+        </Box>
+      </Box>
 
       <Divider sx={{ my: 3 }} />
 
-      <Typography variant="h6" gutterBottom>
-        Known Entities Policy
-      </Typography>
-      <FormControl component="fieldset" fullWidth margin="normal">
-        <FormLabel component="legend">Mode</FormLabel>
-        <RadioGroup
-          row
-          value={stackInstructions.knownEntitiesPolicy.mode}
-          onChange={(e) =>
-            handlePolicyChange('knownEntitiesPolicy', 'mode', e.target.value as StackMode)
-          }
-        >
-          {Object.values(StackModes).map((mode) => (
-            <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
-          ))}
-        </RadioGroup>
-        {(stackInstructions.knownEntitiesPolicy.mode === StackModes.FIRST_N ||
-          stackInstructions.knownEntitiesPolicy.mode === StackModes.AFTER_N) && (
-          <TextField
-            label="N (Entities)"
-            type="number"
-            value={stackInstructions.knownEntitiesPolicy.n}
-            onChange={(e) => handlePolicyChange('knownEntitiesPolicy', 'n', parseInt(e.target.value))}
-            sx={{ mt: 1, width: '150px' }}
-            inputProps={{ min: 0 }}
-          />
-        )}
-        <FormControl fullWidth sx={{ mt: 2 }}>
-          <InputLabel id="knownentities-filtering-label">Filtering</InputLabel>
-          <Select
-            labelId="knownentities-filtering-label"
-            value={stackInstructions.knownEntitiesPolicy.filtering}
-            label="Filtering"
-            onChange={(e) =>
-              handlePolicyChange('knownEntitiesPolicy', 'filtering', e.target.value as FilterMode)
+      {/* Known Entities Policy */}
+      <Box sx={{ mb: 4, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            Known Entities Policy
+          </Typography>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={stackInstructions.knownEntitiesPolicy.enabled || false}
+                onChange={() => handleToggleEnable('knownEntitiesPolicy')}
+              />
             }
-          >
-            {Object.values(FilterModes).map((mode) => (
-              <MenuItem key={mode} value={mode}>
-                {mode}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </FormControl>
+            label="Enable"
+            labelPlacement="start"
+          />
+        </Box>
+        <Box sx={{ opacity: stackInstructions.knownEntitiesPolicy.enabled ? 1 : 0.5, pointerEvents: stackInstructions.knownEntitiesPolicy.enabled ? 'auto' : 'none' }}>
+          <Typography gutterBottom>
+            Mode
+            <InfoDialog
+              title="Known Entities Policy Mode"
+              content={`Controls how a list of 'known entities' (tagged items, characters, locations from world state) is included. This list reminds the AI of important things without sending the full world state.
+
+- ALWAYS: Include all known entities.
+- FIRST_N: Include known entities up to the 'N'th entity discovered.
+- AFTER_N: Include known entities discovered after the 'N'th entity.
+- NEVER: Do not include known entities.`}
+            />
+          </Typography>
+          <FormControl component="fieldset" fullWidth margin="normal">
+            <RadioGroup
+              row
+              value={stackInstructions.knownEntitiesPolicy.mode}
+              onChange={(e) =>
+                handlePolicyChange('knownEntitiesPolicy', 'mode', e.target.value as StackMode)
+              }
+            >
+              {Object.values(StackMode).map((mode) => (
+                <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
+              ))}
+            </RadioGroup>
+            {(stackInstructions.knownEntitiesPolicy.mode === StackMode.FIRST_N ||
+              stackInstructions.knownEntitiesPolicy.mode === StackMode.AFTER_N) && (
+                <TextField
+                  label="N (Entities)"
+                  type="number"
+                  value={stackInstructions.knownEntitiesPolicy.n}
+                  onChange={(e) => handlePolicyChange('knownEntitiesPolicy', 'n', parseInt(e.target.value))}
+                  sx={{ mt: 1, width: '150px' }}
+                  inputProps={{ min: 0 }}
+                />
+              )}
+            <Typography gutterBottom sx={{ mt: 2 }}>
+              Filtering
+              <InfoDialog
+                title="Known Entities Filtering"
+                content={`Filters which known entities are listed.
+
+- NONE: Include all known entities found based on the selected mode.
+- SCENE_ONLY: Only include entities that are currently present in the scene.
+- TAGGED: Only include entities that have explicit #, @, or $ tags.`}
+              />
+            </Typography>
+            <FormControl fullWidth sx={{ mt: 2 }}>
+              <InputLabel id="knownentities-filtering-label">Filtering</InputLabel>
+              <Select
+                labelId="knownentities-filtering-label"
+                value={stackInstructions.knownEntitiesPolicy.filtering}
+                label="Filtering"
+                onChange={(e) =>
+                  handlePolicyChange('knownEntitiesPolicy', 'filtering', e.target.value as FilterMode)
+                }
+              >
+                {Object.values(FilterMode).map((mode) => (
+                  <MenuItem key={mode} value={mode}>
+                    {mode}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </FormControl>
+        </Box>
+      </Box>
 
       <Divider sx={{ my: 3 }} />
 
       <Typography variant="h6" gutterBottom>
         Output Format
+        <InfoDialog
+          title="Output Format String (Stack Emission)"
+          content={`This string defines the *expected order* and *types* of structured blocks the AI should generate in its response, following the \`Emit & Tagging Skeleton\`. It's crucial for the application to correctly parse the AI's output.
+
+**Common keywords (separated by underscores):**
+- \`prose\`: The main narrative text.
+- \`digest\`: The summarized digest lines (e.g., \`@digest\` block).
+- \`emit\`: World state changes (e.g., \`@delta\` block).
+- \`scene\`: Scene changes (e.g., \`@scene\` block).
+
+**Example Orders:**
+- \`prose_digest_emit_scene\`: Narration, then digest, then deltas, then scene changes.
+- \`emit_prose\`: Deltas first, then narration (useful for strict state updates).
+
+**Important:** The AI will try to follow this order, but might occasionally deviate. Ensure your \`Emit & Tagging Skeleton\` also guides the AI to produce these blocks correctly.`}
+        />
       </Typography>
       <TextField
         fullWidth
@@ -4813,39 +4991,82 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
       </Typography>
       <TextField
         fullWidth
-        label="Min Tokens"
+        label={
+          <>
+            Min Tokens
+            <InfoDialog
+              title="Min Tokens"
+              content="The AI will attempt to generate a response of at least this many tokens."
+            />
+          </>
+        }
         type="number"
         value={stackInstructions.tokenPolicy.minTokens}
-        onChange={(e) => handleTokenPolicyChange('minTokens', parseInt(e.target.value))}
+        onChange={(e) =>
+          handlePolicyChange(
+            'tokenPolicy',
+            'minTokens',
+            parseInt(e.target.value)
+          )
+        }
         sx={{ mb: 2 }}
         inputProps={{ min: 0 }}
       />
       <TextField
         fullWidth
-        label="Max Tokens"
+        label={
+          <>
+            Max Tokens
+            <InfoDialog
+              title="Max Tokens"
+              content="The absolute maximum number of tokens the AI can generate."
+            />
+          </>
+        }
         type="number"
         value={stackInstructions.tokenPolicy.maxTokens}
-        onChange={(e) => handleTokenPolicyChange('maxTokens', parseInt(e.target.value))}
+        onChange={(e) =>
+          handlePolicyChange(
+            'tokenPolicy',
+            'maxTokens',
+            parseInt(e.target.value)
+          )
+        }
         sx={{ mb: 2 }}
         inputProps={{ min: 0 }}
       />
       <TextField
         fullWidth
-        label="Fallback Plan (comma-separated, e.g., drop_known_entities, truncate_expression_logs)"
+        label={
+          <>
+            Fallback Plan
+            <InfoDialog
+              title="Fallback Plan"
+              content={`A prioritized, comma-separated list of strategies the system will use to reduce the *input prompt's* token count if it exceeds the AI model's context window.
+
+**Common Fallback Strategies:**
+- \`drop_known_entities\`: Removes the 'Known Entities' block.
+- \`drop_low_importance_digest\`: Removes low-importance digests.
+- \`truncate_expression_logs\`: Shortens expression logs.
+- \`drop_narrator_prose\`: Removes past narrator prose.
+- \`truncate_conversation_history\`: Shortens older conversation turns.`}
+            />
+          </>
+        }
         value={stackInstructions.tokenPolicy.fallbackPlan.join(', ')}
-        onChange={(e) => handleTokenPolicyChange('fallbackPlan', e.target.value.split(',').map(s => s.trim()))}
+        onChange={(e) =>
+          handleTokenPolicyChange(
+            'fallbackPlan',
+            e.target.value.split(',').map((s) => s.trim())
+          )
+        }
         sx={{ mb: 2 }}
       />
-    </CollapsibleSection>
-  );
+  </CollapsibleSection>);
 };
 
-// Add the named export here
 export { StackInstructionsEditor };
-
-
-// ===== src/ui/components/WorldStateItemRow.tsx =====
-
+@@FILE: src/ui/components/WorldStateItemRow.tsx
 // src/ui/components/WorldStateItemRow.tsx
 
 import React, { useState } from 'react';
@@ -4966,10 +5187,8 @@ export const WorldStateItemRow: React.FC<WorldStateItemRowProps> = ({
     </Box>
   );
 };
-
-
-// ===== src/ui/screens/GameLibraryScreen.tsx =====
-
+@@FOLDER: src/ui/screens
+@@FILE: src/ui/screens/GameLibraryScreen.tsx
 // src/ui/screens/GameLibraryScreen.tsx
 
 import React, { useEffect, useState } from 'react';
@@ -5181,10 +5400,7 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
 };
 
 export default GameLibraryScreen;
-
-
-// ===== src/ui/screens/GameScreen.tsx =====
-
+@@FILE: src/ui/screens/GameScreen.tsx
 // src/ui/screens/GameScreen.tsx
 
 import React, { useEffect, useRef } from 'react';
@@ -5442,10 +5658,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
 };
 
 export default GameScreen;
-
-
-// ===== src/ui/screens/LogViewerScreen.tsx =====
-
+@@FILE: src/ui/screens/LogViewerScreen.tsx
 // src/ui/screens/LogViewerScreen.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -5620,10 +5833,7 @@ const LogViewerScreen: React.FC<LogViewerScreenProps> = ({ onNavToggle }) => {
 };
 
 export default LogViewerScreen;
-
-
-// ===== src/ui/screens/LoginScreen.tsx =====
-
+@@FILE: src/ui/screens/LoginScreen.tsx
 // src/ui/screens/LoginScreen.tsx
 
 import React from 'react';
@@ -5695,10 +5905,7 @@ const styles: { [key: string]: React.CSSProperties } = {
 };
 
 export default LoginScreen;
-
-
-// ===== src/ui/screens/PromptCardEditor.tsx =====
-
+@@FILE: src/ui/screens/PromptCardEditor.tsx
 // src/ui/screens/PromptCardEditor.tsx
 
 import React from 'react';
@@ -5708,6 +5915,8 @@ import {
   Checkbox,
   FormControlLabel,
   Grid,
+  Switch,
+  Divider,
 } from '@mui/material';
 import { CollapsibleSection } from '../components/CollapsibleSection';
 import { AiSettingsEditor } from '../components/AiSettingsEditor';
@@ -5718,7 +5927,9 @@ import {
   DEFAULT_FIRST_TURN_PROMPT_BLOCK,
   DEFAULT_EMIT_SKELETON_STRING,
   defaultStackInstructions,
+  defaultAiSettingsInCard,
 } from '../../data/config/promptCardDefaults';
+import { InfoDialog } from '../components/InfoDialog'; // NEW: Import InfoDialog
 
 interface PromptCardEditorProps {
   card: PromptCard;
@@ -5731,7 +5942,6 @@ const PromptCardEditor: React.FC<PromptCardEditorProps> = ({
   onCardChange,
   availableConnections,
 }) => {
-  // Helper to create a change handler for a specific card property
   const createChangeHandler = <K extends keyof PromptCard>(prop: K) => {
     return (value: PromptCard[K]) => {
       onCardChange({ ...card, [prop]: value });
@@ -5755,14 +5965,30 @@ const PromptCardEditor: React.FC<PromptCardEditorProps> = ({
       <CollapsibleSection title="Title & Description" initiallyExpanded={true}>
         <TextField
           fullWidth
-          label="Title"
+          label={
+            <>
+              Title
+              <InfoDialog
+                title="Prompt Card Title"
+                content="A short, descriptive name for this prompt card. Used for display in the game library and manager."
+              />
+            </>
+          }
           value={card.title}
           onChange={(e) => createChangeHandler('title')(e.target.value)}
           sx={{ mb: 2 }}
         />
         <TextField
           fullWidth
-          label="Description"
+          label={
+            <>
+              Description
+              <InfoDialog
+                title="Prompt Card Description"
+                content="An optional, longer explanation of what this prompt card is about. It helps you remember the card's purpose and can be seen by others if the card is made public. It is NOT sent to the AI."
+              />
+            </>
+          }
           multiline
           minRows={2}
           value={card.description || ''}
@@ -5777,7 +6003,15 @@ const PromptCardEditor: React.FC<PromptCardEditorProps> = ({
           fullWidth
           multiline
           minRows={5}
-          label="Core Scenario / Persona Prompt"
+          label={
+            <>
+              Core Scenario / Persona Prompt
+              <InfoDialog
+                title="Core Scenario / Persona Prompt"
+                content="This is the most important part of your prompt card. It defines the core scenario, the AI's persona (e.g., 'You are a wise old wizard...'), the setting, and any foundational rules. This text is ALWAYS sent to the AI."
+              />
+            </>
+          }
           value={card.prompt}
           onChange={(e) => createChangeHandler('prompt')(e.target.value)}
         />
@@ -5789,7 +6023,18 @@ const PromptCardEditor: React.FC<PromptCardEditorProps> = ({
           fullWidth
           multiline
           minRows={4}
-          label="Intro scene shown only on turn 1"
+          label={
+            <>
+              Intro scene shown only on turn 1
+              <InfoDialog
+                title="First Turn Only Block"
+                content={`This text is added to the AI's prompt ONLY for the very first turn of a new game session using this card. It's ideal for setting an initial scene, asking the player for their first action, or providing specific introductory narrative.
+                
+Example:
+"The camera pans down. It's your first time in this place. Describe the scene and how the world feels from the character's perspective."`}
+              />
+            </>
+          }
           value={card.firstTurnOnlyBlock}
           onChange={(e) => createChangeHandler('firstTurnOnlyBlock')(e.target.value)}
           placeholder={DEFAULT_FIRST_TURN_PROMPT_BLOCK}
@@ -5802,7 +6047,28 @@ const PromptCardEditor: React.FC<PromptCardEditorProps> = ({
           fullWidth
           multiline
           minRows={6}
-          label="Emit/Tagging Rules (JSON/Text)"
+          label={
+            <>
+              Emit/Tagging Rules (JSON/Text)
+              <InfoDialog
+                title="Emit & Tagging Skeleton"
+                content={`This section provides the AI with strict rules on how to output structured data (emits, tags, scene changes) as part of its response. It ensures consistency for automated parsing and game state updates.
+                
+It should contain markdown and specific marker words like @delta, @digest, @scene.
+
+Example Emit:
+{
+  "+npcs.#fox.trust": 1,
+  "=player.#you.weapons.primary.arrows": 47
+}
+
+Example Tagging:
+- Use # for characters/NPCs (e.g., #goblin)
+- Use @ for locations (e.g., @forest)
+- Use $ for items (e.g., $sword)`}
+              />
+            </>
+          }
           value={card.emitSkeleton}
           onChange={(e) => createChangeHandler('emitSkeleton')(e.target.value)}
           placeholder={DEFAULT_EMIT_SKELETON_STRING}
@@ -5815,7 +6081,45 @@ const PromptCardEditor: React.FC<PromptCardEditorProps> = ({
           fullWidth
           multiline
           minRows={5}
-          label="Initial World State (JSON)"
+          label={
+            <>
+              Initial World State (JSON)
+              <InfoDialog
+                title="Initial World State (JSON)"
+                content={`A JSON object defining the starting state of your game world. This is loaded once at the beginning of a new game session.
+                
+It's recommended to use a three-level structure: category.entity.variable.
+Categories define broad groups (e.g., 'player', 'npcs', 'locations', 'items').
+Entities are specific instances within a category (e.g., '#you', '#goblin_1', '@forest').
+Variables are properties of those entities (e.g., 'hp', 'gold', 'status').
+
+Example:
+{
+  "player": {
+    "#you": {
+      "hp": 100,
+      "gold": 50,
+      "inventory": ["$dagger", "$torch"],
+      "location": "@forest_edge"
+    }
+  },
+  "npcs": {
+    "#goblin_1": {
+      "hp": 20,
+      "mood": "grumpy",
+      "location": "@goblin_camp"
+    }
+  },
+  "locations": {
+    "@forest_edge": {
+      "description": "A dense forest path.",
+      "weather": "sunny"
+    }
+  }
+}`}
+              />
+            </>
+          }
           value={card.worldStateInit}
           onChange={(e) => createChangeHandler('worldStateInit')(e.target.value)}
           placeholder="{}"
@@ -5828,26 +6132,59 @@ const PromptCardEditor: React.FC<PromptCardEditorProps> = ({
           fullWidth
           multiline
           minRows={5}
-          label="Game Rules"
+          label={
+            <>
+              Game Rules
+              <InfoDialog
+                title="Game Rules"
+                content="Textual rules or guidelines for the AI to follow throughout the game. This can include combat mechanics, social interaction rules, or narrative conventions. This is always included in the AI prompt."
+              />
+            </>
+          }
           value={card.gameRules}
           onChange={(e) => createChangeHandler('gameRules')(e.target.value)}
           placeholder="Rules for the AI to follow during gameplay."
         />
       </CollapsibleSection>
 
-      {/* AI Settings */}
+      {/* Primary AI Settings */}
       <AiSettingsEditor
         label="Primary AI Settings"
         settings={card.aiSettings}
         onSettingsChange={(s) => handleAiSettingsChange('aiSettings', s)}
         availableConnections={availableConnections}
       />
-      <AiSettingsEditor
-        label="Helper AI Settings"
-        settings={card.helperAiSettings}
-        onSettingsChange={(s) => handleAiSettingsChange('helperAiSettings', s)}
-        availableConnections={availableConnections}
-      />
+
+      {/* Helper AI Settings with Toggle */}
+      <CollapsibleSection title="Helper AI Settings" initiallyExpanded={false}>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={card.isHelperAiEnabled}
+              onChange={(e) => createChangeHandler('isHelperAiEnabled')(e.target.checked)}
+            />
+          }
+          label={
+            <>
+              Enable Helper AI
+              <InfoDialog
+                title="Enable Helper AI"
+                content="Toggle this to enable or disable an additional, secondary AI call for specific tasks (e.g., generating descriptions for new items, character dialog, or resolving complex rules). If disabled, the Helper AI settings below are ignored."
+              />
+            </>
+          }
+          sx={{ mb: 2 }}
+        />
+        <Divider sx={{ mb: 2 }} />
+        <Box sx={{ opacity: card.isHelperAiEnabled ? 1 : 0.5, pointerEvents: card.isHelperAiEnabled ? 'auto' : 'none' }}>
+          <AiSettingsEditor
+            label=""
+            settings={card.helperAiSettings}
+            onSettingsChange={(s) => handleAiSettingsChange('helperAiSettings', s)}
+            availableConnections={availableConnections}
+          />
+        </Box>
+      </CollapsibleSection>
 
       {/* Function Definitions */}
       <CollapsibleSection title="Function Definitions" initiallyExpanded={false}>
@@ -5855,7 +6192,31 @@ const PromptCardEditor: React.FC<PromptCardEditorProps> = ({
           fullWidth
           multiline
           minRows={6}
-          label="Function Definitions (JSON)"
+          label={
+            <>
+              Function Definitions (JSON)
+              <InfoDialog
+                title="Function Definitions"
+                content={`Provide JSON schemas for functions the AI can 'call'. This enables the AI to interact with external tools or structured game systems by outputting specific function calls.
+                
+Example (OpenAI format):
+{
+  "name": "use_item",
+  "description": "Use an item from the player's inventory.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "item_name": {
+        "type": "string",
+        "description": "The name of the item to use."
+      }
+    },
+    "required": ["item_name"]
+  }
+}`}
+              />
+            </>
+          }
           value={card.functionDefs}
           onChange={(e) => createChangeHandler('functionDefs')(e.target.value)}
           placeholder="e.g., { 'name': 'action', 'parameters': { ... } }"
@@ -5877,7 +6238,15 @@ const PromptCardEditor: React.FC<PromptCardEditorProps> = ({
               onChange={(e) => createChangeHandler('isPublic')(e.target.checked)}
             />
           }
-          label="Make Public (visible to others)"
+          label={
+            <>
+              Make Public (visible to others)
+              <InfoDialog
+                title="Public Card"
+                content="If checked, this prompt card will be visible and potentially usable by other users. Use this for sharing your creations."
+              />
+            </>
+          }
         />
         <FormControlLabel
           control={
@@ -5886,7 +6255,15 @@ const PromptCardEditor: React.FC<PromptCardEditorProps> = ({
               onChange={(e) => createChangeHandler('isExample')(e.target.checked)}
             />
           }
-          label="Is Example Card (for showcase)"
+          label={
+            <>
+              Is Example Card (for showcase)
+              <InfoDialog
+                title="Example Card"
+                content="Mark this card as an official example. This is usually for built-in, curated content rather than user-generated cards."
+              />
+            </>
+          }
         />
       </Box>
     </Box>
@@ -5894,10 +6271,7 @@ const PromptCardEditor: React.FC<PromptCardEditorProps> = ({
 };
 
 export default PromptCardEditor;
-
-
-// ===== src/ui/screens/PromptCardManager.tsx =====
-
+@@FILE: src/ui/screens/PromptCardManager.tsx
 // src/ui/screens/PromptCardManager.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -5937,6 +6311,14 @@ import { useGameStateStore } from '../../state/useGameStateStore';
 import { useSettingsStore } from '../../state/useSettingsStore'; // Import useSettingsStore to pass AI connections
 import { PromptCard, NewPromptCardData } from '../../models/index';
 import PromptCardEditor from './PromptCardEditor'; // Editor component
+
+import { // NEW: Import all default values
+  DEFAULT_FIRST_TURN_PROMPT_BLOCK,
+  DEFAULT_EMIT_SKELETON_STRING,
+  defaultStackInstructions,
+  defaultAiSettingsInCard, // Although AI settings are merged in CardManager, it's good to be explicit here
+} from '../../data/config/promptCardDefaults';
+
 
 interface PromptCardManagerProps {
   onNavToggle: () => void;
@@ -6014,17 +6396,29 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
     // Pre-select the default AI connection if available
     const defaultConnectionId = aiConnections.length > 0 ? aiConnections[0].id : "";
 
+    // NEW: Explicitly set all default values
     const newCardData: NewPromptCardData = {
       title: "New Prompt Card",
       prompt: "This is a new prompt card. Describe the setting and your character's starting situation.",
+      description: null,
+      firstTurnOnlyBlock: DEFAULT_FIRST_TURN_PROMPT_BLOCK,
+      stackInstructions: defaultStackInstructions, // Pass the object, cardManager will stringify
+      emitSkeleton: DEFAULT_EMIT_SKELETON_STRING,
+      worldStateInit: '',
+      gameRules: '',
       aiSettings: {
+        ...defaultAiSettingsInCard,
         selectedConnectionId: defaultConnectionId,
-        temperature: 0.7, topP: 1.0, maxTokens: 2048, presencePenalty: 0.0, frequencyPenalty: 0.0, functionCallingEnabled: false
       },
       helperAiSettings: {
+        ...defaultAiSettingsInCard,
         selectedConnectionId: defaultConnectionId,
-        temperature: 0.7, topP: 1.0, maxTokens: 2048, presencePenalty: 0.0, frequencyPenalty: 0.0, functionCallingEnabled: false
-      }
+      },
+      isHelperAiEnabled: false, // NEW: Default to disabled
+      tags: [],
+      isExample: false,
+      functionDefs: '',
+      isPublic: false,
     };
     try {
       const createdCard = await addPromptCard(user.uid, newCardData);
@@ -6172,7 +6566,7 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
         await importPromptCards(user.uid, cardsToImport);
         showSnackbar(`Successfully imported ${cardsToImport.length} cards!`, 'success');
       } catch (err) {
-        showSnackbar(`Failed to import cards: ${err instanceof Error ? err.message : 'Invalid JSON'}`, 'error');
+        showSnackbar(`Failed to import cards: ${err instanceof Error ? e.message : 'Invalid JSON'}`, 'error');
         console.error("Import error:", err);
       } finally {
         // Clear the file input
@@ -6381,10 +6775,7 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
 };
 
 export default PromptCardManager;
-
-
-// ===== src/ui/screens/SettingsScreen.tsx =====
-
+@@FILE: src/ui/screens/SettingsScreen.tsx
 // src/ui/screens/SettingsScreen.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -6797,80 +7188,176 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onNavToggle }) => {
 };
 
 export default SettingsScreen;
-
-
-// ===== src/ui/screens/SourceDump.tsx =====
-
+@@FILE: src/ui/screens/SourceDump.tsx
 import React, { useEffect, useState } from 'react';
 
-const POLL_INTERVAL = 5000; // check every 5 seconds
-
-const SourceDump: React.FC = () => {
-  const [code, setCode] = useState('Loading...');
-  const [lastHash, setLastHash] = useState('');
-  const [lastUpdated, setLastUpdated] = useState<string>('');
-
-  const fetchDump = async () => {
+// Small reusable copy button
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
     try {
-      // Cache-buster so browser doesn't reuse an old copy
-      const res = await fetch(`/sourcedump.txt?_=${Date.now()}`);
-      const text = await res.text();
-
-      // Quick fingerprint to detect if content changed
-      const hash = String(text.length) + '-' + text.slice(0, 100);
-
-      if (hash !== lastHash) {
-        setCode(text);
-        setLastHash(hash);
-        setLastUpdated(new Date().toLocaleTimeString());
-      }
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
     } catch (err) {
-      setCode(`Error loading source dump: ${String(err)}`);
+      console.error('Copy failed', err);
     }
   };
+  return (
+    <button
+      onClick={handleCopy}
+      style={{
+        marginLeft: '6px',
+        fontSize: '0.8rem',
+        cursor: 'pointer',
+        background: 'none',
+        border: '1px solid #ccc',
+        borderRadius: '4px',
+        padding: '2px 5px',
+      }}
+    >
+      {copied ? '✅' : '📋'}
+    </button>
+  );
+}
 
-  useEffect(() => {
-    fetchDump(); // first load
-    const interval = setInterval(fetchDump, POLL_INTERVAL);
-    return () => clearInterval(interval);
-  }, [lastHash]); // refetch if hash changes
+function FolderView({
+  name,
+  node,
+  level = 0,
+}: {
+  name: string;
+  node: any;
+  level?: number;
+}) {
+  const [open, setOpen] = useState(true);
+
+  const isFolder = typeof node === 'object';
+  if (!isFolder) return null;
+
+  const folderIndent = { paddingLeft: `${level * 1.2}rem` };
+
+  // Gather folder text for copy
+  const folderText = node.__files
+    ? node.__files.map((f: any) => f.content).join('\n')
+    : '';
 
   return (
-    <div style={{ height: '100%', background: '#121212', color: '#d4d4d4' }}>
+    <div style={{ ...folderIndent }}>
       <div
         style={{
-          padding: '0.5rem 1rem',
-          borderBottom: '1px solid #333',
-          fontSize: '0.85rem',
-          background: '#1e1e1e',
+          cursor: 'pointer',
+          userSelect: 'none',
+          fontWeight: 'bold',
         }}
+        onClick={() => setOpen(!open)}
       >
-        <span>Last updated: {lastUpdated || 'Waiting for first load...'}</span>
+        {open ? '📂' : '📁'} {name}
+        {folderText && <CopyButton text={folderText} />}
       </div>
+
+      {open && (
+        <>
+          {node.__files &&
+            node.__files.map((file: any) => (
+              <div key={file.name} style={{ paddingLeft: '1.5rem' }}>
+                📄 {file.name}
+                <CopyButton text={file.content} />
+              </div>
+            ))}
+          {Object.entries(node)
+            .filter(([k]) => k !== '__files')
+            .map(([childName, childNode]) => (
+              <FolderView
+                key={childName}
+                name={childName}
+                node={childNode}
+                level={level + 1}
+              />
+            ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+export default function SourceDump() {
+  const [dumpText, setDumpText] = useState('');
+  const [tree, setTree] = useState<any>(null);
+
+  useEffect(() => {
+    fetch(`/source-dump.txt?_=${Date.now()}`)
+      .then((res) => res.text())
+      .then((text) => {
+        setDumpText(text);
+        setTree(parseDumpToTree(text));
+      });
+  }, []);
+
+  if (!dumpText) return <div>Loading...</div>;
+
+  return (
+    <div style={{ padding: '1rem', fontFamily: 'monospace' }}>
+      <h2>
+        📋 Copy Entire Repo
+        <CopyButton text={dumpText} />
+      </h2>
+
+      {tree && <FolderView name="src" node={tree.src || tree} />}
+
+      <hr style={{ margin: '2rem 0' }} />
+      <h3>Full Dump:</h3>
       <pre
         style={{
           whiteSpace: 'pre-wrap',
-          background: '#1e1e1e',
-          color: '#d4d4d4',
-          padding: '1rem',
-          overflowX: 'auto',
           fontSize: '0.85rem',
-          margin: 0,
-          height: 'calc(100% - 2rem)',
+          maxHeight: '400px',
+          overflow: 'auto',
         }}
       >
-        {code}
+        {dumpText}
       </pre>
     </div>
   );
-};
+}
 
-export default SourceDump;
+function parseDumpToTree(dump: string) {
+  const lines = dump.split('\n');
+  const root: any = {};
+  let currentFolder: string[] = [];
+  let currentFile: { name: string; content: string } | null = null;
 
+  const ensureFolder = (pathParts: string[]) => {
+    let node = root;
+    for (const part of pathParts) {
+      if (!node[part]) node[part] = { __files: [] };
+      node = node[part];
+    }
+    return node;
+  };
 
+  for (let line of lines) {
+    if (line.startsWith('@@FOLDER:')) {
+      const folderPath = line.replace('@@FOLDER: ', '').trim();
+      currentFolder = folderPath.split('/').slice(1); // remove 'src'
+      ensureFolder(currentFolder);
+    } else if (line.startsWith('@@FILE:')) {
+      const filePath = line.replace('@@FILE: ', '').trim();
+      const parts = filePath.split('/');
+      const fileName = parts.pop()!;
+      currentFolder = parts.slice(1);
+      const folderNode = ensureFolder(currentFolder);
+      currentFile = { name: fileName, content: '' };
+      folderNode.__files.push(currentFile);
+    } else {
+      if (currentFile) currentFile.content += line + '\n';
+    }
+  }
 
-// ===== src/ui/screens/WorldStateScreen.tsx =====
+  return root;
+}
 
+@@FILE: src/ui/screens/WorldStateScreen.tsx
 // src/ui/screens/WorldStateScreen.tsx
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'; // Import useCallback and useMemo
@@ -7325,10 +7812,8 @@ const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
 };
 
 export default WorldStateScreen;
-
-
-// ===== src/utils/diceRoller.ts =====
-
+@@FOLDER: src/utils
+@@FILE: src/utils/diceRoller.ts
 // src/utils/diceRoller.ts
 
 /**
@@ -7389,10 +7874,7 @@ export const DiceRoller = {
     return summary;
   },
 };
-
-
-// ===== src/utils/formatDate.ts =====
-
+@@FILE: src/utils/formatDate.ts
 // src/utils/formatDate.ts
 
 /**
@@ -7423,10 +7905,7 @@ export function formatIsoDateForDisplay(isoString: string): string {
     return "Error formatting date";
   }
 }
-
-
-// ===== src/utils/hash.test.ts =====
-
+@@FILE: src/utils/hash.test.ts
 // src/utils/hash.test.ts
 
 import { generateContentHash, getPromptCardContentForHash } from './hash';
@@ -7569,10 +8048,7 @@ describe('hash utilities', () => {
     expect(getPromptCardContentForHash(cardWithNulls)).toBe(getPromptCardContentForHash(cardWithEmptyStrings));
   });
 });
-
-
-// ===== src/utils/hash.ts =====
-
+@@FILE: src/utils/hash.ts
 // src/utils/hash.ts
 
 import { PromptCard, AiSettingsInCard, StackInstructions } from '../models/PromptCard';
@@ -7650,10 +8126,8 @@ export function getPromptCardContentForHash(card: {
     card.functionDefs,
   ].join('|||'); // Use a distinctive separator to avoid accidental matches
 }
-
-
-// ===== src/utils/hooks/useLongPress.ts =====
-
+@@FOLDER: src/utils/hooks
+@@FILE: src/utils/hooks/useLongPress.ts
 // src/utils/hooks/useLongPress.ts
 
 import React, { useRef, useCallback } from 'react';
@@ -7706,10 +8180,7 @@ export function useLongPress<T extends HTMLElement>(
     onTouchCancel: (e: React.TouchEvent<T>) => clear(e, false), // No click if touch cancelled
   };
 }
-
-
-// ===== src/utils/jsonUtils.ts =====
-
+@@FILE: src/utils/jsonUtils.ts
 // src/utils/jsonUtils.ts
 
 import { JsonPrimitive } from '@mui/material'; // Assuming this is for example, JsonPrimitive isn't from MUI
@@ -7781,10 +8252,7 @@ export function getNestedValue(obj: Record<string, any>, pathParts: string[]): a
   }
   return current;
 }
-
-
-// ===== src/utils/types.ts =====
-
+@@FILE: src/utils/types.ts
 // src/utils/types.ts
 
 export enum LogViewMode {
@@ -7799,10 +8267,7 @@ export enum LogViewMode {
   ERROR_FLAGS = 'Error Flags',
   MODEL_SLUG_USED = 'Model Slug Used'
 }
-
-
-// ===== src/utils/uuid.ts =====
-
+@@FILE: src/utils/uuid.ts
 // src/utils/uuid.ts
 
 import { v4 as uuidv4 } from 'uuid';
@@ -7814,129 +8279,6 @@ import { v4 as uuidv4 } from 'uuid';
 export function generateUuid(): string {
   return uuidv4();
 }
-
-
-// ===== src/vite-env.d.ts =====
-
+@@FILE: src/vite-env.d.ts
 /// <reference types="vite/client" />
 
-
-
-// ===== package.json =====
-
-{
-  "name": "storyforge",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-  "dump-src": "node dump-src.js",
-  "dump-src:watch": "node dump-src.js --watch",
-  "vite-dev": "vite --host 0.0.0.0 --port 5173",
-  "dev": "npm-run-all --parallel dump-src:watch vite-dev",
-
-  "build": "npm run dump-src && vite build",
-  "lint": "eslint .",
-  "preview": "vite preview",
-  "test": "vitest"
-  },
-  "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.1",
-    "@mui/icons-material": "^7.2.0",
-    "@mui/material": "^7.2.0",
-    "firebase": "^11.10.0",
-    "immer": "^10.1.1",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "react-router-dom": "^7.7.1",
-    "react-virtualized": "^9.22.6",
-    "uuid": "^11.1.0",
-    "zustand": "^5.0.7"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.30.1",
-    "@types/react": "^19.1.9",
-    "@types/react-dom": "^19.1.7",
-    "@types/react-router-dom": "^5.3.3",
-    "@types/uuid": "^10.0.0",
-    "@vitejs/plugin-react-swc": "^3.10.2",
-    "c8": "^10.1.3",
-    "chokidar": "^4.0.3",
-    "eslint": "^9.30.1",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.20",
-    "globals": "^16.3.0",
-    "jsdom": "^26.1.0",
-    "npm-run-all": "^4.1.5",
-    "typescript": "~5.8.3",
-    "typescript-eslint": "^8.35.1",
-    "vite": "^7.0.4",
-    "vitest": "^3.2.4"
-  }
-}
-
-
-
-// ===== tsconfig.json =====
-
-{
-  "files": [],
-  "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
-  ]
-}
-
-
-
-// ===== vite.config.ts =====
-
-// vite.config.ts
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react-swc';
-
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    // These make sure local dev matches your package.json `vite-dev` script
-    host: '0.0.0.0',
-    port: 5173,
-  },
-  preview: {
-    // This is the important part for Vercel
-    // It tells Vite's preview server (used in production static builds) to
-    // fall back to index.html for all unknown routes
-    host: '0.0.0.0',
-    port: 4173,
-    strictPort: true,
-  },
-  build: {
-    outDir: 'dist',
-  },
-  // Enable SPA fallback for dev + preview servers
-  // Vite doesn't have a direct `historyApiFallback` option in config,
-  // but setting up rewrites in preview works the same way.
-  optimizeDeps: {},
-});
-
-
-// ===== public/index.html =====
-
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>StoryForge Web</title>
-  </head>
-  <body>
-    <!-- This div with id="root" is crucial! React will render your entire application inside this element. -->
-    <div id="root"></div>
-
-    <!-- This script tag is how Vite injects your compiled React application into the browser.
-         It points to your main entry file (src/main.tsx), which Vite bundles. -->
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>

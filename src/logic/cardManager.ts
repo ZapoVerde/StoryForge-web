@@ -147,6 +147,7 @@ export class PromptCardManager implements ICardManager {
       gameRules: data.gameRules ?? "",
       aiSettings: { ...defaultAiSettingsInCard, ...data.aiSettings },
       helperAiSettings: { ...defaultAiSettingsInCard, ...data.helperAiSettings },
+      isHelperAiEnabled: data.isHelperAiEnabled ?? false, // NEW: Initialize with default false
       tags: data.tags ?? [],
       isExample: data.isExample ?? false,
       functionDefs: data.functionDefs ?? "",
@@ -204,6 +205,7 @@ export class PromptCardManager implements ICardManager {
       updatedAt: now, // New update timestamp
       isExample: false, // Duplicates are user-owned, not examples
       isPublic: false, // Duplicates are private by default
+      // isHelperAiEnabled will be copied correctly from sourceCard by the spread operator
     };
 
     // Recalculate hash for the duplicated card in case any content fields were implicitly changed

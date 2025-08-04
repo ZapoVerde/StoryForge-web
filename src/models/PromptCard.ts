@@ -40,6 +40,7 @@ export interface PromptCard {
   gameRules: string;
   aiSettings: AiSettings;
   helperAiSettings: AiSettings;
+  isHelperAiEnabled: boolean; // NEW: Controls whether helper AI is considered active
   tags: string[];            // Kotlin `List<String>` maps to `string[]`
   isExample: boolean;        // From Kotlin `isExample`
   functionDefs: string;      // JSON string
@@ -67,8 +68,9 @@ export interface NewPromptCardData {
   emitSkeleton?: string;
   worldStateInit?: string;
   gameRules?: string;
-  aiSettings?: AiSettingsInCard;
-  helperAiSettings?: AiSettingsInCard;
+  aiSettings?: AiSettings; // Changed from AiSettingsInCard to AiSettings for consistency
+  helperAiSettings?: AiSettings; // Changed from AiSettingsInCard to AiSettings for consistency
+  isHelperAiEnabled?: boolean; // NEW: Optional for new card data
   tags?: string[];
   isExample?: boolean;
   functionDefs?: string;

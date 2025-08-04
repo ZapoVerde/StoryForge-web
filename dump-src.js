@@ -1,65 +1,48 @@
+// dump-src.js
 import fs from 'fs';
 import path from 'path';
 import chokidar from 'chokidar';
 
-const srcDir = path.join(process.cwd(), 'src');
-const outputFile = path.join(process.cwd(), 'public', 'sourcedump.txt');
-
-// ✅ Whitelisted extra files that are safe to expose
-const safeExtraFiles = [
-  'package.json',
-  'tsconfig.json',
-  'vite.config.ts',
-  'vite.config.js',
-  'public/index.html'
-];
+const SRC_DIR = path.join(process.cwd(), 'src');
+const OUT_FILE = path.join(process.cwd(), 'public', 'source-dump.txt');
 
 function walkDir(dir, callback) {
-  fs.readdirSync(dir).forEach(file => {
-    const fullPath = path.join(dir, file);
-    if (fs.statSync(fullPath).isDirectory()) {
+  fs.readdirSync(dir, { withFileTypes: true }).forEach((entry) => {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      callback(fullPath, true);
       walkDir(fullPath, callback);
     } else {
-      callback(fullPath);
+      callback(fullPath, false);
     }
   });
 }
 
-function dump() {
-  let allCode = '';
+function dumpSource() {
+  let output = '';
 
-  // --- Dump /src files ---
-  walkDir(srcDir, (filePath) => {
-    if (/\.(ts|tsx|js|jsx|css|json|html)$/.test(filePath)) {
-      const relativePath = path.relative(process.cwd(), filePath);
-      const contents = fs.readFileSync(filePath, 'utf8');
-      allCode += `\n\n// ===== ${relativePath} =====\n\n${contents}\n`;
+  walkDir(SRC_DIR, (fullPath, isDir) => {
+    const relPath = path.relative(process.cwd(), fullPath).replace(/\\/g, '/');
+    if (isDir) {
+      output += `@@FOLDER: ${relPath}\n`;
+    } else {
+      output += `@@FILE: ${relPath}\n`;
+      try {
+        const fileContent = fs.readFileSync(fullPath, 'utf8');
+        output += fileContent + '\n';
+      } catch (err) {
+        output += `// ERROR reading file: ${err.message}\n`;
+      }
     }
   });
 
-  // --- Dump explicitly safe files ---
-  safeExtraFiles.forEach(file => {
-    const fullPath = path.join(process.cwd(), file);
-    if (fs.existsSync(fullPath)) {
-      const contents = fs.readFileSync(fullPath, 'utf8');
-      allCode += `\n\n// ===== ${file} =====\n\n${contents}\n`;
-    }
-  });
-
-  fs.writeFileSync(outputFile, allCode);
+  fs.writeFileSync(OUT_FILE, output, 'utf8');
   console.log(`✅ Source dump updated: ${new Date().toLocaleTimeString()}`);
 }
 
 if (process.argv.includes('--watch')) {
-  console.log('👀 Watching for changes...');
-  dump(); // run once immediately
-  chokidar.watch(['src', ...safeExtraFiles], {
-    ignored: /(^|[\/\\])\../, // ignore dotfiles
-    ignoreInitial: true
-  }).on('all', (event, filePath) => {
-    console.log(`📄 File changed: ${path.relative(process.cwd(), filePath)}`);
-    dump();
-  });
+  dumpSource();
+  chokidar.watch(SRC_DIR, { ignoreInitial: true }).on('all', () => dumpSource());
 } else {
-  dump(); // one‑time run
+  dumpSource();
 }

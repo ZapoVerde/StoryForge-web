@@ -38,6 +38,14 @@ import { useSettingsStore } from '../../state/useSettingsStore'; // Import useSe
 import { PromptCard, NewPromptCardData } from '../../models/index';
 import PromptCardEditor from './PromptCardEditor'; // Editor component
 
+import { // NEW: Import all default values
+  DEFAULT_FIRST_TURN_PROMPT_BLOCK,
+  DEFAULT_EMIT_SKELETON_STRING,
+  defaultStackInstructions,
+  defaultAiSettingsInCard, // Although AI settings are merged in CardManager, it's good to be explicit here
+} from '../../data/config/promptCardDefaults';
+
+
 interface PromptCardManagerProps {
   onNavToggle: () => void;
 }
@@ -114,17 +122,29 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
     // Pre-select the default AI connection if available
     const defaultConnectionId = aiConnections.length > 0 ? aiConnections[0].id : "";
 
+    // NEW: Explicitly set all default values
     const newCardData: NewPromptCardData = {
       title: "New Prompt Card",
       prompt: "This is a new prompt card. Describe the setting and your character's starting situation.",
+      description: null,
+      firstTurnOnlyBlock: DEFAULT_FIRST_TURN_PROMPT_BLOCK,
+      stackInstructions: defaultStackInstructions, // Pass the object, cardManager will stringify
+      emitSkeleton: DEFAULT_EMIT_SKELETON_STRING,
+      worldStateInit: '',
+      gameRules: '',
       aiSettings: {
+        ...defaultAiSettingsInCard,
         selectedConnectionId: defaultConnectionId,
-        temperature: 0.7, topP: 1.0, maxTokens: 2048, presencePenalty: 0.0, frequencyPenalty: 0.0, functionCallingEnabled: false
       },
       helperAiSettings: {
+        ...defaultAiSettingsInCard,
         selectedConnectionId: defaultConnectionId,
-        temperature: 0.7, topP: 1.0, maxTokens: 2048, presencePenalty: 0.0, frequencyPenalty: 0.0, functionCallingEnabled: false
-      }
+      },
+      isHelperAiEnabled: false, // NEW: Default to disabled
+      tags: [],
+      isExample: false,
+      functionDefs: '',
+      isPublic: false,
     };
     try {
       const createdCard = await addPromptCard(user.uid, newCardData);
@@ -272,7 +292,7 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
         await importPromptCards(user.uid, cardsToImport);
         showSnackbar(`Successfully imported ${cardsToImport.length} cards!`, 'success');
       } catch (err) {
-        showSnackbar(`Failed to import cards: ${err instanceof Error ? err.message : 'Invalid JSON'}`, 'error');
+        showSnackbar(`Failed to import cards: ${err instanceof Error ? e.message : 'Invalid JSON'}`, 'error');
         console.error("Import error:", err);
       } finally {
         // Clear the file input
