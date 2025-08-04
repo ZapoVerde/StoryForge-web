@@ -29,6 +29,8 @@ import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { PromptCard } from '../../models/index';
 import Snackbar from '@mui/material/Snackbar';
+import { useNavigate } from 'react-router-dom'; // <--- ADD THIS IMPORT
+
 
 
 interface GameLibraryScreenProps {
@@ -38,6 +40,7 @@ interface GameLibraryScreenProps {
 
 const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) => {
   const { user } = useAuthStore();
+  const navigate = useNavigate(); // <--- INITIALIZE useNavigate HOOK
   const {
     promptCards,
     isLoading,
@@ -97,6 +100,7 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
       await initializeGame(user.uid, card.id);
       setSnackbarMessage(`Game "${card.title}" initialized! Navigating to game...`);
       setSnackbarSeverity('success');
+      navigate('/game'); // <--- ADD THIS LINE TO NAVIGATE TO THE GAME SCREEN
       // TODO: Navigate to GameScreen
       console.log(`Game "${card.title}" started! Navigating to GameScreen.`);
     } catch (e) {

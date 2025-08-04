@@ -103,11 +103,17 @@ class FirestoreGameRepository implements IGameRepository {
 
   async saveGameSnapshot(userId: string, snapshot: GameSnapshot): Promise<void> {
     const snapshotDocRef = doc(this.getSnapshotsCollectionRef(userId), snapshot.id);
-    await setDoc(snapshotDocRef, {
-      ...snapshot,
-      updatedAt: serverTimestamp() // Use Firestore's server-side timestamp for accuracy
-    }, { merge: true });
-    console.log(`GameSnapshot ${snapshot.id} saved for user ${userId}`);
+    console.log(`FirestoreGameRepository: Attempting to setDoc for GameSnapshot ${snapshot.id} for user ${userId}.`);
+    try {
+      await setDoc(snapshotDocRef, {
+        ...snapshot,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      console.log(`FirestoreGameRepository: Successfully setDoc for GameSnapshot ${snapshot.id}.`);
+    } catch (e) {
+      console.error(`FirestoreGameRepository: FAILED to setDoc for GameSnapshot ${snapshot.id}:`, e);
+      throw e; // Re-throw the error for GameSession to catch
+    }
   }
 
   async getGameSnapshot(userId: string, snapshotId: string): Promise<GameSnapshot | null> {

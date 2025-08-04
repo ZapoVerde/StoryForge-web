@@ -1,7 +1,5 @@
-// src/ui/screens/GameScreen.tsx
-
 import React, { useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate hook
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -28,12 +26,12 @@ import { GameState, LogEntry, Message } from '../../models/index';
 import { DiceRoller } from '../../utils/diceRoller';
 
 interface GameScreenProps {
-  onNavToggle: () => void; // Callback to open/close side menu
+  onNavToggle: () => void;
 }
 
 const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
   const { user } = useAuthStore();
-  const navigate = useNavigate(); // Initialize useNavigate
+  const navigate = useNavigate();
   const {
     currentSnapshot,
     currentGameState,
@@ -52,8 +50,47 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
   const [snackbarMessage, setSnackbarMessage] = React.useState<string | null>(null);
   const [snackbarSeverity, setSnackbarSeverity] = React.useState<'success' | 'error' | 'info' | 'warning'>('info');
 
-
   const logRef = useRef<HTMLDivElement>(null);
+
+  // Define handleGoToLogin ONCE, here at the top, after hooks.
+  const handleGoToLogin = () => {
+    console.log('GameScreen: Navigating to /login due to game not initialized or user not logged in.');
+    navigate('/login');
+  };
+
+  console.log('--- GameScreen: Component RENDER ---');
+  console.log('GameScreen: user:', user ? user.uid : 'null');
+  console.log('GameScreen: currentSnapshot:', currentSnapshot ? currentSnapshot.id : 'null');
+  console.log('GameScreen: currentGameState:', currentGameState ? 'present' : 'null');
+
+  // Combined and simplified initial loading/error display
+  // This block will catch if user is null, or if game state isn't ready
+  if (!user || !currentSnapshot || !currentGameState) {
+    console.warn('GameScreen: Displaying "Game not initialized" message because:', {
+      userExists: !!user,
+      snapshotExists: !!currentSnapshot,
+      gameStateExists: !!currentGameState,
+      errorMessage: gameError
+    });
+
+    // If loading, show a loading indicator
+    if (gameLoading) {
+      return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+          <CircularProgress />
+          <Typography variant="h6" ml={2}>Loading Game...</Typography>
+        </Box>
+      );
+    }
+
+    // Otherwise, show the "not initialized" message
+    return (
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Typography variant="h6" color="error">Game not initialized or user not logged in.</Typography>
+        <Button onClick={handleGoToLogin}>Go to Login</Button>
+      </Box>
+    );
+  }
 
   // Effect to scroll to bottom on new log entries (auto-scroll)
   useEffect(() => {
@@ -74,7 +111,6 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
       }
     };
   }, []);
-
 
   const handleSendAction = async () => {
     if (narratorInputText.trim() === '') return;
@@ -102,7 +138,6 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
   };
 
   const handleRollDialogConfirm = () => {
-    // Basic validation for dice formula
     if (!rollFormula.match(/^(\d*)d(\d+)([\+\-]\d+)?$/i)) {
         setSnackbarSeverity('warning');
         setSnackbarMessage('Invalid dice formula format. Please use NdN[+M|-M].');
@@ -110,31 +145,6 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
     }
     setShowRollDialog(false);
   };
-
-  // Correct navigation to LoginScreen
-  const handleGoToLogin = () => {
-    navigate('/login');
-  };
-
-  if (gameLoading && !currentSnapshot) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress />
-        <Typography variant="h6" ml={2}>Loading Game...</Typography>
-      </Box>
-    );
-  }
-
-  // Changed to check for `user` first for proper redirection from App.tsx.
-  // This screen only truly renders its content if user and snapshot are present.
-  if (!user || !currentSnapshot || !currentGameState) {
-    return (
-      <Box sx={{ p: 3, textAlign: 'center' }}>
-        <Typography variant="h6" color="error">Game not initialized or user not logged in.</Typography>
-        <Button onClick={handleGoToLogin}>Go to Login</Button> {/* Corrected navigation */}
-      </Box>
-    );
-  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>

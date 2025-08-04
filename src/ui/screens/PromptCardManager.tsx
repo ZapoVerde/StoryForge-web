@@ -251,24 +251,26 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
     }
   };
 
-  const handleStartGame = async () => {
-    if (!user?.uid || !activePromptCard) {
-      showSnackbar('Please select an active prompt card and be logged in to start a game.', 'info');
-      return;
-    }
-    if (isCardDirty) {
-      showSnackbar('Please save or revert changes before starting a game.', 'warning');
-      return;
-    }
-    try {
-      await initializeGame(user.uid, activePromptCard.id);
-      showSnackbar('Game initialized! Navigating to game screen...', 'success');
-      navigate('/game'); // Navigate to GameScreen
-    }
-    catch (e) {
-      showSnackbar(`Failed to start game: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
-    }
-  };
+const handleStartGame = async () => {
+  console.log('PromptCardManager: handleStartGame called. User:', user?.uid, 'Active Card:', activePromptCard?.id);
+  if (!user?.uid || !activePromptCard) {
+    // ...
+  }
+  if (isCardDirty) {
+    // ...
+  }
+  try {
+    console.log('PromptCardManager: Calling initializeGame...');
+    await initializeGame(user.uid, activePromptCard.id);
+    console.log('PromptCardManager: initializeGame AWAITED successfully. Now navigating to /game.');
+    showSnackbar('Game initialized! Navigating to game screen...', 'success');
+    navigate('/game');
+  }
+  catch (e: any) { // Ensure 'e' is typed as 'any'
+    console.error('PromptCardManager: Error during game initialization:', e);
+    showSnackbar(`Failed to start game: ${e.message || 'Unknown error'}`, 'error');
+  }
+};
 
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];

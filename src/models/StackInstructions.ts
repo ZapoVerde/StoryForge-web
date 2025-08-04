@@ -77,6 +77,6 @@ export interface StackInstructions {
   worldStatePolicy: ProsePolicy;
   knownEntitiesPolicy: ProsePolicy;
 
-  outputFormat: string;
+  // REMOVED: outputFormat: string; // This field is being removed
   tokenPolicy: TokenPolicy;
 }

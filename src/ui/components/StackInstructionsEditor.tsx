@@ -566,6 +566,8 @@ Each section below can be individually enabled/disabled using the toggle switche
 
       <Divider sx={{ my: 3 }} />
 
+      {/* REMOVED: Output Format */}
+      {/*
       <Typography variant="h6" gutterBottom>
         Output Format
         <InfoDialog
@@ -592,6 +594,7 @@ Each section below can be individually enabled/disabled using the toggle switche
         onChange={(e) => onStackInstructionsChange({ ...stackInstructions, outputFormat: e.target.value })}
         sx={{ mb: 3 }}
       />
+      */}
 
       <Typography variant="h6" gutterBottom>
         Token Policy

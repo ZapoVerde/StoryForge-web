@@ -128,21 +128,28 @@ export class GameSession implements IGameSession { // Export the class
 
   async initializeGame(userId: string, cardId: string, existingSnapshotId?: string): Promise<void> {
     this.currentUserId = userId;
+    console.log(`GameSession: Initializing game for user ${userId} with card ${cardId}. Existing Snapshot ID: ${existingSnapshotId || 'None'}`);
+
     const card = await this.cardRepo.getPromptCard(userId, cardId);
     if (!card) {
+      console.error(`GameSession: PromptCard with ID ${cardId} not found for user ${userId}.`);
       throw new Error(`PromptCard with ID ${cardId} not found for user ${userId}. Cannot start game.`);
     }
-    this.currentPromptCard = card; // Set the active card
+    this.currentPromptCard = card;
+    console.log(`GameSession: PromptCard "${card.title}" loaded.`);
+
 
     if (existingSnapshotId) {
+      console.log(`GameSession: Attempting to load existing snapshot ${existingSnapshotId}...`);
       const snapshot = await this.gameRepo.getGameSnapshot(userId, existingSnapshotId);
       if (!snapshot) {
+        console.error(`GameSession: Game snapshot with ID ${existingSnapshotId} not found for user ${userId}.`);
         throw new Error(`Game snapshot with ID ${existingSnapshotId} not found for user ${userId}.`);
       }
       this.currentSnapshot = snapshot;
-      console.log(`Loaded existing game: ${snapshot.id}`);
+      console.log(`GameSession: Loaded existing game snapshot: ${snapshot.id}. Current turn: ${snapshot.currentTurn}`);
     } else {
-      // Start a new game
+      console.log('GameSession: Starting a new game...');
       const newSnapshotId = generateUuid(); // Use UUID
       const now = new Date().toISOString();
 
@@ -159,11 +166,12 @@ export class GameSession implements IGameSession { // Export the class
           // Simple validation: ensure it's a top-level object
           if (typeof parsedInit === 'object' && parsedInit !== null && !Array.isArray(parsedInit)) {
             initialGameState.worldState = parsedInit;
+            console.log("GameSession: Applied initial worldState from PromptCard.");
           } else {
-            console.warn("PromptCard worldStateInit is not a valid JSON object, ignoring:", card.worldStateInit);
+            console.warn("GameSession: PromptCard worldStateInit is not a valid JSON object, ignoring:", card.worldStateInit);
           }
         } catch (e) {
-          console.error("Failed to parse PromptCard worldStateInit JSON:", e);
+          console.error("GameSession: Failed to parse PromptCard worldStateInit JSON:", e);
         }
       }
 
@@ -179,14 +187,21 @@ export class GameSession implements IGameSession { // Export the class
         logs: [],
         worldStatePinnedKeys: [], // Add this for persistence of pinning.
       };
-      console.log(`Initialized new game with card: ${card.title}, Snapshot ID: ${newSnapshotId}`);
+      console.log(`GameSession: Initialized new game snapshot with ID: ${newSnapshotId}.`);
 
-      // First turn prompt (for AI)
-      const firstTurnPrompt = this.builder.buildFirstTurnPrompt(card);
-      console.log("First Turn Prompt (for AI):", firstTurnPrompt);
-      // Note: No AI call here. The first actual AI call happens on the first player action.
-      // This initial prompt is for building the session's context for the first turn.
+      // Save the newly created snapshot immediately
+      try {
+          console.log(`GameSession: Attempting to save new game snapshot ${newSnapshotId} to Firestore.`);
+          await this.gameRepo.saveGameSnapshot(userId, this.currentSnapshot);
+          console.log(`GameSession: New game snapshot ${newSnapshotId} successfully saved to Firestore.`);
+      } catch (saveError) {
+          console.error(`GameSession: Failed to save new game snapshot ${newSnapshotId} to Firestore:`, saveError);
+          // Decide if you want to throw here, or let the game proceed with unsaved state.
+          // For now, let's re-throw to indicate a critical setup failure.
+          throw new Error(`Failed to save initial game snapshot: ${saveError instanceof Error ? saveError.message : 'Unknown error'}`);
+      }
     }
+    console.log(`GameSession: Initialization complete. currentSnapshot is now set to ${this.currentSnapshot?.id}.`);
   }
 
   async processPlayerAction(action: string, useDummyNarrator: boolean): Promise<{ aiProse: string; newLogEntries: LogEntry[]; updatedSnapshot: GameSnapshot }> { // Added useDummyNarrator
@@ -331,6 +346,7 @@ export class GameSession implements IGameSession { // Export the class
   }
 
   getCurrentGameSnapshot(): GameSnapshot | null {
+    console.log('GameSession: getCurrentGameSnapshot called. Returning snapshot with ID:', this.currentSnapshot?.id || 'null');
     return this.currentSnapshot;
   }
 
@@ -348,32 +364,36 @@ export class GameSession implements IGameSession { // Export the class
 
   async saveGame(): Promise<void> {
     if (!this.currentUserId || !this.currentSnapshot) {
-      console.warn("Cannot save game: user or game snapshot not initialized.");
+      console.warn("GameSession: Cannot save game: user or game snapshot not initialized.");
       return;
     }
+    console.log(`GameSession: Saving game snapshot ${this.currentSnapshot.id} for user ${this.currentUserId}.`);
     await this.gameRepo.saveGameSnapshot(this.currentUserId, this.currentSnapshot);
-    console.log(`Game snapshot ${this.currentSnapshot.id} saved for user ${this.currentUserId}.`);
+    console.log(`GameSession: Game snapshot ${this.currentSnapshot.id} saved successfully.`);
   }
 
   async loadGame(snapshotId: string): Promise<void> {
     if (!this.currentUserId) {
       throw new Error("Cannot load game: user not initialized.");
     }
+    console.log(`GameSession: Attempting to load game snapshot ${snapshotId} for user ${this.currentUserId}.`);
     const snapshot = await this.gameRepo.getGameSnapshot(this.currentUserId, snapshotId);
     if (!snapshot) {
+      console.error(`GameSession: Game snapshot ${snapshotId} not found for user ${this.currentUserId}.`);
       throw new Error(`Game snapshot ${snapshotId} not found for user ${this.currentUserId}.`);
     }
     this.currentSnapshot = snapshot;
     // Also load the associated PromptCard when a game is loaded
     const card = await this.cardRepo.getPromptCard(this.currentUserId, snapshot.promptCardId);
     if (!card) {
-        console.warn(`PromptCard ${snapshot.promptCardId} for loaded game ${snapshotId} not found.`);
+        console.warn(`GameSession: PromptCard ${snapshot.promptCardId} for loaded game ${snapshotId} not found.`);
         this.currentPromptCard = null;
     } else {
         this.currentPromptCard = card;
+        console.log(`GameSession: Associated PromptCard "${card.title}" loaded for snapshot ${snapshotId}.`);
     }
 
-    console.log(`Game snapshot ${snapshotId} loaded.`);
+    console.log(`GameSession: Game snapshot ${snapshotId} loaded. Current turn: ${this.currentSnapshot.currentTurn}.`);
   }
 
   /**
@@ -384,6 +404,7 @@ export class GameSession implements IGameSession { // Export the class
    */
   private applyDeltasToGameState(gameState: GameState, deltas: DeltaMap): void {
     const updatedWorld = { ...gameState.worldState }; // Create a mutable copy of worldState
+    console.log('GameSession: Applying deltas to worldState. Initial state:', JSON.stringify(updatedWorld));
 
     for (const fullKey in deltas) {
       const instruction = deltas[fullKey];
@@ -395,6 +416,7 @@ export class GameSession implements IGameSession { // Export the class
         const part = parts[i];
         if (!currentLevel[part] || typeof currentLevel[part] !== 'object' || Array.isArray(currentLevel[part])) {
           currentLevel[part] = {}; // Create if non-existent or not an object
+          console.log(`GameSession: Created nested object at path: ${parts.slice(0, i + 1).join('.')}`);
         }
         currentLevel = currentLevel[part];
       }
@@ -407,21 +429,28 @@ export class GameSession implements IGameSession { // Export the class
           const prevAddValue = typeof currentLevel[lastPart] === 'number' ? currentLevel[lastPart] : 0;
           const addValue = typeof instruction.value === 'number' ? instruction.value : 0;
           currentLevel[lastPart] = prevAddValue + addValue;
+          console.log(`GameSession: Delta ADD: ${instruction.key} from ${prevAddValue} to ${currentLevel[lastPart]}`);
           break;
         case 'assign':
           currentLevel[lastPart] = instruction.value;
+          console.log(`GameSession: Delta ASSIGN: ${instruction.key} = ${JSON.stringify(instruction.value)}`);
           break;
         case 'declare':
           if (!(lastPart in currentLevel)) { // Only declare if not already present
             currentLevel[lastPart] = instruction.value;
+            console.log(`GameSession: Delta DECLARE: ${instruction.key} = ${JSON.stringify(instruction.value)} (new)`);
+          } else {
+            console.log(`GameSession: Delta DECLARE: ${instruction.key} already exists, not declared.`);
           }
           break;
         case 'delete':
           delete currentLevel[lastPart];
+          console.log(`GameSession: Delta DELETE: ${instruction.key}`);
           break;
       }
     }
     gameState.worldState = updatedWorld; // Assign the updated worldState back
+    console.log('GameSession: Deltas applied. Final worldState:', JSON.stringify(gameState.worldState));
   }
 
   /**
@@ -429,6 +458,7 @@ export class GameSession implements IGameSession { // Export the class
    * Replicates logic from SceneManager.
    */
   private updateSceneState(currentScene: SceneState, parsedScene: Record<string, any> | null | undefined, deltas: DeltaMap, worldState: Record<string, any>): void {
+    console.log('GameSession: Updating scene state. Current:', currentScene);
     let newLocation: string | null = currentScene.location;
     let newPresent: string[] = currentScene.present;
 
@@ -436,14 +466,17 @@ export class GameSession implements IGameSession { // Export the class
     if (parsedScene) {
       if (parsedScene.location !== undefined) {
         newLocation = typeof parsedScene.location === 'string' ? parsedScene.location : null;
+        console.log(`GameSession: Scene updated by @scene block: location = ${newLocation}`);
       }
       if (Array.isArray(parsedScene.present)) {
         newPresent = parsedScene.present.filter((item: any) => typeof item === 'string');
+        console.log(`GameSession: Scene updated by @scene block: present = ${JSON.stringify(newPresent)}`);
       }
     } else {
       // Fallback: Infer from deltas if scene was not explicitly provided by AI
       // Only infer if current scene is empty or not yet set
       if (!newLocation && newPresent.length === 0 && deltas) {
+        console.log('GameSession: Inferring scene from deltas (no explicit @scene block found).');
         const inferredPresent = new Set<string>();
         for (const fullKey in deltas) {
           const instruction = deltas[fullKey];
@@ -456,10 +489,12 @@ export class GameSession implements IGameSession { // Export the class
               const valueObj = instruction.value as Record<string, any>;
               if (valueObj && (valueObj.tag === 'character' || valueObj.tag === 'location')) {
                 inferredPresent.add(`${category}.${entity}`);
+                console.log(`GameSession: Inferred present entity from delta: ${category}.${entity}`);
               }
             }
             if (instruction.key === "world.location" && typeof instruction.value === 'string') {
               newLocation = instruction.value;
+              console.log(`GameSession: Inferred location from delta: ${newLocation}`);
             }
           }
         }
@@ -469,6 +504,7 @@ export class GameSession implements IGameSession { // Export the class
 
     currentScene.location = newLocation;
     currentScene.present = newPresent;
+    console.log('GameSession: Final scene state after update:', currentScene);
   }
 }
 

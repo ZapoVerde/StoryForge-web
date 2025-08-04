@@ -2,15 +2,15 @@
 
 import { create } from 'zustand';
 import { GameSnapshot, GameState, LogEntry, Message } from '../models/index';
-// import { gameSession } from '../logic/gameSession'; // REMOVE this import
+// REMOVED: import { gameSession } from '../logic/gameSession'; // REMOVE this import
 import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
 import { produce } from 'immer'; // For immutable updates of nested objects
 import { useSettingsStore } from './useSettingsStore'; // Import the new settings store
 import { useCallback } from 'react'; // Import useCallback
 
-// Access the globally available gameSessionInstance
-// This requires `declare global` block in main.tsx or a separate declaration file.
-const gameSession = typeof window !== 'undefined' ? window.gameSessionInstance : null;
+// Access the globally available gameSessionInstance.
+// This is now accessed directly within actions to ensure it's always live.
+// const gameSession = typeof window !== 'undefined' ? window.gameSessionInstance : null; // REMOVED
 
 // Define types for pinning
 type PinToggleType = 'variable' | 'entity' | 'category';
@@ -64,33 +64,48 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   gameLoading: false,
 
   initializeGame: async (userId, cardId, existingSnapshotId) => {
-    if (!gameSession) {
-        set({ gameError: "Game session not initialized.", gameLoading: false });
-        return;
-    }
+    console.log('GameStateStore: initializeGame action started.');
     set({ gameLoading: true, gameError: null });
     try {
-      await gameSession.initializeGame(userId, cardId, existingSnapshotId);
-      const snapshot = gameSession.getCurrentGameSnapshot();
+      // Access gameSessionInstance directly here to ensure latest reference
+      const gameSessionInstance = window.gameSessionInstance;
+      if (!gameSessionInstance) {
+          throw new Error("Game session instance not found on window. Ensure main.tsx has initialized it.");
+      }
+
+      console.log('GameStateStore: Calling gameSession.initializeGame...');
+      await gameSessionInstance.initializeGame(userId, cardId, existingSnapshotId);
+      console.log('GameStateStore: gameSession.initializeGame completed.');
+
+      console.log('GameStateStore: DIRECT INSPECTION of gameSession instance:', gameSessionInstance);
+
+      const snapshot = gameSessionInstance.getCurrentGameSnapshot();
+      console.log('GameStateStore: Retrieved snapshot from gameSession:', snapshot);
+
       if (snapshot) {
         set({
           currentSnapshot: snapshot,
-          currentPromptCardId: cardId,
+          currentPromptCardId: snapshot.promptCardId, // Use snapshot's ID for consistency
           currentGameState: snapshot.gameState,
           gameLogs: snapshot.logs || [],
           conversationHistory: snapshot.conversationHistory || [],
-          worldStatePinnedKeys: snapshot.worldStatePinnedKeys || [], // Load pinned keys
+          worldStatePinnedKeys: snapshot.worldStatePinnedKeys || [],
         });
+        console.log('GameStateStore: Zustand state updated with snapshot. currentSnapshot:', get().currentSnapshot);
+      } else {
+        console.warn('GameStateStore: gameSession.getCurrentGameSnapshot() returned null after initialization. Setting error.');
+        set({ gameError: "Game state could not be loaded or initialized.", gameLoading: false });
       }
       set({ gameLoading: false });
     } catch (error: any) {
+      console.error("GameStateStore: Error in initializeGame action:", error);
       set({ gameError: error.message, gameLoading: false });
-      console.error("Error initializing game:", error);
     }
   },
 
   processPlayerAction: async (action) => {
-    if (!gameSession) {
+    const gameSessionInstance = window.gameSessionInstance;
+    if (!gameSessionInstance) {
         set({ gameError: "Game session not initialized.", gameLoading: false });
         return;
     }
@@ -101,7 +116,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
 
     try {
       // Pass the dummy narrator flag to gameSession
-      const { aiProse, newLogEntries, updatedSnapshot } = await gameSession.processPlayerAction(
+      const { aiProse, newLogEntries, updatedSnapshot } = await gameSessionInstance.processPlayerAction(
         action,
         useDummyNarrator // Pass the flag
       );
@@ -121,7 +136,8 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   saveGame: async () => {
-    if (!gameSession) {
+    const gameSessionInstance = window.gameSessionInstance;
+    if (!gameSessionInstance) {
         console.warn("Cannot save game: game session not initialized.");
         return;
     }
@@ -138,20 +154,21 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
         // To be explicit, we could pass the currentSnapshot:
         // await gameSession.saveGame(currentSnapshot); // (Requires modifying IGameSession.saveGame)
         // For now, relying on the fact that `currentSnapshot` in GameSession points to the same object as in store after updates.
-        await gameSession.saveGame();
+        await gameSessionInstance.saveGame();
     } else {
         console.warn("No current snapshot to save.");
     }
   },
   loadGame: async (snapshotId) => {
-    if (!gameSession || !get().currentUserId) {
+    const gameSessionInstance = window.gameSessionInstance;
+    if (!gameSessionInstance || !get().currentUserId) {
         set({ gameError: "Game session not initialized or user not logged in.", gameLoading: false });
         return;
     }
     set({ gameLoading: true, gameError: null });
     try {
-      await gameSession.loadGame(snapshotId);
-      const snapshot = gameSession.getCurrentGameSnapshot();
+      await gameSessionInstance.loadGame(snapshotId);
+      const snapshot = gameSessionInstance.getCurrentGameSnapshot();
       if (snapshot) {
         set({
           currentSnapshot: snapshot,
@@ -297,7 +314,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
       if (state.currentSnapshot) {
           state.currentSnapshot.gameState.worldState = newWorldState;
           state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
-      }
+        }
     }));
     get().saveGame();
   },

@@ -1,4 +1,4 @@
-// src/data/promptCardDefaults.ts
+// src/data/config/promptCardDefaults.ts
 
 // In src/data/config/promptCardDefaults.ts
 import { AiSettingsInCard } from '../../models/PromptCard'; // Corrected path
@@ -37,7 +37,7 @@ export const defaultStackInstructions: StackInstructions = {
   emotionWeighting: true,
   worldStatePolicy: { mode: StackMode.FILTERED, filtering: FilterMode.SCENE_ONLY, enabled: true }, // NEW: enabled: true
   knownEntitiesPolicy: { mode: StackMode.FIRST_N, n: 2, filtering: FilterMode.TAGGED, enabled: true }, // NEW: enabled: true
-  outputFormat: "prose_digest_emit",
+  // REMOVED: "outputFormat": "prose_digest_emit",
   tokenPolicy: {
     minTokens: 1000,
     maxTokens: 4096,

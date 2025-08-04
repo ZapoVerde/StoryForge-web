@@ -349,7 +349,7 @@ export default App;
 @@FOLDER: src/data
 @@FOLDER: src/data/config
 @@FILE: src/data/config/promptCardDefaults.ts
-// src/data/promptCardDefaults.ts
+// src/data/config/promptCardDefaults.ts
 
 // In src/data/config/promptCardDefaults.ts
 import { AiSettingsInCard } from '../../models/PromptCard'; // Corrected path
@@ -388,7 +388,7 @@ export const defaultStackInstructions: StackInstructions = {
   emotionWeighting: true,
   worldStatePolicy: { mode: StackMode.FILTERED, filtering: FilterMode.SCENE_ONLY, enabled: true }, // NEW: enabled: true
   knownEntitiesPolicy: { mode: StackMode.FIRST_N, n: 2, filtering: FilterMode.TAGGED, enabled: true }, // NEW: enabled: true
-  outputFormat: "prose_digest_emit",
+  // REMOVED: "outputFormat": "prose_digest_emit",
   tokenPolicy: {
     minTokens: 1000,
     maxTokens: 4096,
@@ -721,11 +721,17 @@ class FirestoreGameRepository implements IGameRepository {
 
   async saveGameSnapshot(userId: string, snapshot: GameSnapshot): Promise<void> {
     const snapshotDocRef = doc(this.getSnapshotsCollectionRef(userId), snapshot.id);
-    await setDoc(snapshotDocRef, {
-      ...snapshot,
-      updatedAt: serverTimestamp() // Use Firestore's server-side timestamp for accuracy
-    }, { merge: true });
-    console.log(`GameSnapshot ${snapshot.id} saved for user ${userId}`);
+    console.log(`FirestoreGameRepository: Attempting to setDoc for GameSnapshot ${snapshot.id} for user ${userId}.`);
+    try {
+      await setDoc(snapshotDocRef, {
+        ...snapshot,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      console.log(`FirestoreGameRepository: Successfully setDoc for GameSnapshot ${snapshot.id}.`);
+    } catch (e) {
+      console.error(`FirestoreGameRepository: FAILED to setDoc for GameSnapshot ${snapshot.id}:`, e);
+      throw e; // Re-throw the error for GameSession to catch
+    }
   }
 
   async getGameSnapshot(userId: string, snapshotId: string): Promise<GameSnapshot | null> {
@@ -1677,21 +1683,28 @@ export class GameSession implements IGameSession { // Export the class
 
   async initializeGame(userId: string, cardId: string, existingSnapshotId?: string): Promise<void> {
     this.currentUserId = userId;
+    console.log(`GameSession: Initializing game for user ${userId} with card ${cardId}. Existing Snapshot ID: ${existingSnapshotId || 'None'}`);
+
     const card = await this.cardRepo.getPromptCard(userId, cardId);
     if (!card) {
+      console.error(`GameSession: PromptCard with ID ${cardId} not found for user ${userId}.`);
       throw new Error(`PromptCard with ID ${cardId} not found for user ${userId}. Cannot start game.`);
     }
-    this.currentPromptCard = card; // Set the active card
+    this.currentPromptCard = card;
+    console.log(`GameSession: PromptCard "${card.title}" loaded.`);
+
 
     if (existingSnapshotId) {
+      console.log(`GameSession: Attempting to load existing snapshot ${existingSnapshotId}...`);
       const snapshot = await this.gameRepo.getGameSnapshot(userId, existingSnapshotId);
       if (!snapshot) {
+        console.error(`GameSession: Game snapshot with ID ${existingSnapshotId} not found for user ${userId}.`);
         throw new Error(`Game snapshot with ID ${existingSnapshotId} not found for user ${userId}.`);
       }
       this.currentSnapshot = snapshot;
-      console.log(`Loaded existing game: ${snapshot.id}`);
+      console.log(`GameSession: Loaded existing game snapshot: ${snapshot.id}. Current turn: ${snapshot.currentTurn}`);
     } else {
-      // Start a new game
+      console.log('GameSession: Starting a new game...');
       const newSnapshotId = generateUuid(); // Use UUID
       const now = new Date().toISOString();
 
@@ -1708,11 +1721,12 @@ export class GameSession implements IGameSession { // Export the class
           // Simple validation: ensure it's a top-level object
           if (typeof parsedInit === 'object' && parsedInit !== null && !Array.isArray(parsedInit)) {
             initialGameState.worldState = parsedInit;
+            console.log("GameSession: Applied initial worldState from PromptCard.");
           } else {
-            console.warn("PromptCard worldStateInit is not a valid JSON object, ignoring:", card.worldStateInit);
+            console.warn("GameSession: PromptCard worldStateInit is not a valid JSON object, ignoring:", card.worldStateInit);
           }
         } catch (e) {
-          console.error("Failed to parse PromptCard worldStateInit JSON:", e);
+          console.error("GameSession: Failed to parse PromptCard worldStateInit JSON:", e);
         }
       }
 
@@ -1728,14 +1742,21 @@ export class GameSession implements IGameSession { // Export the class
         logs: [],
         worldStatePinnedKeys: [], // Add this for persistence of pinning.
       };
-      console.log(`Initialized new game with card: ${card.title}, Snapshot ID: ${newSnapshotId}`);
+      console.log(`GameSession: Initialized new game snapshot with ID: ${newSnapshotId}.`);
 
-      // First turn prompt (for AI)
-      const firstTurnPrompt = this.builder.buildFirstTurnPrompt(card);
-      console.log("First Turn Prompt (for AI):", firstTurnPrompt);
-      // Note: No AI call here. The first actual AI call happens on the first player action.
-      // This initial prompt is for building the session's context for the first turn.
+      // Save the newly created snapshot immediately
+      try {
+          console.log(`GameSession: Attempting to save new game snapshot ${newSnapshotId} to Firestore.`);
+          await this.gameRepo.saveGameSnapshot(userId, this.currentSnapshot);
+          console.log(`GameSession: New game snapshot ${newSnapshotId} successfully saved to Firestore.`);
+      } catch (saveError) {
+          console.error(`GameSession: Failed to save new game snapshot ${newSnapshotId} to Firestore:`, saveError);
+          // Decide if you want to throw here, or let the game proceed with unsaved state.
+          // For now, let's re-throw to indicate a critical setup failure.
+          throw new Error(`Failed to save initial game snapshot: ${saveError instanceof Error ? saveError.message : 'Unknown error'}`);
+      }
     }
+    console.log(`GameSession: Initialization complete. currentSnapshot is now set to ${this.currentSnapshot?.id}.`);
   }
 
   async processPlayerAction(action: string, useDummyNarrator: boolean): Promise<{ aiProse: string; newLogEntries: LogEntry[]; updatedSnapshot: GameSnapshot }> { // Added useDummyNarrator
@@ -1880,6 +1901,7 @@ export class GameSession implements IGameSession { // Export the class
   }
 
   getCurrentGameSnapshot(): GameSnapshot | null {
+    console.log('GameSession: getCurrentGameSnapshot called. Returning snapshot with ID:', this.currentSnapshot?.id || 'null');
     return this.currentSnapshot;
   }
 
@@ -1897,32 +1919,36 @@ export class GameSession implements IGameSession { // Export the class
 
   async saveGame(): Promise<void> {
     if (!this.currentUserId || !this.currentSnapshot) {
-      console.warn("Cannot save game: user or game snapshot not initialized.");
+      console.warn("GameSession: Cannot save game: user or game snapshot not initialized.");
       return;
     }
+    console.log(`GameSession: Saving game snapshot ${this.currentSnapshot.id} for user ${this.currentUserId}.`);
     await this.gameRepo.saveGameSnapshot(this.currentUserId, this.currentSnapshot);
-    console.log(`Game snapshot ${this.currentSnapshot.id} saved for user ${this.currentUserId}.`);
+    console.log(`GameSession: Game snapshot ${this.currentSnapshot.id} saved successfully.`);
   }
 
   async loadGame(snapshotId: string): Promise<void> {
     if (!this.currentUserId) {
       throw new Error("Cannot load game: user not initialized.");
     }
+    console.log(`GameSession: Attempting to load game snapshot ${snapshotId} for user ${this.currentUserId}.`);
     const snapshot = await this.gameRepo.getGameSnapshot(this.currentUserId, snapshotId);
     if (!snapshot) {
+      console.error(`GameSession: Game snapshot ${snapshotId} not found for user ${this.currentUserId}.`);
       throw new Error(`Game snapshot ${snapshotId} not found for user ${this.currentUserId}.`);
     }
     this.currentSnapshot = snapshot;
     // Also load the associated PromptCard when a game is loaded
     const card = await this.cardRepo.getPromptCard(this.currentUserId, snapshot.promptCardId);
     if (!card) {
-        console.warn(`PromptCard ${snapshot.promptCardId} for loaded game ${snapshotId} not found.`);
+        console.warn(`GameSession: PromptCard ${snapshot.promptCardId} for loaded game ${snapshotId} not found.`);
         this.currentPromptCard = null;
     } else {
         this.currentPromptCard = card;
+        console.log(`GameSession: Associated PromptCard "${card.title}" loaded for snapshot ${snapshotId}.`);
     }
 
-    console.log(`Game snapshot ${snapshotId} loaded.`);
+    console.log(`GameSession: Game snapshot ${snapshotId} loaded. Current turn: ${this.currentSnapshot.currentTurn}.`);
   }
 
   /**
@@ -1933,6 +1959,7 @@ export class GameSession implements IGameSession { // Export the class
    */
   private applyDeltasToGameState(gameState: GameState, deltas: DeltaMap): void {
     const updatedWorld = { ...gameState.worldState }; // Create a mutable copy of worldState
+    console.log('GameSession: Applying deltas to worldState. Initial state:', JSON.stringify(updatedWorld));
 
     for (const fullKey in deltas) {
       const instruction = deltas[fullKey];
@@ -1944,6 +1971,7 @@ export class GameSession implements IGameSession { // Export the class
         const part = parts[i];
         if (!currentLevel[part] || typeof currentLevel[part] !== 'object' || Array.isArray(currentLevel[part])) {
           currentLevel[part] = {}; // Create if non-existent or not an object
+          console.log(`GameSession: Created nested object at path: ${parts.slice(0, i + 1).join('.')}`);
         }
         currentLevel = currentLevel[part];
       }
@@ -1956,21 +1984,28 @@ export class GameSession implements IGameSession { // Export the class
           const prevAddValue = typeof currentLevel[lastPart] === 'number' ? currentLevel[lastPart] : 0;
           const addValue = typeof instruction.value === 'number' ? instruction.value : 0;
           currentLevel[lastPart] = prevAddValue + addValue;
+          console.log(`GameSession: Delta ADD: ${instruction.key} from ${prevAddValue} to ${currentLevel[lastPart]}`);
           break;
         case 'assign':
           currentLevel[lastPart] = instruction.value;
+          console.log(`GameSession: Delta ASSIGN: ${instruction.key} = ${JSON.stringify(instruction.value)}`);
           break;
         case 'declare':
           if (!(lastPart in currentLevel)) { // Only declare if not already present
             currentLevel[lastPart] = instruction.value;
+            console.log(`GameSession: Delta DECLARE: ${instruction.key} = ${JSON.stringify(instruction.value)} (new)`);
+          } else {
+            console.log(`GameSession: Delta DECLARE: ${instruction.key} already exists, not declared.`);
           }
           break;
         case 'delete':
           delete currentLevel[lastPart];
+          console.log(`GameSession: Delta DELETE: ${instruction.key}`);
           break;
       }
     }
     gameState.worldState = updatedWorld; // Assign the updated worldState back
+    console.log('GameSession: Deltas applied. Final worldState:', JSON.stringify(gameState.worldState));
   }
 
   /**
@@ -1978,6 +2013,7 @@ export class GameSession implements IGameSession { // Export the class
    * Replicates logic from SceneManager.
    */
   private updateSceneState(currentScene: SceneState, parsedScene: Record<string, any> | null | undefined, deltas: DeltaMap, worldState: Record<string, any>): void {
+    console.log('GameSession: Updating scene state. Current:', currentScene);
     let newLocation: string | null = currentScene.location;
     let newPresent: string[] = currentScene.present;
 
@@ -1985,14 +2021,17 @@ export class GameSession implements IGameSession { // Export the class
     if (parsedScene) {
       if (parsedScene.location !== undefined) {
         newLocation = typeof parsedScene.location === 'string' ? parsedScene.location : null;
+        console.log(`GameSession: Scene updated by @scene block: location = ${newLocation}`);
       }
       if (Array.isArray(parsedScene.present)) {
         newPresent = parsedScene.present.filter((item: any) => typeof item === 'string');
+        console.log(`GameSession: Scene updated by @scene block: present = ${JSON.stringify(newPresent)}`);
       }
     } else {
       // Fallback: Infer from deltas if scene was not explicitly provided by AI
       // Only infer if current scene is empty or not yet set
       if (!newLocation && newPresent.length === 0 && deltas) {
+        console.log('GameSession: Inferring scene from deltas (no explicit @scene block found).');
         const inferredPresent = new Set<string>();
         for (const fullKey in deltas) {
           const instruction = deltas[fullKey];
@@ -2005,10 +2044,12 @@ export class GameSession implements IGameSession { // Export the class
               const valueObj = instruction.value as Record<string, any>;
               if (valueObj && (valueObj.tag === 'character' || valueObj.tag === 'location')) {
                 inferredPresent.add(`${category}.${entity}`);
+                console.log(`GameSession: Inferred present entity from delta: ${category}.${entity}`);
               }
             }
             if (instruction.key === "world.location" && typeof instruction.value === 'string') {
               newLocation = instruction.value;
+              console.log(`GameSession: Inferred location from delta: ${newLocation}`);
             }
           }
         }
@@ -2018,6 +2059,7 @@ export class GameSession implements IGameSession { // Export the class
 
     currentScene.location = newLocation;
     currentScene.present = newPresent;
+    console.log('GameSession: Final scene state after update:', currentScene);
   }
 }
 
@@ -3051,7 +3093,7 @@ export interface StackInstructions {
   worldStatePolicy: ProsePolicy;
   knownEntitiesPolicy: ProsePolicy;
 
-  outputFormat: string;
+  // REMOVED: outputFormat: string; // This field is being removed
   tokenPolicy: TokenPolicy;
 }
 @@FILE: src/models/index.ts
@@ -3165,15 +3207,15 @@ const unsubscribe = subscribeToAuthChanges((user) => {
 
 import { create } from 'zustand';
 import { GameSnapshot, GameState, LogEntry, Message } from '../models/index';
-// import { gameSession } from '../logic/gameSession'; // REMOVE this import
+// REMOVED: import { gameSession } from '../logic/gameSession'; // REMOVE this import
 import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
 import { produce } from 'immer'; // For immutable updates of nested objects
 import { useSettingsStore } from './useSettingsStore'; // Import the new settings store
 import { useCallback } from 'react'; // Import useCallback
 
-// Access the globally available gameSessionInstance
-// This requires `declare global` block in main.tsx or a separate declaration file.
-const gameSession = typeof window !== 'undefined' ? window.gameSessionInstance : null;
+// Access the globally available gameSessionInstance.
+// This is now accessed directly within actions to ensure it's always live.
+// const gameSession = typeof window !== 'undefined' ? window.gameSessionInstance : null; // REMOVED
 
 // Define types for pinning
 type PinToggleType = 'variable' | 'entity' | 'category';
@@ -3227,33 +3269,48 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   gameLoading: false,
 
   initializeGame: async (userId, cardId, existingSnapshotId) => {
-    if (!gameSession) {
-        set({ gameError: "Game session not initialized.", gameLoading: false });
-        return;
-    }
+    console.log('GameStateStore: initializeGame action started.');
     set({ gameLoading: true, gameError: null });
     try {
-      await gameSession.initializeGame(userId, cardId, existingSnapshotId);
-      const snapshot = gameSession.getCurrentGameSnapshot();
+      // Access gameSessionInstance directly here to ensure latest reference
+      const gameSessionInstance = window.gameSessionInstance;
+      if (!gameSessionInstance) {
+          throw new Error("Game session instance not found on window. Ensure main.tsx has initialized it.");
+      }
+
+      console.log('GameStateStore: Calling gameSession.initializeGame...');
+      await gameSessionInstance.initializeGame(userId, cardId, existingSnapshotId);
+      console.log('GameStateStore: gameSession.initializeGame completed.');
+
+      console.log('GameStateStore: DIRECT INSPECTION of gameSession instance:', gameSessionInstance);
+
+      const snapshot = gameSessionInstance.getCurrentGameSnapshot();
+      console.log('GameStateStore: Retrieved snapshot from gameSession:', snapshot);
+
       if (snapshot) {
         set({
           currentSnapshot: snapshot,
-          currentPromptCardId: cardId,
+          currentPromptCardId: snapshot.promptCardId, // Use snapshot's ID for consistency
           currentGameState: snapshot.gameState,
           gameLogs: snapshot.logs || [],
           conversationHistory: snapshot.conversationHistory || [],
-          worldStatePinnedKeys: snapshot.worldStatePinnedKeys || [], // Load pinned keys
+          worldStatePinnedKeys: snapshot.worldStatePinnedKeys || [],
         });
+        console.log('GameStateStore: Zustand state updated with snapshot. currentSnapshot:', get().currentSnapshot);
+      } else {
+        console.warn('GameStateStore: gameSession.getCurrentGameSnapshot() returned null after initialization. Setting error.');
+        set({ gameError: "Game state could not be loaded or initialized.", gameLoading: false });
       }
       set({ gameLoading: false });
     } catch (error: any) {
+      console.error("GameStateStore: Error in initializeGame action:", error);
       set({ gameError: error.message, gameLoading: false });
-      console.error("Error initializing game:", error);
     }
   },
 
   processPlayerAction: async (action) => {
-    if (!gameSession) {
+    const gameSessionInstance = window.gameSessionInstance;
+    if (!gameSessionInstance) {
         set({ gameError: "Game session not initialized.", gameLoading: false });
         return;
     }
@@ -3264,7 +3321,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
 
     try {
       // Pass the dummy narrator flag to gameSession
-      const { aiProse, newLogEntries, updatedSnapshot } = await gameSession.processPlayerAction(
+      const { aiProse, newLogEntries, updatedSnapshot } = await gameSessionInstance.processPlayerAction(
         action,
         useDummyNarrator // Pass the flag
       );
@@ -3284,7 +3341,8 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   saveGame: async () => {
-    if (!gameSession) {
+    const gameSessionInstance = window.gameSessionInstance;
+    if (!gameSessionInstance) {
         console.warn("Cannot save game: game session not initialized.");
         return;
     }
@@ -3301,20 +3359,21 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
         // To be explicit, we could pass the currentSnapshot:
         // await gameSession.saveGame(currentSnapshot); // (Requires modifying IGameSession.saveGame)
         // For now, relying on the fact that `currentSnapshot` in GameSession points to the same object as in store after updates.
-        await gameSession.saveGame();
+        await gameSessionInstance.saveGame();
     } else {
         console.warn("No current snapshot to save.");
     }
   },
   loadGame: async (snapshotId) => {
-    if (!gameSession || !get().currentUserId) {
+    const gameSessionInstance = window.gameSessionInstance;
+    if (!gameSessionInstance || !get().currentUserId) {
         set({ gameError: "Game session not initialized or user not logged in.", gameLoading: false });
         return;
     }
     set({ gameLoading: true, gameError: null });
     try {
-      await gameSession.loadGame(snapshotId);
-      const snapshot = gameSession.getCurrentGameSnapshot();
+      await gameSessionInstance.loadGame(snapshotId);
+      const snapshot = gameSessionInstance.getCurrentGameSnapshot();
       if (snapshot) {
         set({
           currentSnapshot: snapshot,
@@ -3460,7 +3519,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
       if (state.currentSnapshot) {
           state.currentSnapshot.gameState.worldState = newWorldState;
           state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
-      }
+        }
     }));
     get().saveGame();
   },
@@ -4959,6 +5018,8 @@ Each section below can be individually enabled/disabled using the toggle switche
 
       <Divider sx={{ my: 3 }} />
 
+      {/* REMOVED: Output Format */}
+      {/*
       <Typography variant="h6" gutterBottom>
         Output Format
         <InfoDialog
@@ -4985,6 +5046,7 @@ Each section below can be individually enabled/disabled using the toggle switche
         onChange={(e) => onStackInstructionsChange({ ...stackInstructions, outputFormat: e.target.value })}
         sx={{ mb: 3 }}
       />
+      */}
 
       <Typography variant="h6" gutterBottom>
         Token Policy
@@ -5220,6 +5282,8 @@ import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { PromptCard } from '../../models/index';
 import Snackbar from '@mui/material/Snackbar';
+import { useNavigate } from 'react-router-dom'; // <--- ADD THIS IMPORT
+
 
 
 interface GameLibraryScreenProps {
@@ -5229,6 +5293,7 @@ interface GameLibraryScreenProps {
 
 const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) => {
   const { user } = useAuthStore();
+  const navigate = useNavigate(); // <--- INITIALIZE useNavigate HOOK
   const {
     promptCards,
     isLoading,
@@ -5288,6 +5353,7 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
       await initializeGame(user.uid, card.id);
       setSnackbarMessage(`Game "${card.title}" initialized! Navigating to game...`);
       setSnackbarSeverity('success');
+      navigate('/game'); // <--- ADD THIS LINE TO NAVIGATE TO THE GAME SCREEN
       // TODO: Navigate to GameScreen
       console.log(`Game "${card.title}" started! Navigating to GameScreen.`);
     } catch (e) {
@@ -5401,10 +5467,8 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
 
 export default GameLibraryScreen;
 @@FILE: src/ui/screens/GameScreen.tsx
-// src/ui/screens/GameScreen.tsx
-
 import React, { useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate hook
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -5431,12 +5495,12 @@ import { GameState, LogEntry, Message } from '../../models/index';
 import { DiceRoller } from '../../utils/diceRoller';
 
 interface GameScreenProps {
-  onNavToggle: () => void; // Callback to open/close side menu
+  onNavToggle: () => void;
 }
 
 const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
   const { user } = useAuthStore();
-  const navigate = useNavigate(); // Initialize useNavigate
+  const navigate = useNavigate();
   const {
     currentSnapshot,
     currentGameState,
@@ -5455,8 +5519,47 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
   const [snackbarMessage, setSnackbarMessage] = React.useState<string | null>(null);
   const [snackbarSeverity, setSnackbarSeverity] = React.useState<'success' | 'error' | 'info' | 'warning'>('info');
 
-
   const logRef = useRef<HTMLDivElement>(null);
+
+  // Define handleGoToLogin ONCE, here at the top, after hooks.
+  const handleGoToLogin = () => {
+    console.log('GameScreen: Navigating to /login due to game not initialized or user not logged in.');
+    navigate('/login');
+  };
+
+  console.log('--- GameScreen: Component RENDER ---');
+  console.log('GameScreen: user:', user ? user.uid : 'null');
+  console.log('GameScreen: currentSnapshot:', currentSnapshot ? currentSnapshot.id : 'null');
+  console.log('GameScreen: currentGameState:', currentGameState ? 'present' : 'null');
+
+  // Combined and simplified initial loading/error display
+  // This block will catch if user is null, or if game state isn't ready
+  if (!user || !currentSnapshot || !currentGameState) {
+    console.warn('GameScreen: Displaying "Game not initialized" message because:', {
+      userExists: !!user,
+      snapshotExists: !!currentSnapshot,
+      gameStateExists: !!currentGameState,
+      errorMessage: gameError
+    });
+
+    // If loading, show a loading indicator
+    if (gameLoading) {
+      return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+          <CircularProgress />
+          <Typography variant="h6" ml={2}>Loading Game...</Typography>
+        </Box>
+      );
+    }
+
+    // Otherwise, show the "not initialized" message
+    return (
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Typography variant="h6" color="error">Game not initialized or user not logged in.</Typography>
+        <Button onClick={handleGoToLogin}>Go to Login</Button>
+      </Box>
+    );
+  }
 
   // Effect to scroll to bottom on new log entries (auto-scroll)
   useEffect(() => {
@@ -5477,7 +5580,6 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
       }
     };
   }, []);
-
 
   const handleSendAction = async () => {
     if (narratorInputText.trim() === '') return;
@@ -5505,7 +5607,6 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
   };
 
   const handleRollDialogConfirm = () => {
-    // Basic validation for dice formula
     if (!rollFormula.match(/^(\d*)d(\d+)([\+\-]\d+)?$/i)) {
         setSnackbarSeverity('warning');
         setSnackbarMessage('Invalid dice formula format. Please use NdN[+M|-M].');
@@ -5513,31 +5614,6 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
     }
     setShowRollDialog(false);
   };
-
-  // Correct navigation to LoginScreen
-  const handleGoToLogin = () => {
-    navigate('/login');
-  };
-
-  if (gameLoading && !currentSnapshot) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress />
-        <Typography variant="h6" ml={2}>Loading Game...</Typography>
-      </Box>
-    );
-  }
-
-  // Changed to check for `user` first for proper redirection from App.tsx.
-  // This screen only truly renders its content if user and snapshot are present.
-  if (!user || !currentSnapshot || !currentGameState) {
-    return (
-      <Box sx={{ p: 3, textAlign: 'center' }}>
-        <Typography variant="h6" color="error">Game not initialized or user not logged in.</Typography>
-        <Button onClick={handleGoToLogin}>Go to Login</Button> {/* Corrected navigation */}
-      </Box>
-    );
-  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
@@ -6525,24 +6601,26 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
     }
   };
 
-  const handleStartGame = async () => {
-    if (!user?.uid || !activePromptCard) {
-      showSnackbar('Please select an active prompt card and be logged in to start a game.', 'info');
-      return;
-    }
-    if (isCardDirty) {
-      showSnackbar('Please save or revert changes before starting a game.', 'warning');
-      return;
-    }
-    try {
-      await initializeGame(user.uid, activePromptCard.id);
-      showSnackbar('Game initialized! Navigating to game screen...', 'success');
-      navigate('/game'); // Navigate to GameScreen
-    }
-    catch (e) {
-      showSnackbar(`Failed to start game: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
-    }
-  };
+const handleStartGame = async () => {
+  console.log('PromptCardManager: handleStartGame called. User:', user?.uid, 'Active Card:', activePromptCard?.id);
+  if (!user?.uid || !activePromptCard) {
+    // ...
+  }
+  if (isCardDirty) {
+    // ...
+  }
+  try {
+    console.log('PromptCardManager: Calling initializeGame...');
+    await initializeGame(user.uid, activePromptCard.id);
+    console.log('PromptCardManager: initializeGame AWAITED successfully. Now navigating to /game.');
+    showSnackbar('Game initialized! Navigating to game screen...', 'success');
+    navigate('/game');
+  }
+  catch (e: any) { // Ensure 'e' is typed as 'any'
+    console.error('PromptCardManager: Error during game initialization:', e);
+    showSnackbar(`Failed to start game: ${e.message || 'Unknown error'}`, 'error');
+  }
+};
 
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
