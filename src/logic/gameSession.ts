@@ -150,23 +150,31 @@ export class GameSession implements IGameSession { // Export the class
       console.log(`GameSession: Loaded existing game snapshot: ${snapshot.id}. Current turn: ${snapshot.currentTurn}`);
     } else {
       console.log('GameSession: Starting a new game...');
-      const newSnapshotId = generateUuid(); // Use UUID
+      const newSnapshotId = generateUuid();
       const now = new Date().toISOString();
 
       const initialGameState: GameState = {
         narration: "A new adventure begins...",
-        worldState: {}, // Initialize as empty, `worldStateInit` from card will populate this
-        scene: { location: null, present: [] }, // Initialize empty scene
+        worldState: {},
+        scene: { location: null, present: [] },
       };
 
-      // Apply initial worldState from PromptCard (similar to ViewModel's setActivePromptCard logic)
+      let initialDeltas: DeltaMap = {};
+
       if (card.worldStateInit && card.worldStateInit.trim().length > 0) {
         try {
           const parsedInit = JSON.parse(card.worldStateInit);
-          // Simple validation: ensure it's a top-level object
           if (typeof parsedInit === 'object' && parsedInit !== null && !Array.isArray(parsedInit)) {
             initialGameState.worldState = parsedInit;
             console.log("GameSession: Applied initial worldState from PromptCard.");
+
+            for (const key in parsedInit) {
+                if (Object.prototype.hasOwnProperty.call(parsedInit, key)) {
+                    initialDeltas[`!${key}`] = { op: 'declare', key: key, value: parsedInit[key] };
+                }
+            }
+            console.log("GameSession: Generated initial deltas from worldStateInit:", initialDeltas);
+
           } else {
             console.warn("GameSession: PromptCard worldStateInit is not a valid JSON object, ignoring:", card.worldStateInit);
           }
@@ -174,6 +182,32 @@ export class GameSession implements IGameSession { // Export the class
           console.error("GameSession: Failed to parse PromptCard worldStateInit JSON:", e);
         }
       }
+
+      // Fetch the selected AI connection to populate initial log details
+      let initialConnection: AiConnection | undefined;
+      try {
+          const connections = await this.gameRepo.getAiConnections(userId);
+          initialConnection = connections.find(c => c.id === card.aiSettings.selectedConnectionId);
+          if (!initialConnection) {
+              console.warn(`GameSession: Initial AI connection ${card.aiSettings.selectedConnectionId} not found. Using default/empty values for initial log.`);
+              initialConnection = {
+                  id: 'unknown', displayName: 'Unknown Connection', modelName: 'Unknown', modelSlug: 'unknown',
+                  apiUrl: 'N/A', apiToken: 'N/A', functionCallingEnabled: false, createdAt: '', lastUpdated: ''
+              };
+          }
+      } catch (e) {
+          console.error("GameSession: Error fetching AI connections during initialization:", e);
+          initialConnection = {
+              id: 'error', displayName: 'Error Fetching', modelName: 'Error', modelSlug: 'error',
+              apiUrl: 'Error', apiToken: 'Error', functionCallingEnabled: false, createdAt: '', lastUpdated: ''
+          };
+      }
+
+
+      // Build the prompt for the first turn to capture its context
+      const firstTurnPromptMessages = this.builder.buildFirstTurnPrompt(card);
+      const initialContextSnapshot = JSON.stringify(firstTurnPromptMessages, null, 2); // Pretty print for log readability
+
 
       this.currentSnapshot = {
         id: newSnapshotId,
@@ -183,21 +217,40 @@ export class GameSession implements IGameSession { // Export the class
         updatedAt: now,
         currentTurn: 0,
         gameState: initialGameState,
-        conversationHistory: [], // Start with empty history
+        conversationHistory: [],
         logs: [],
-        worldStatePinnedKeys: [], // Add this for persistence of pinning.
+        worldStatePinnedKeys: [],
       };
       console.log(`GameSession: Initialized new game snapshot with ID: ${newSnapshotId}.`);
 
-      // Save the newly created snapshot immediately
+      const initialLogEntry = this.logManager.assembleTurnLogEntry({
+          turnNumber: 0,
+          userInput: "Game Initialized",
+          rawNarratorOutput: initialGameState.narration,
+          parsedOutput: {
+              prose: initialGameState.narration,
+              deltas: initialDeltas,
+              digestLines: this.logManager.inferDigestLinesFromDeltas(initialDeltas, initialGameState.narration),
+              scene: initialGameState.scene,
+          },
+          contextSnapshot: initialContextSnapshot, // Use the actual first turn prompt
+          tokenUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          aiSettings: card.aiSettings,
+          apiRequestBody: null,
+          apiResponseBody: null,
+          apiUrl: initialConnection.apiUrl, // Use configured API URL
+          latencyMs: null,
+          modelSlugUsed: initialConnection.modelSlug, // Use configured model slug
+      });
+      this.currentSnapshot.logs.push(initialLogEntry);
+      console.log(`GameSession: Added initial log entry for turn 0.`);
+
       try {
           console.log(`GameSession: Attempting to save new game snapshot ${newSnapshotId} to Firestore.`);
           await this.gameRepo.saveGameSnapshot(userId, this.currentSnapshot);
           console.log(`GameSession: New game snapshot ${newSnapshotId} successfully saved to Firestore.`);
       } catch (saveError) {
           console.error(`GameSession: Failed to save new game snapshot ${newSnapshotId} to Firestore:`, saveError);
-          // Decide if you want to throw here, or let the game proceed with unsaved state.
-          // For now, let's re-throw to indicate a critical setup failure.
           throw new Error(`Failed to save initial game snapshot: ${saveError instanceof Error ? saveError.message : 'Unknown error'}`);
       }
     }

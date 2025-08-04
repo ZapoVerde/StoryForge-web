@@ -110,28 +110,15 @@ const AppContent: React.FC = () => {
     <Box sx={{ display: 'flex', height: '100vh' }}>
       <CssBaseline />
 
-      {/* Temporary Drawer for mobile */}
+      {/* Single Drawer for both mobile and desktop, controlled by mobileOpen */}
       <Drawer
         variant="temporary"
         open={mobileOpen}
         onClose={handleDrawerToggle}
         ModalProps={{ keepMounted: true }}
         sx={{
-          display: { xs: 'block', sm: 'none' },
           '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
         }}
-      >
-        {drawer}
-      </Drawer>
-
-      {/* Permanent Drawer for desktop */}
-      <Drawer
-        variant="permanent"
-        sx={{
-          display: { xs: 'none', sm: 'block' },
-          '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
-        }}
-        open
       >
         {drawer}
       </Drawer>
@@ -143,8 +130,9 @@ const AppContent: React.FC = () => {
           flexGrow: 1,
           p: 0,
           transition: 'margin .3s ease-out, width .3s ease-out',
-          marginLeft: { sm: `${drawerWidth}px` },
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          // Dynamically adjust marginLeft and width based on drawer open state
+          marginLeft: mobileOpen ? `${drawerWidth}px` : '0px',
+          width: mobileOpen ? `calc(100% - ${drawerWidth}px)` : '100%',
           height: '100%',
         }}
       >

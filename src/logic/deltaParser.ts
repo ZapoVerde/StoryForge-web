@@ -4,9 +4,10 @@ import type { DeltaInstruction, DeltaMap } from '../models/DeltaInstruction.ts';
 import type { DigestLine } from '../models/LogEntryElements.ts';
 import type { ParsedNarrationOutput } from '../models/ParsedNarrationOutput.ts';
 
-const DELTA_MARKER = "@delta";
-const DIGEST_MARKER = "@digest";
-const SCENE_MARKER = "@scene";
+// Exported Marker constants
+export const DELTA_MARKER = "@delta";
+export const DIGEST_MARKER = "@digest";
+export const SCENE_MARKER = "@scene";
 
 /**
  * Extracts a JSON object from a list of lines, handling potential parsing errors.

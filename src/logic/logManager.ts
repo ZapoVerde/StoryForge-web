@@ -5,6 +5,7 @@ import type{ ParsedNarrationOutput } from '../models/ParsedNarrationOutput';
 import type{ AiSettings, PromptCard } from '../models/PromptCard'; // For AI settings from the card
 import type{ DeltaInstruction, DeltaMap } from '../models/DeltaInstruction'; // For the DeltaMap type
 import type{ DigestLine, TokenSummary, LogErrorFlag } from '../models/LogEntryElements'; // For related types
+import { DELTA_MARKER } from './deltaParser'; // Import DELTA_MARKER
 
 /**
  * Interface defining the contract for the Log Manager.
@@ -152,6 +153,7 @@ class LogManager implements ILogManager {
     if (!parsedOutput.prose) {
       errorFlags.push('MISSING_PROSE');
     }
+    // Now using DELTA_MARKER imported from deltaParser
     if (parsedOutput.deltas && Object.keys(parsedOutput.deltas).length === 0 && rawNarratorOutput.includes(DELTA_MARKER)) {
         // If the delta marker was present but no deltas were parsed
         errorFlags.push('INVALID_JSON_DELTA');

@@ -155,28 +155,15 @@ const AppContent: React.FC = () => {
     <Box sx={{ display: 'flex', height: '100vh' }}>
       <CssBaseline />
 
-      {/* Temporary Drawer for mobile */}
+      {/* Single Drawer for both mobile and desktop, controlled by mobileOpen */}
       <Drawer
         variant="temporary"
         open={mobileOpen}
         onClose={handleDrawerToggle}
         ModalProps={{ keepMounted: true }}
         sx={{
-          display: { xs: 'block', sm: 'none' },
           '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
         }}
-      >
-        {drawer}
-      </Drawer>
-
-      {/* Permanent Drawer for desktop */}
-      <Drawer
-        variant="permanent"
-        sx={{
-          display: { xs: 'none', sm: 'block' },
-          '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
-        }}
-        open
       >
         {drawer}
       </Drawer>
@@ -188,8 +175,9 @@ const AppContent: React.FC = () => {
           flexGrow: 1,
           p: 0,
           transition: 'margin .3s ease-out, width .3s ease-out',
-          marginLeft: { sm: `${drawerWidth}px` },
-          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          // Dynamically adjust marginLeft and width based on drawer open state
+          marginLeft: mobileOpen ? `${drawerWidth}px` : '0px',
+          width: mobileOpen ? `calc(100% - ${drawerWidth}px)` : '100%',
           height: '100%',
         }}
       >
@@ -1434,9 +1422,10 @@ import type { DeltaInstruction, DeltaMap } from '../models/DeltaInstruction.ts';
 import type { DigestLine } from '../models/LogEntryElements.ts';
 import type { ParsedNarrationOutput } from '../models/ParsedNarrationOutput.ts';
 
-const DELTA_MARKER = "@delta";
-const DIGEST_MARKER = "@digest";
-const SCENE_MARKER = "@scene";
+// Exported Marker constants
+export const DELTA_MARKER = "@delta";
+export const DIGEST_MARKER = "@digest";
+export const SCENE_MARKER = "@scene";
 
 /**
  * Extracts a JSON object from a list of lines, handling potential parsing errors.
@@ -1705,23 +1694,31 @@ export class GameSession implements IGameSession { // Export the class
       console.log(`GameSession: Loaded existing game snapshot: ${snapshot.id}. Current turn: ${snapshot.currentTurn}`);
     } else {
       console.log('GameSession: Starting a new game...');
-      const newSnapshotId = generateUuid(); // Use UUID
+      const newSnapshotId = generateUuid();
       const now = new Date().toISOString();
 
       const initialGameState: GameState = {
         narration: "A new adventure begins...",
-        worldState: {}, // Initialize as empty, `worldStateInit` from card will populate this
-        scene: { location: null, present: [] }, // Initialize empty scene
+        worldState: {},
+        scene: { location: null, present: [] },
       };
 
-      // Apply initial worldState from PromptCard (similar to ViewModel's setActivePromptCard logic)
+      let initialDeltas: DeltaMap = {};
+
       if (card.worldStateInit && card.worldStateInit.trim().length > 0) {
         try {
           const parsedInit = JSON.parse(card.worldStateInit);
-          // Simple validation: ensure it's a top-level object
           if (typeof parsedInit === 'object' && parsedInit !== null && !Array.isArray(parsedInit)) {
             initialGameState.worldState = parsedInit;
             console.log("GameSession: Applied initial worldState from PromptCard.");
+
+            for (const key in parsedInit) {
+                if (Object.prototype.hasOwnProperty.call(parsedInit, key)) {
+                    initialDeltas[`!${key}`] = { op: 'declare', key: key, value: parsedInit[key] };
+                }
+            }
+            console.log("GameSession: Generated initial deltas from worldStateInit:", initialDeltas);
+
           } else {
             console.warn("GameSession: PromptCard worldStateInit is not a valid JSON object, ignoring:", card.worldStateInit);
           }
@@ -1729,6 +1726,32 @@ export class GameSession implements IGameSession { // Export the class
           console.error("GameSession: Failed to parse PromptCard worldStateInit JSON:", e);
         }
       }
+
+      // Fetch the selected AI connection to populate initial log details
+      let initialConnection: AiConnection | undefined;
+      try {
+          const connections = await this.gameRepo.getAiConnections(userId);
+          initialConnection = connections.find(c => c.id === card.aiSettings.selectedConnectionId);
+          if (!initialConnection) {
+              console.warn(`GameSession: Initial AI connection ${card.aiSettings.selectedConnectionId} not found. Using default/empty values for initial log.`);
+              initialConnection = {
+                  id: 'unknown', displayName: 'Unknown Connection', modelName: 'Unknown', modelSlug: 'unknown',
+                  apiUrl: 'N/A', apiToken: 'N/A', functionCallingEnabled: false, createdAt: '', lastUpdated: ''
+              };
+          }
+      } catch (e) {
+          console.error("GameSession: Error fetching AI connections during initialization:", e);
+          initialConnection = {
+              id: 'error', displayName: 'Error Fetching', modelName: 'Error', modelSlug: 'error',
+              apiUrl: 'Error', apiToken: 'Error', functionCallingEnabled: false, createdAt: '', lastUpdated: ''
+          };
+      }
+
+
+      // Build the prompt for the first turn to capture its context
+      const firstTurnPromptMessages = this.builder.buildFirstTurnPrompt(card);
+      const initialContextSnapshot = JSON.stringify(firstTurnPromptMessages, null, 2); // Pretty print for log readability
+
 
       this.currentSnapshot = {
         id: newSnapshotId,
@@ -1738,21 +1761,40 @@ export class GameSession implements IGameSession { // Export the class
         updatedAt: now,
         currentTurn: 0,
         gameState: initialGameState,
-        conversationHistory: [], // Start with empty history
+        conversationHistory: [],
         logs: [],
-        worldStatePinnedKeys: [], // Add this for persistence of pinning.
+        worldStatePinnedKeys: [],
       };
       console.log(`GameSession: Initialized new game snapshot with ID: ${newSnapshotId}.`);
 
-      // Save the newly created snapshot immediately
+      const initialLogEntry = this.logManager.assembleTurnLogEntry({
+          turnNumber: 0,
+          userInput: "Game Initialized",
+          rawNarratorOutput: initialGameState.narration,
+          parsedOutput: {
+              prose: initialGameState.narration,
+              deltas: initialDeltas,
+              digestLines: this.logManager.inferDigestLinesFromDeltas(initialDeltas, initialGameState.narration),
+              scene: initialGameState.scene,
+          },
+          contextSnapshot: initialContextSnapshot, // Use the actual first turn prompt
+          tokenUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+          aiSettings: card.aiSettings,
+          apiRequestBody: null,
+          apiResponseBody: null,
+          apiUrl: initialConnection.apiUrl, // Use configured API URL
+          latencyMs: null,
+          modelSlugUsed: initialConnection.modelSlug, // Use configured model slug
+      });
+      this.currentSnapshot.logs.push(initialLogEntry);
+      console.log(`GameSession: Added initial log entry for turn 0.`);
+
       try {
           console.log(`GameSession: Attempting to save new game snapshot ${newSnapshotId} to Firestore.`);
           await this.gameRepo.saveGameSnapshot(userId, this.currentSnapshot);
           console.log(`GameSession: New game snapshot ${newSnapshotId} successfully saved to Firestore.`);
       } catch (saveError) {
           console.error(`GameSession: Failed to save new game snapshot ${newSnapshotId} to Firestore:`, saveError);
-          // Decide if you want to throw here, or let the game proceed with unsaved state.
-          // For now, let's re-throw to indicate a critical setup failure.
           throw new Error(`Failed to save initial game snapshot: ${saveError instanceof Error ? saveError.message : 'Unknown error'}`);
       }
     }
@@ -2073,6 +2115,7 @@ import type{ ParsedNarrationOutput } from '../models/ParsedNarrationOutput';
 import type{ AiSettings, PromptCard } from '../models/PromptCard'; // For AI settings from the card
 import type{ DeltaInstruction, DeltaMap } from '../models/DeltaInstruction'; // For the DeltaMap type
 import type{ DigestLine, TokenSummary, LogErrorFlag } from '../models/LogEntryElements'; // For related types
+import { DELTA_MARKER } from './deltaParser'; // Import DELTA_MARKER
 
 /**
  * Interface defining the contract for the Log Manager.
@@ -2220,6 +2263,7 @@ class LogManager implements ILogManager {
     if (!parsedOutput.prose) {
       errorFlags.push('MISSING_PROSE');
     }
+    // Now using DELTA_MARKER imported from deltaParser
     if (parsedOutput.deltas && Object.keys(parsedOutput.deltas).length === 0 && rawNarratorOutput.includes(DELTA_MARKER)) {
         // If the delta marker was present but no deltas were parsed
         errorFlags.push('INVALID_JSON_DELTA');
@@ -4109,6 +4153,70 @@ export const AiSettingsEditor: React.FC<AiSettingsEditorProps> = ({
     </CollapsibleSection>
   );
 };
+@@FILE: src/ui/components/CollapsibleLogEntry.tsx
+// src/ui/components/CollapsibleLogEntry.tsx
+
+import React from 'react';
+import { Box, Typography, Divider } from '@mui/material';
+import { LogEntry } from '../../models/LogEntry';
+import { LogViewMode } from '../../utils/types';
+import { CollapsibleSection } from './CollapsibleSection';
+import { LogEntryDisplay } from './LogEntryDisplay';
+
+interface CollapsibleLogEntryProps {
+  entry: LogEntry;
+  selectedLogViewModes: LogViewMode[];
+}
+
+export const CollapsibleLogEntry: React.FC<CollapsibleLogEntryProps> = ({ entry, selectedLogViewModes }) => {
+  // Determine if there's any content to show based on selected modes
+  const hasContent = selectedLogViewModes.some(mode => {
+    switch (mode) {
+      case LogViewMode.NARRATOR_OUTPUT: return !!entry.narratorOutput;
+      case LogViewMode.USER_INPUT: return !!entry.userInput;
+      case LogViewMode.DIGEST_LINES: return (entry.digestLines?.length || 0) > 0;
+      case LogViewMode.DELTAS: return entry.deltas && Object.keys(entry.deltas).length > 0;
+      case LogViewMode.CONTEXT_SNAPSHOT: return !!entry.contextSnapshot;
+      case LogViewMode.TOKEN_USAGE: return !!entry.tokenUsage;
+      case LogViewMode.AI_SETTINGS: return !!entry.aiSettings;
+      case LogViewMode.API_DETAILS: return !!entry.apiUrl || !!entry.modelSlugUsed || entry.latencyMs !== null;
+      case LogViewMode.ERROR_FLAGS: return (entry.errorFlags?.length || 0) > 0;
+      case LogViewMode.MODEL_SLUG_USED: return !!entry.modelSlugUsed;
+      default: return false;
+    }
+  });
+
+  if (!hasContent) {
+    // Optionally return null or a placeholder if no content is selected to display
+    // For now, if the main entry title is desired even without content, keep rendering.
+    // If you want to hide the whole entry if nothing is selected, uncomment below.
+    // return null;
+  }
+
+  return (
+    <CollapsibleSection
+      title={`Turn ${entry.turnNumber} - ${new Date(entry.timestamp).toLocaleTimeString()}`}
+      initiallyExpanded={entry.turnNumber === 0} // Expand Turn 0 by default
+    >
+      <Box sx={{ p: 1 }}>
+        {selectedLogViewModes.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            No log view modes selected for this entry. Please select modes from the "Log Views" menu.
+          </Typography>
+        ) : (
+          selectedLogViewModes.map((mode, index) => (
+            <React.Fragment key={mode}>
+              <CollapsibleSection title={mode} initiallyExpanded={true}> {/* Inner collapsible for each mode */}
+                <LogEntryDisplay mode={mode} entry={entry} hideTurnInfo={true} />
+              </CollapsibleSection>
+              {index < selectedLogViewModes.length - 1 && <Divider sx={{ my: 1 }} />}
+            </React.Fragment>
+          ))
+        )}
+      </Box>
+    </CollapsibleSection>
+  );
+};
 @@FILE: src/ui/components/CollapsibleSection.tsx
 // src/ui/components/CollapsibleSection.tsx
 
@@ -4235,9 +4343,10 @@ import { LogViewMode } from '../../utils/types';
 interface LogEntryDisplayProps {
   mode: LogViewMode;
   entry: LogEntry;
+  hideTurnInfo?: boolean; // New optional prop
 }
 
-export const LogEntryDisplay: React.FC<LogEntryDisplayProps> = ({ mode, entry }) => {
+export const LogEntryDisplay: React.FC<LogEntryDisplayProps> = ({ mode, entry, hideTurnInfo }) => {
   const renderContent = () => {
     switch (mode) {
       case LogViewMode.NARRATOR_OUTPUT:
@@ -4267,9 +4376,12 @@ export const LogEntryDisplay: React.FC<LogEntryDisplayProps> = ({ mode, entry })
 
   return (
     <Box sx={{ mb: 1.5 }}>
-      <Typography variant="caption" color="text.secondary">
-        Turn {entry.turnNumber} - {new Date(entry.timestamp).toLocaleTimeString()}
-      </Typography>
+      {/* Conditionally render turn info based on new prop */}
+      {!hideTurnInfo && (
+        <Typography variant="caption" color="text.secondary">
+          Turn {entry.turnNumber} - {new Date(entry.timestamp).toLocaleTimeString()}
+        </Typography>
+      )}
       <Typography variant="body2" component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', mt: 0.5 }}>
         {renderContent()}
       </Typography>
@@ -5756,7 +5868,8 @@ import MenuIcon from '@mui/icons-material/Menu';
 import { useLogStore } from '../../state/useLogStore';
 import { LogViewMode } from '../../utils/types';
 import { useGameStateStore } from '../../state/useGameStateStore';
-import { LogEntryDisplay } from '../components/LogEntryDisplay'; // Component to render individual log parts
+// import { LogEntryDisplay } from '../components/LogEntryDisplay'; // Removed direct import
+import { CollapsibleLogEntry } from '../components/CollapsibleLogEntry'; // NEW: Import CollapsibleLogEntry
 import { AutoSizer, List } from 'react-virtualized'; // For efficient list rendering
 
 interface LogViewerScreenProps {
@@ -5802,15 +5915,8 @@ const LogViewerScreen: React.FC<LogViewerScreenProps> = ({ onNavToggle }) => {
 
     return (
       <Box key={key} style={style} sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <LogEntryDisplay mode={selectedLogViewModes[0] || LogViewMode.NARRATOR_OUTPUT} entry={entry} />
-        {/*
-          Currently, this simple stub only displays the first selected mode.
-          For multiple modes, you'd iterate `selectedLogViewModes` and render `LogEntryDisplay` for each.
-          The Android version used a HorizontalPager, which would be a more complex implementation here
-          likely involving a carousel library or custom gesture handling.
-          For this stub, we'll keep it simple: assume the user chooses one main view for the list.
-          Full fidelity with Android's HorizontalPager for multiple views will require more work later.
-        */}
+        {/* Render the new CollapsibleLogEntry component for each row */}
+        <CollapsibleLogEntry entry={entry} selectedLogViewModes={selectedLogViewModes} />
       </Box>
     );
   };
@@ -5876,33 +5982,37 @@ const LogViewerScreen: React.FC<LogViewerScreenProps> = ({ onNavToggle }) => {
           </Typography>
         </Box>
       ) : (
-        <Paper elevation={1} sx={{ flexGrow: 1, m: 2, overflow: 'hidden' }}>
+        <Paper
+          elevation={1}
+          sx={{
+            flexGrow: 1,
+            m: 2,
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0, // ensures child flex containers can shrink
+          }}
+        >
+          {/* Fixed header inside Paper */}
           <Box sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider', textAlign: 'center' }}>
             <Typography variant="subtitle1" color="text.primary">
               Showing: {selectedLogViewModes.join(' | ')}
             </Typography>
           </Box>
-          {logEntries.length === 0 ? (
-            <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
-              <Typography variant="body1" color="text.secondary">
-                No log entries yet. Play a game to generate logs!
-              </Typography>
-            </Box>
-          ) : (
-            <AutoSizer>
-              {({ height, width }) => (
-                <List
-                  height={height}
-                  width={width}
-                  rowCount={logEntries.length}
-                  rowHeight={80} // Placeholder, will need dynamic row heights based on content
-                  rowRenderer={rowRenderer}
-                  overscanRowCount={5}
+
+          {/* Scrollable log list */}
+          <Box sx={{ flex: 1, overflowY: 'auto' }}>
+            {logEntries.map((entry, index) => (
+              <Box key={index} sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+                <CollapsibleLogEntry
+                  entry={entry}
+                  selectedLogViewModes={selectedLogViewModes}
                 />
-              )}
-            </AutoSizer>
-          )}
+              </Box>
+            ))}
+          </Box>
+
         </Paper>
+
       )}
     </Box>
   );

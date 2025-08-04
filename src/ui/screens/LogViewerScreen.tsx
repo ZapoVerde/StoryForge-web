@@ -19,7 +19,8 @@ import MenuIcon from '@mui/icons-material/Menu';
 import { useLogStore } from '../../state/useLogStore';
 import { LogViewMode } from '../../utils/types';
 import { useGameStateStore } from '../../state/useGameStateStore';
-import { LogEntryDisplay } from '../components/LogEntryDisplay'; // Component to render individual log parts
+// import { LogEntryDisplay } from '../components/LogEntryDisplay'; // Removed direct import
+import { CollapsibleLogEntry } from '../components/CollapsibleLogEntry'; // NEW: Import CollapsibleLogEntry
 import { AutoSizer, List } from 'react-virtualized'; // For efficient list rendering
 
 interface LogViewerScreenProps {
@@ -65,15 +66,8 @@ const LogViewerScreen: React.FC<LogViewerScreenProps> = ({ onNavToggle }) => {
 
     return (
       <Box key={key} style={style} sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <LogEntryDisplay mode={selectedLogViewModes[0] || LogViewMode.NARRATOR_OUTPUT} entry={entry} />
-        {/*
-          Currently, this simple stub only displays the first selected mode.
-          For multiple modes, you'd iterate `selectedLogViewModes` and render `LogEntryDisplay` for each.
-          The Android version used a HorizontalPager, which would be a more complex implementation here
-          likely involving a carousel library or custom gesture handling.
-          For this stub, we'll keep it simple: assume the user chooses one main view for the list.
-          Full fidelity with Android's HorizontalPager for multiple views will require more work later.
-        */}
+        {/* Render the new CollapsibleLogEntry component for each row */}
+        <CollapsibleLogEntry entry={entry} selectedLogViewModes={selectedLogViewModes} />
       </Box>
     );
   };
@@ -139,33 +133,37 @@ const LogViewerScreen: React.FC<LogViewerScreenProps> = ({ onNavToggle }) => {
           </Typography>
         </Box>
       ) : (
-        <Paper elevation={1} sx={{ flexGrow: 1, m: 2, overflow: 'hidden' }}>
+        <Paper
+          elevation={1}
+          sx={{
+            flexGrow: 1,
+            m: 2,
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0, // ensures child flex containers can shrink
+          }}
+        >
+          {/* Fixed header inside Paper */}
           <Box sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider', textAlign: 'center' }}>
             <Typography variant="subtitle1" color="text.primary">
               Showing: {selectedLogViewModes.join(' | ')}
             </Typography>
           </Box>
-          {logEntries.length === 0 ? (
-            <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
-              <Typography variant="body1" color="text.secondary">
-                No log entries yet. Play a game to generate logs!
-              </Typography>
-            </Box>
-          ) : (
-            <AutoSizer>
-              {({ height, width }) => (
-                <List
-                  height={height}
-                  width={width}
-                  rowCount={logEntries.length}
-                  rowHeight={80} // Placeholder, will need dynamic row heights based on content
-                  rowRenderer={rowRenderer}
-                  overscanRowCount={5}
+
+          {/* Scrollable log list */}
+          <Box sx={{ flex: 1, overflowY: 'auto' }}>
+            {logEntries.map((entry, index) => (
+              <Box key={index} sx={{ p: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+                <CollapsibleLogEntry
+                  entry={entry}
+                  selectedLogViewModes={selectedLogViewModes}
                 />
-              )}
-            </AutoSizer>
-          )}
+              </Box>
+            ))}
+          </Box>
+
         </Paper>
+
       )}
     </Box>
   );

@@ -8,9 +8,10 @@ import { LogViewMode } from '../../utils/types';
 interface LogEntryDisplayProps {
   mode: LogViewMode;
   entry: LogEntry;
+  hideTurnInfo?: boolean; // New optional prop
 }
 
-export const LogEntryDisplay: React.FC<LogEntryDisplayProps> = ({ mode, entry }) => {
+export const LogEntryDisplay: React.FC<LogEntryDisplayProps> = ({ mode, entry, hideTurnInfo }) => {
   const renderContent = () => {
     switch (mode) {
       case LogViewMode.NARRATOR_OUTPUT:
@@ -40,9 +41,12 @@ export const LogEntryDisplay: React.FC<LogEntryDisplayProps> = ({ mode, entry })
 
   return (
     <Box sx={{ mb: 1.5 }}>
-      <Typography variant="caption" color="text.secondary">
-        Turn {entry.turnNumber} - {new Date(entry.timestamp).toLocaleTimeString()}
-      </Typography>
+      {/* Conditionally render turn info based on new prop */}
+      {!hideTurnInfo && (
+        <Typography variant="caption" color="text.secondary">
+          Turn {entry.turnNumber} - {new Date(entry.timestamp).toLocaleTimeString()}
+        </Typography>
+      )}
       <Typography variant="body2" component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', mt: 0.5 }}>
         {renderContent()}
       </Typography>
