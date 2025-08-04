@@ -35,7 +35,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
   const {
     currentSnapshot,
     currentGameState,
-    gameLogs,
+    conversationHistory,
     narratorInputText,
     narratorScrollPosition,
     gameLoading,
@@ -97,7 +97,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
     if (logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
-  }, [gameLogs]);
+  }, [conversationHistory]);
 
   // Effect to restore scroll position from store (on component mount/unmount)
   useEffect(() => {
@@ -174,7 +174,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
           position: 'relative',
         }}
       >
-        <LogView logEntries={gameLogs} />
+        <LogView conversationHistory={conversationHistory} />
 
         {/* Dice Roller Button (Floating) */}
         <IconButton

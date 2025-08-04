@@ -95,8 +95,9 @@ class LogManager implements ILogManager {
     summaryText = `Removed ${instruction.key}`;
    }
 
-   const tags = this.extractTags(summaryText); // Extract tags from the generated summary
-   inferredDigests.push({ turn: 0, tags, score, text: summaryText }); // Turn will be set by assembleTurnLogEntry
+  const tags = this.extractTags(summaryText); // Extract tags from the generated summary
+    // MODIFIED: Use `importance: score` to match the DigestLine model
+   inferredDigests.push({ text: summaryText, importance: score, tags });
   }
 
   // Optional prose line extraction from DigestManager.addParsedLines
@@ -104,13 +105,15 @@ class LogManager implements ILogManager {
    const firstLine = prose.trim().split(/[.!?\n]/).find(line => line.trim().length > 10)?.trim();
    if (firstLine) {
     const tags = this.extractTags(firstLine);
-    inferredDigests.push({ turn: 0, tags, score: 3, text: firstLine });
+      // MODIFIED: Use `importance: 3`
+    inferredDigests.push({ text: firstLine, importance: 3, tags });
    }
   }
 
   // Assign consistent turn number AFTER all are collected
-  return inferredDigests.map(d => ({ ...d, turn: 0 })); // We'll update `turn` in assembleTurnLogEntry
- }
+  // MODIFIED: Remove turn property, as it's not in the DigestLine model. It's part of the parent LogEntry.
+  return inferredDigests;
+}
 
  private extractTags(text: string): string[] {
   const tagPattern = /[#@$][a-zA-Z0-9_]+/g; // Global flag to find all matches

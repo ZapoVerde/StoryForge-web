@@ -78,9 +78,10 @@ export interface IGameSession {
 
   /**
    * Saves the current game state.
+   * @param snapshot The GameSnapshot object to save. // MODIFIED: Add parameter
    * @returns A Promise resolving when the game is saved.
    */
-  saveGame(): Promise<void>;
+  saveGame(snapshot: GameSnapshot): Promise<void>;
 
   /**
    * Loads a game snapshot.
@@ -211,17 +212,17 @@ export class GameSession implements IGameSession { // Export the class
       const firstTurnPromptMessages = this.builder.buildFirstTurnPrompt(card);
       const initialContextSnapshot = JSON.stringify(firstTurnPromptMessages, null, 2); // Pretty print for log readability
 
-
       this.currentSnapshot = {
         id: newSnapshotId,
         userId: userId,
         promptCardId: card.id,
-        title: gameTitle, // Set the generated title for the new game
+        title: gameTitle,
         createdAt: now,
         updatedAt: now,
         currentTurn: 0,
         gameState: initialGameState,
-        conversationHistory: [],
+        // MODIFIED: Start conversation history with the initial narration.
+        conversationHistory: [{ role: 'assistant', content: initialGameState.narration }],
         logs: [],
         worldStatePinnedKeys: [],
       };
@@ -281,16 +282,22 @@ export class GameSession implements IGameSession { // Export the class
       nextTurnNumber // Pass current turn number
     );
 
-    let aiRawOutput: string = "";
-    let aiResponseLatencyMs: number | null = null;
-    let aiModelSlugUsed: string = "";
-    let aiApiUrl: string | null = null;
-    let aiApiRequestBody: string | null = JSON.stringify({ // Capture request body
-        model: promptCard.aiSettings.selectedConnectionId, // Placeholder; actual model slug comes from AiConnection
-        messages: messagesToSend.map(m => ({ role: m.role, content: m.content })) // Simplified for logging
-    });
-    let aiApiResponseBody: string | null = null;
-    let aiTokenUsage: any = null; // TokenSummary from AI not implemented yet
+  // MODIFIED: Create a cleaned request body for logging
+  const requestBodyForApi = {
+    model: promptCard.aiSettings.selectedConnectionId, // Placeholder; actual model slug comes from AiConnection
+    messages: messagesToSend.map(m => ({ role: m.role, content: m.content }))
+  };
+  const requestBodyForLog = { ...requestBodyForApi };
+  delete (requestBodyForLog as any).messages; // Remove messages for cleaner log
+
+  let aiRawOutput: string = "";
+  let aiResponseLatencyMs: number | null = null;
+  let aiModelSlugUsed: string = "";
+  let aiApiUrl: string | null = null;
+  // MODIFIED: Use the cleaned request body for the log
+  let aiApiRequestBody: string | null = JSON.stringify(requestBodyForLog, null, 2);
+  let aiApiResponseBody: string | null = null;
+  let aiTokenUsage: any = null;
 
     try {
         const activeAiClient = useDummyNarrator ? this.dummyAiClient : this.realAiClient; // Choose AI client
@@ -394,7 +401,7 @@ export class GameSession implements IGameSession { // Export the class
     currentSnapshot.updatedAt = new Date().toISOString();
     // Title is set once during initialization, no need to update per turn.
 
-    await this.saveGame(); // Save the full snapshot
+    await this.saveGame(this.currentSnapshot);  // Save the full snapshot
 
     return {
       aiProse: parsedAiOutput.prose,
@@ -420,14 +427,15 @@ export class GameSession implements IGameSession { // Export the class
     return this.currentSnapshot ? this.currentSnapshot.logs : [];
   }
 
-  async saveGame(): Promise<void> {
-    if (!this.currentUserId || !this.currentSnapshot) {
-      console.warn("GameSession: Cannot save game: user or game snapshot not initialized.");
+  async saveGame(snapshotToSave: GameSnapshot): Promise<void> {
+    if (!this.currentUserId || !snapshotToSave) { // Use the passed snapshot
+      console.warn("GameSession: Cannot save game: user not initialized or no snapshot provided.");
       return;
     }
-    console.log(`GameSession: Saving game snapshot ${this.currentSnapshot.id} for user ${this.currentUserId}.`);
-    await this.gameRepo.saveGameSnapshot(this.currentUserId, this.currentSnapshot);
-    console.log(`GameSession: Game snapshot ${this.currentSnapshot.id} saved successfully.`);
+    console.log(`GameSession: Saving game snapshot ${snapshotToSave.id} for user ${this.currentUserId}.`);
+    // Use the snapshot passed as an argument, not this.currentSnapshot
+    await this.gameRepo.saveGameSnapshot(this.currentUserId, snapshotToSave);
+    console.log(`GameSession: Game snapshot ${snapshotToSave.id} saved successfully.`);
   }
 
   // MODIFIED: Added userId parameter to loadGame

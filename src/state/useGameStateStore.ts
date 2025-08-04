@@ -139,24 +139,22 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   saveGame: async () => {
     const gameSessionInstance = window.gameSessionInstance;
     if (!gameSessionInstance) {
-        console.warn("Cannot save game: game session not initialized.");
-        return;
+      console.warn("Cannot save game: game session not initialized.");
+      return;
     }
-    const currentSnapshot = get().currentSnapshot;
+    const currentSnapshot = get().currentSnapshot; // Get the definitive snapshot from the store's state
     if (currentSnapshot) {
-        // Before calling gameSession.saveGame, ensure the store's currentSnapshot
-        // has its `updatedAt` field up-to-date locally, even though Firestore's
-        // `serverTimestamp()` will overwrite it. This ensures consistency.
-        set(produce((state: GameStateStore) => {
-            if (state.currentSnapshot) {
-                state.currentSnapshot.updatedAt = new Date().toISOString();
-                // Ensure pinned keys are synced to the snapshot object
-                state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
-            }
-        }));
-        await gameSessionInstance.saveGame();
+      const snapshotToSave = produce(currentSnapshot, draft => {
+        // Ensure the store's latest pinned keys are on the object to be saved
+        draft.worldStatePinnedKeys = get().worldStatePinnedKeys;
+        draft.updatedAt = new Date().toISOString();
+      });
+
+      // MODIFIED: Pass the store's snapshot to the saveGame method.
+      await gameSessionInstance.saveGame(snapshotToSave);
+      console.log('useGameStateStore: saveGame() finished.');
     } else {
-        console.warn("No current snapshot to save.");
+      console.warn("No current snapshot in store to save.");
     }
   },
 

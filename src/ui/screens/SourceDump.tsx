@@ -132,7 +132,7 @@ export default function SourceDump() {
 
 function parseDumpToTree(dump: string) {
   const lines = dump.split('\n');
-  const root: any = {};
+  const root: any = { __files: [] };;
   let currentFolder: string[] = [];
   let currentFile: { name: string; content: string } | null = null;
 

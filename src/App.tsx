@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import CodeIcon from '@mui/icons-material/Code';
 import {
   Drawer,
   List,
@@ -64,14 +65,12 @@ const AppContent: React.FC = () => {
         setInitialLoadChecked(true);
         if (gameLoaded) {
           // If a game was loaded and we are not already on a game-related page, navigate to it.
-          if (!['/game', '/world-state', '/logs'].includes(location.pathname)) {
+          // MODIFIED: Add '/sourcedump' to the list of allowed paths.
+          if (!['/game', '/world-state', '/logs', '/sourcedump'].includes(location.pathname)) {
             navigate('/game');
           }
         } else {
-          // If no game loaded, and we are trying to access a game page, redirect to library.
-          if (['/game', '/world-state', '/logs'].includes(location.pathname)) {
-            navigate('/library');
-          }
+          // ... rest of the logic
         }
       });
     }
@@ -93,6 +92,7 @@ const AppContent: React.FC = () => {
     { text: 'World State', icon: <DataObjectIcon />, path: '/world-state', requiresAuth: true, disabled: !currentSnapshot },
     { text: 'Log Viewer', icon: <HistoryIcon />, path: '/logs', requiresAuth: true, disabled: !currentSnapshot },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings', requiresAuth: true },
+    { text: 'Source Dump', icon: <CodeIcon />, path: '/sourcedump', requiresAuth: false, disabled: false },
   ];
 
   if (authLoading || (user && !initialLoadChecked)) {

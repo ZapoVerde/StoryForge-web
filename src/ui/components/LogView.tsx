@@ -2,40 +2,44 @@
 
 import React from 'react';
 import { Box, Typography, Paper } from '@mui/material';
-import { LogEntry } from '../../models/LogEntry'; // Assuming LogEntry model
+// MODIFIED: Import Message model instead of LogEntry
+import { Message } from '../../models/Message';
 
 interface LogViewProps {
- logEntries: LogEntry[];
+ // MODIFIED: Expect conversationHistory of type Message[]
+ conversationHistory: Message[];
 }
 
-export const LogView: React.FC<LogViewProps> = ({ logEntries }) => {
+export const LogView: React.FC<LogViewProps> = ({ conversationHistory }) => {
  return (
   <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
-   {logEntries.length === 0 ? (
+   {conversationHistory.length === 0 ? (
     <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 4 }}>
-     No turns logged yet. Start playing!
+     The story begins...
     </Typography>
    ) : (
-    logEntries.map((entry, index) => (
+    // MODIFIED: Map over conversationHistory
+    conversationHistory.map((message, index) => (
      <Paper key={index} elevation={0} sx={{ p: 1.5, mb: 1.5, backgroundColor: 'transparent' }}>
-      <Typography variant="body2" sx={{ fontWeight: 'bold', color: (theme) => theme.palette.primary.dark }}>
-       You (Turn {entry.turnNumber}):
-      </Typography>
-      <Typography variant="body1" sx={{ mb: 1 }}>
-       {entry.userInput}
-      </Typography>
-      {/* MODIFIED: Check for entry.prose instead of entry.narratorOutput */}
-      {entry.prose && (
+      {message.role === 'user' ? (
+       <>
+        <Typography variant="body2" sx={{ fontWeight: 'bold', color: (theme) => theme.palette.primary.dark }}>
+         You:
+        </Typography>
+        <Typography variant="body1" sx={{ mb: 1 }}>
+         {message.content}
+        </Typography>
+       </>
+      ) : message.role === 'assistant' ? (
        <>
         <Typography variant="body2" sx={{ fontWeight: 'bold', color: (theme) => theme.palette.secondary.dark }}>
          AI Narrator:
         </Typography>
         <Typography variant="body1">
-         {/* MODIFIED: Display the clean prose. Fallback to raw output if prose is missing (for older data). */}
-         {entry.prose || entry.narratorOutput}
+         {message.content}
         </Typography>
        </>
-      )}
+        ) : null}
      </Paper>
     ))
    )}

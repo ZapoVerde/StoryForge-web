@@ -92,13 +92,22 @@ class FirestoreGameRepository implements IGameRepository {
   }
 
   // Helper to convert Firestore Timestamp to ISO string
-  private convertTimestamps<T extends { createdAt?: string | Timestamp; updatedAt?: string | Timestamp; lastUpdated?: string | Timestamp }>(data: any): T {
-    return {
-      ...data,
-      createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate().toISOString() : data.createdAt,
-      updatedAt: data.updatedAt instanceof Timestamp ? data.updatedAt.toDate().toISOString() : data.updatedAt,
-      lastUpdated: data.lastUpdated instanceof Timestamp ? data.lastUpdated.toDate().toISOString() : data.lastUpdated,
-    } as T;
+  private convertTimestamps<T extends { createdAt?: any; updatedAt?: any; lastUpdated?: any }>(data: any): T {
+    const convertedData: any = { ...data };
+
+    if (data.createdAt && data.createdAt instanceof Timestamp) {
+      convertedData.createdAt = data.createdAt.toDate().toISOString();
+    }
+    if (data.updatedAt && data.updatedAt instanceof Timestamp) {
+      convertedData.updatedAt = data.updatedAt.toDate().toISOString();
+    }
+    // This is the specific field causing the error. 
+    // Only convert it if it exists on the source object.
+    if (data.lastUpdated && data.lastUpdated instanceof Timestamp) {
+      convertedData.lastUpdated = data.lastUpdated.toDate().toISOString();
+    }
+    
+    return convertedData as T;
   }
 
   async saveGameSnapshot(userId: string, snapshot: GameSnapshot): Promise<void> {
