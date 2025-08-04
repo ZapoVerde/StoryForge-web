@@ -42,6 +42,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
     gameError,
     processPlayerAction,
     updateNarratorInputText,
+    processFirstNarratorTurn,
     updateNarratorScrollPosition,
   } = useGameStateStore();
 
@@ -51,6 +52,8 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
   const [snackbarSeverity, setSnackbarSeverity] = React.useState<'success' | 'error' | 'info' | 'warning'>('info');
 
   const logRef = useRef<HTMLDivElement>(null);
+  // Ref to track if the initial turn has been processed for the current snapshot
+  const initialTurnTriggeredForSnapshot = useRef<string | null>(null);
 
   // Define handleGoToLogin ONCE, here at the top, after hooks.
   const handleGoToLogin = () => {
@@ -98,6 +101,27 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
       logRef.current.scrollTop = logRef.current.scrollHeight;
     }
   }, [conversationHistory]);
+
+  // NEW useEffect to trigger the first turn AI response
+  useEffect(() => {
+    if (!currentSnapshot) {
+      return;
+    }
+
+    // This effect runs when the component mounts or the snapshot changes.
+    // It checks if it's the very beginning of a new game.
+    if (
+      initialTurnTriggeredForSnapshot.current !== currentSnapshot.id && // Check the flag for the current game
+      currentSnapshot.currentTurn === 0 &&
+      currentSnapshot.conversationHistory?.length === 1 && // Only the intro text exists
+      !gameLoading // Don't run if another process is already loading
+    ) {
+      // Set the flag *before* dispatching the action to prevent re-entry
+      initialTurnTriggeredForSnapshot.current = currentSnapshot.id;
+      console.log("GameScreen: Detected start of Turn 0. Triggering narrator's first response.");
+      processFirstNarratorTurn();
+    }
+  }, [currentSnapshot, gameLoading, processFirstNarratorTurn]);
 
   // Effect to restore scroll position from store (on component mount/unmount)
   useEffect(() => {

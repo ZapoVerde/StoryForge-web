@@ -30,6 +30,7 @@ interface GameStateStore {
   // Actions
   initializeGame: (userId: string, cardId: string, existingSnapshotId?: string) => Promise<void>;
   processPlayerAction: (action: string) => Promise<void>;
+  processFirstNarratorTurn: () => Promise<void>;
   saveGame: () => Promise<void>;
   loadGame: (userId: string, snapshotId: string) => Promise<void>;
   loadLastActiveGame: (userId: string) => Promise<boolean>; // NEW: Load the most recent game
@@ -108,6 +109,37 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
     } catch (error: any) {
       console.error("GameStateStore: Error in initializeGame action:", error);
       set({ gameError: error.message, gameLoading: false });
+    }
+  },
+
+  processFirstNarratorTurn: async () => {
+    const gameSessionInstance = window.gameSessionInstance;
+    if (!gameSessionInstance) {
+      set({ gameError: "Game session not initialized.", gameLoading: false });
+      return;
+    }
+    set({ gameLoading: true, gameError: null });
+
+    const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
+
+    try {
+      // This method will now update the internal snapshot and save it.
+      await gameSessionInstance.processFirstTurn(useDummyNarrator);
+
+      // After it's done, we get the updated snapshot and set our state
+      const updatedSnapshot = gameSessionInstance.getCurrentGameSnapshot();
+      if (updatedSnapshot) {
+        set({
+          currentSnapshot: updatedSnapshot,
+          currentGameState: updatedSnapshot.gameState,
+          gameLogs: updatedSnapshot.logs,
+          conversationHistory: updatedSnapshot.conversationHistory,
+        });
+      }
+      set({ gameLoading: false });
+    } catch (error: any) {
+      set({ gameError: error.message, gameLoading: false });
+      console.error("Error processing first narrator turn:", error);
     }
   },
 
