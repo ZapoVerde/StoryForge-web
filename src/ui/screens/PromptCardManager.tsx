@@ -349,12 +349,17 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
               promptCards.map((card) => (
                 <ListItem
                   key={card.id}
-                  button
-                  component="li"
                   selected={activePromptCard?.id === card.id}
                   onClick={() => handleCardSelect(card)}
-                  sx={{ py: 1, pr: 0 }}
-                >
+                  sx={{ 
+                      py: 1, 
+                      pr: 0, 
+                      cursor: 'pointer', // Add cursor to show it's clickable
+                      '&:hover': {
+                          backgroundColor: 'action.hover'
+                      }
+                  }}
+              >
                   <ListItemText
                     primary={card.title}
                     secondary={card.description || 'No description'}

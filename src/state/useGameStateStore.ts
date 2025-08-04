@@ -67,26 +67,33 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   initializeGame: async (userId, cardId, existingSnapshotId) => {
     console.log('GameStateStore: initializeGame action started.');
     set({ gameLoading: true, gameError: null });
+
+    // *** MODIFICATION START ***
+    // Get the dummy narrator setting from the settings store
+    const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
+    // *** MODIFICATION END ***
+
     try {
-      // Access gameSessionInstance directly here to ensure latest reference
       const gameSessionInstance = window.gameSessionInstance;
       if (!gameSessionInstance) {
-          throw new Error("Game session instance not found on window. Ensure main.tsx has initialized it.");
+        throw new Error("Game session instance not found on window. Ensure main.tsx has initialized it.");
       }
 
       console.log('GameStateStore: Calling gameSession.initializeGame...');
-      await gameSessionInstance.initializeGame(userId, cardId, existingSnapshotId);
+      
+      // *** MODIFICATION START ***
+      // Pass the useDummyNarrator flag to the game session
+      await gameSessionInstance.initializeGame(userId, cardId, existingSnapshotId, useDummyNarrator);
+      // *** MODIFICATION END ***
+      
       console.log('GameStateStore: gameSession.initializeGame completed.');
-
-      console.log('GameStateStore: DIRECT INSPECTION of gameSession instance:', gameSessionInstance);
 
       const snapshot = gameSessionInstance.getCurrentGameSnapshot();
       console.log('GameStateStore: Retrieved snapshot from gameSession:', snapshot);
-
       if (snapshot) {
         set({
           currentSnapshot: snapshot,
-          currentPromptCardId: snapshot.promptCardId, // Use snapshot's ID for consistency
+          currentPromptCardId: snapshot.promptCardId,
           currentGameState: snapshot.gameState,
           gameLogs: snapshot.logs || [],
           conversationHistory: snapshot.conversationHistory || [],

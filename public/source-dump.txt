@@ -1570,8 +1570,15 @@ class DummyAiClient implements IAiClient {
     const dummyResponse = {
       choices: [{
         message: {
-          content: `@delta\n{"=player.hp": 99, "+player.gold": 1}\n@digest\n{"text": "A dummy event occurred.", "importance": 3}\n{"text": "Your input was: '${lastUserMessage}'.", "importance": 1}\n@scene\n{"location": "dummy_location", "present": []}\n` +
-          `The dummy narrator responds to your action: "${lastUserMessage}". A gentle breeze rustles through the imaginary trees, and you feel slightly less real. Your health is now 99, and you found 1 gold coin.`
+          content: `@delta
+{"=player.hp": 99, "+player.gold": 1}
+@digest
+{"text": "A dummy event occurred.", "importance": 3}
+{"text": "Your input was: '$'.", "importance": 1}
+@scene
+{"location": "dummy_location", "present": []}
+` +
+            `The dummy narrator responds to your action: "$". A gentle breeze rustles through the imaginary trees, and you feel slightly less real. Your health is now 99, and you found 1 gold coin.`
         }
       }],
       usage: {
@@ -1628,7 +1635,7 @@ export interface IGameSession {
    * @param snapshotId The ID of the snapshot to load.
    * @returns A Promise resolving when the game is loaded.
    */
-  loadGame(userId: string, snapshotId: string): Promise<void>; 
+  loadGame(userId: string, snapshotId: string): Promise<void>;
 
   /**
    * Provides access to the current PromptCard for UI purposes.
@@ -1652,106 +1659,174 @@ export interface IGameSession {
 export class GameSession implements IGameSession { // Export the class
   private currentUserId: string | null = null;
   private currentSnapshot: GameSnapshot | null = null;
-  private currentPromptCard: PromptCard | null = null; // Store active card to avoid re-fetching
-
-  // Store the real AI client and a dummy one
+  private currentPromptCard: PromptCard | null = null;
   private realAiClient: IAiClient;
-  private dummyAiClient: IAiClient = new DummyAiClient(); // Instantiate dummy client
+  private dummyAiClient: IAiClient = new DummyAiClient();
 
   constructor(
     private cardRepo: IPromptCardRepository,
     private gameRepo: IGameRepository,
     private builder: IPromptBuilder,
-    aiClientInstance: IAiClient, // Receive the real AI client here
+    aiClientInstance: IAiClient,
     private logManager: ILogManager,
   ) {
     this.realAiClient = aiClientInstance;
   }
 
-  async initializeGame(userId: string, cardId: string, existingSnapshotId?: string): Promise<void> {
+  // *** NEW METHOD: processFirstTurn ***
+  /**
+   * Processes the very first turn of the game (Turn 0), which is driven by the AI.
+   * This method builds the initial prompt, calls the AI, and creates the first log entry.
+   * @param useDummyNarrator Flag to indicate if the dummy AI should be used.
+   */
+  public async processFirstTurn(useDummyNarrator: boolean): Promise<void> {
+    if (!this.currentSnapshot || !this.currentUserId || !this.currentPromptCard) {
+      throw new Error("Cannot process first turn: Game not initialized correctly.");
+    }
+    console.log("GameSession: Processing first turn (Turn 0)...");
+
+    const snapshot = this.currentSnapshot;
+    const card = this.currentPromptCard;
+    const userId = this.currentUserId;
+    const turnNumber = 0;
+    const userInputForLog = card.firstTurnOnlyBlock || "Begin the story."; // The "input" for this turn.
+
+    // 1. Build the special first-turn prompt
+    const messagesToSend = this.builder.buildFirstTurnPrompt(card);
+    const contextSnapshotForLog = JSON.stringify(messagesToSend, null, 2);
+
+    // 2. Execute AI call and get response (logic is similar to processPlayerAction)
+    let aiRawOutput: string = "";
+    let aiResponseLatencyMs: number | null = null;
+    let aiModelSlugUsed: string = "";
+    let aiApiUrl: string | null = null;
+    let aiApiRequestBody: string | null = JSON.stringify({ model: card.aiSettings.selectedConnectionId, messages: "..." }, null, 2); // Placeholder for request body
+    let aiApiResponseBody: string | null = null; // Placeholder for response body
+    let aiTokenUsage: any = null;
+
+    try {
+      const activeAiClient = useDummyNarrator ? this.dummyAiClient : this.realAiClient;
+
+      let connection: AiConnection | undefined;
+      if (!useDummyNarrator) {
+        const connections = await this.gameRepo.getAiConnections(userId);
+        connection = connections.find(c => c.id === card.aiSettings.selectedConnectionId);
+        if (!connection) {
+          throw new Error(`AI connection ${card.aiSettings.selectedConnectionId} not found.`);
+        }
+        aiModelSlugUsed = connection.modelSlug;
+        aiApiUrl = new URL("chat/completions", connection.apiUrl).href;
+      } else {
+        connection = {
+          id: 'dummy', displayName: 'Dummy Narrator', modelName: 'Dummy', modelSlug: 'dummy-narrator',
+          apiUrl: 'n/a', apiToken: 'n/a', functionCallingEnabled: false, createdAt: '', lastUpdated: ''
+        };
+        aiModelSlugUsed = 'dummy-narrator';
+        aiApiUrl = 'local-dummy-url';
+      }
+
+      const startTime = performance.now();
+      const fullAiResponse = await activeAiClient.generateCompletion(connection, messagesToSend, card.aiSettings);
+      aiResponseLatencyMs = Math.round(performance.now() - startTime);
+
+      let parsedAiJson;
+      try {
+        parsedAiJson = JSON.parse(fullAiResponse);
+        aiRawOutput = parsedAiJson.choices?.[0]?.message?.content?.trim() || "";
+        aiTokenUsage = parsedAiJson.usage ? {
+          inputTokens: parsedAiJson.usage.prompt_tokens || 0,
+          outputTokens: parsedAiJson.usage.completion_tokens || 0,
+          totalTokens: parsedAiJson.usage.total_tokens || 0,
+        } : null;
+        aiApiResponseBody = fullAiResponse; // Assign the full response to the variable
+      } catch (parseError) {
+        aiRawOutput = fullAiResponse;
+        aiApiResponseBody = fullAiResponse; // Assign the full response if parsing fails
+      }
+    } catch (e: any) {
+      console.error("First turn AI call failed:", e);
+      aiRawOutput = `AI system error during initialization: ${e.message}. The story cannot begin. Please check your AI settings and try again.`;
+      // The error will be logged and shown to the user.
+    }
+
+    // 3. Process AI output
+    const parsedAiOutput = this.builder.parseNarratorOutput(aiRawOutput);
+
+    // 4. Update Game State
+    snapshot.conversationHistory.push({ role: 'assistant', content: parsedAiOutput.prose });
+    snapshot.gameState.narration = parsedAiOutput.prose;
+
+    if (parsedAiOutput.deltas) {
+      this.applyDeltasToGameState(snapshot.gameState, parsedAiOutput.deltas);
+    }
+    this.updateSceneState(snapshot.gameState.scene, parsedAiOutput.scene, parsedAiOutput.deltas, snapshot.gameState.worldState);
+
+    // 5. Create LogEntry
+    const newLogEntry = this.logManager.assembleTurnLogEntry({
+      turnNumber: turnNumber,
+      userInput: userInputForLog,
+      rawNarratorOutput: aiRawOutput,
+      parsedOutput: parsedAiOutput,
+      contextSnapshot: contextSnapshotForLog,
+      tokenUsage: aiTokenUsage,
+      aiSettings: card.aiSettings,
+      apiRequestBody: aiApiRequestBody, // Corrected variable name
+      apiResponseBody: aiApiResponseBody, // Corrected variable name
+      apiUrl: aiApiUrl,
+      latencyMs: aiResponseLatencyMs,
+      modelSlugUsed: aiModelSlugUsed,
+    });
+    snapshot.logs.push(newLogEntry);
+
+    // 6. Update snapshot metadata
+    snapshot.currentTurn = turnNumber;
+    snapshot.updatedAt = new Date().toISOString();
+
+    // 7. Save the fully initialized snapshot
+    await this.saveGame(snapshot);
+    console.log("GameSession: First turn processed and saved. Snapshot ID:", snapshot.id);
+  }
+
+  // *** UPDATED METHOD: initializeGame ***
+  async initializeGame(userId: string, cardId: string, existingSnapshotId?: string, useDummyNarrator: boolean = false): Promise<void> {
     this.currentUserId = userId;
-    console.log(`GameSession: Initializing game for user ${userId} with card ${cardId}. Existing Snapshot ID: ${existingSnapshotId || 'None'}`);
+    console.log(`GameSession: Initializing game for user $ with card $. Existing Snapshot ID: ${existingSnapshotId || 'None'}`);
 
     const card = await this.cardRepo.getPromptCard(userId, cardId);
     if (!card) {
-      console.error(`GameSession: PromptCard with ID ${cardId} not found for user ${userId}.`);
-      throw new Error(`PromptCard with ID ${cardId} not found for user ${userId}. Cannot start game.`);
+      console.error(`GameSession: PromptCard with ID $ not found for user $.`);
+      throw new Error(`PromptCard with ID $ not found for user $. Cannot start game.`);
     }
     this.currentPromptCard = card;
     console.log(`GameSession: PromptCard "${card.title}" loaded.`);
 
-
     if (existingSnapshotId) {
-      console.log(`GameSession: Attempting to load existing snapshot ${existingSnapshotId}...`);
-      const snapshot = await this.gameRepo.getGameSnapshot(userId, existingSnapshotId);
-      if (!snapshot) {
-        console.error(`GameSession: Game snapshot with ID ${existingSnapshotId} not found for user ${userId}.`);
-        throw new Error(`Game snapshot with ID ${existingSnapshotId} not found for user ${userId}.`);
-      }
-      this.currentSnapshot = snapshot;
-      console.log(`GameSession: Loaded existing game snapshot: ${snapshot.id}. Current turn: ${snapshot.currentTurn}`);
+      // Loading an existing game remains the same
+      console.log(`GameSession: Attempting to load existing snapshot $...`);
+      await this.loadGame(userId, existingSnapshotId);
     } else {
+      // This is the new, improved flow for starting a new game
       console.log('GameSession: Starting a new game...');
       const newSnapshotId = generateUuid();
       const now = new Date().toISOString();
-      // Generate a title for the new game snapshot
       const gameTitle = `${card.title} - ${formatIsoDateForDisplay(now)}`;
 
       const initialGameState: GameState = {
-        narration: "A new adventure begins...",
+        narration: "Initializing your adventure...", // This is a temporary message
         worldState: {},
         scene: { location: null, present: [] },
       };
 
-      let initialDeltas: DeltaMap = {};
-
       if (card.worldStateInit && card.worldStateInit.trim().length > 0) {
         try {
-          const parsedInit = JSON.parse(card.worldStateInit);
-          if (typeof parsedInit === 'object' && parsedInit !== null && !Array.isArray(parsedInit)) {
-            initialGameState.worldState = parsedInit;
-            console.log("GameSession: Applied initial worldState from PromptCard.");
-
-            for (const key in parsedInit) {
-                if (Object.prototype.hasOwnProperty.call(parsedInit, key)) {
-                    initialDeltas[`!${key}`] = { op: 'declare', key: key, value: parsedInit[key] };
-                }
-            }
-            console.log("GameSession: Generated initial deltas from worldStateInit:", initialDeltas);
-
-          } else {
-            console.warn("GameSession: PromptCard worldStateInit is not a valid JSON object, ignoring:", card.worldStateInit);
-          }
+          initialGameState.worldState = JSON.parse(card.worldStateInit);
+          console.log("GameSession: Applied initial worldState from PromptCard.");
         } catch (e) {
           console.error("GameSession: Failed to parse PromptCard worldStateInit JSON:", e);
         }
       }
 
-      // Fetch the selected AI connection to populate initial log details
-      let initialConnection: AiConnection | undefined;
-      try {
-          const connections = await this.gameRepo.getAiConnections(userId);
-          initialConnection = connections.find(c => c.id === card.aiSettings.selectedConnectionId);
-          if (!initialConnection) {
-              console.warn(`GameSession: Initial AI connection ${card.aiSettings.selectedConnectionId} not found. Using default/empty values for initial log.`);
-              initialConnection = {
-                  id: 'unknown', displayName: 'Unknown Connection', modelName: 'Unknown', modelSlug: 'unknown',
-                  apiUrl: 'N/A', apiToken: 'N/A', functionCallingEnabled: false, createdAt: '', lastUpdated: ''
-              };
-          }
-      } catch (e) {
-          console.error("GameSession: Error fetching AI connections during initialization:", e);
-          initialConnection = {
-              id: 'error', displayName: 'Error Fetching', modelName: 'Error', modelSlug: 'error',
-              apiUrl: 'Error', apiToken: 'Error', functionCallingEnabled: false, createdAt: '', lastUpdated: ''
-          };
-      }
-
-
-      // Build the prompt for the first turn to capture its context
-      const firstTurnPromptMessages = this.builder.buildFirstTurnPrompt(card);
-      const initialContextSnapshot = JSON.stringify(firstTurnPromptMessages, null, 2); // Pretty print for log readability
-
+      // Create a temporary snapshot object in memory. It will be finalized and saved by processFirstTurn.
       this.currentSnapshot = {
         id: newSnapshotId,
         userId: userId,
@@ -1759,255 +1834,93 @@ export class GameSession implements IGameSession { // Export the class
         title: gameTitle,
         createdAt: now,
         updatedAt: now,
-        currentTurn: 0,
+        currentTurn: -1, // Start at -1. processFirstTurn will set it to 0.
         gameState: initialGameState,
-        // MODIFIED: Start conversation history with the initial narration.
-        conversationHistory: [{ role: 'assistant', content: initialGameState.narration }],
-        logs: [],
+        conversationHistory: [], // Start empty. The AI's response will be the first entry.
+        logs: [], // Start with empty logs.
         worldStatePinnedKeys: [],
       };
-      console.log(`GameSession: Initialized new game snapshot with ID: ${newSnapshotId}. Title: "${gameTitle}".`);
 
-      const initialLogEntry = this.logManager.assembleTurnLogEntry({
-          turnNumber: 0,
-          userInput: "Game Initialized",
-          rawNarratorOutput: initialGameState.narration,
-          parsedOutput: {
-              prose: initialGameState.narration,
-              deltas: initialDeltas,
-              digestLines: this.logManager.inferDigestLinesFromDeltas(initialDeltas, initialGameState.narration),
-              scene: initialGameState.scene,
-          },
-          contextSnapshot: initialContextSnapshot, // Use the actual first turn prompt
-          tokenUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-          aiSettings: card.aiSettings,
-          apiRequestBody: null,
-          apiResponseBody: null,
-          apiUrl: initialConnection.apiUrl, // Use configured API URL
-          latencyMs: null,
-          modelSlugUsed: initialConnection.modelSlug, // Use configured model slug
-      });
-      this.currentSnapshot.logs.push(initialLogEntry);
-      console.log(`GameSession: Added initial log entry for turn 0.`);
+      console.log(`GameSession: Created temporary snapshot ${this.currentSnapshot.id}. Now processing first turn...`);
 
+      // Now, execute the first AI turn to get the actual starting narration.
       try {
-          console.log(`GameSession: Attempting to save new game snapshot ${newSnapshotId} to Firestore.`);
-          await this.gameRepo.saveGameSnapshot(userId, this.currentSnapshot);
-          console.log(`GameSession: New game snapshot ${newSnapshotId} successfully saved to Firestore.`);
-      } catch (saveError) {
-          console.error(`GameSession: Failed to save new game snapshot ${newSnapshotId} to Firestore:`, saveError);
-          throw new Error(`Failed to save initial game snapshot: ${saveError instanceof Error ? saveError.message : 'Unknown error'}`);
+        await this.processFirstTurn(useDummyNarrator);
+        console.log("GameSession: First turn processed successfully during initialization.");
+      } catch (initError) {
+        console.error("GameSession: FAILED to process the first turn during initialization:", initError);
+        throw new Error(`Failed to initialize the game with the AI: ${initError instanceof Error ? initError.message : 'Unknown error'}`);
       }
     }
+
     console.log(`GameSession: Initialization complete. currentSnapshot is now set to ${this.currentSnapshot?.id}.`);
   }
 
-  async processPlayerAction(action: string, useDummyNarrator: boolean): Promise<{ aiProse: string; newLogEntries: LogEntry[]; updatedSnapshot: GameSnapshot }> { // Added useDummyNarrator
-    if (!this.currentSnapshot || !this.currentUserId || !this.currentPromptCard) {
-      throw new Error("Game not initialized. Call initializeGame first.");
+  // *** NEWLY IMPLEMENTED METHOD: loadGame ***
+  /**
+   * Loads an existing game snapshot and its associated prompt card into the session.
+   * @param userId The ID of the user owning the game.
+   * @param snapshotId The ID of the game snapshot to load.
+   */
+  public async loadGame(userId: string, snapshotId: string): Promise<void> {
+    console.log(`GameSession: Loading game snapshot ID ${snapshotId} for user ${userId}.`);
+
+    // 1. Fetch the game snapshot from the repository.
+    const snapshot = await this.gameRepo.getGameSnapshot(userId, snapshotId);
+    if (!snapshot) {
+      throw new Error(`Game snapshot with ID ${snapshotId} not found for user ${userId}.`);
     }
-    const userId = this.currentUserId;
-    const currentSnapshot = this.currentSnapshot;
-    const promptCard = this.currentPromptCard; // Use the stored prompt card
 
-    const nextTurnNumber = currentSnapshot.currentTurn + 1;
+    // 2. Fetch the associated prompt card.
+    const card = await this.cardRepo.getPromptCard(userId, snapshot.promptCardId);
+    if (!card) {
+      throw new Error(`Associated PromptCard with ID ${snapshot.promptCardId} not found for snapshot ${snapshotId}.`);
+    }
 
-    // 1. Build prompt for AI (including dynamic context)
-    const messagesToSend: Message[] = this.builder.buildEveryTurnPrompt(
-      promptCard,
-      currentSnapshot.gameState,
-      currentSnapshot.logs,
-      currentSnapshot.conversationHistory, // Pass conversation history
-      action, // Pass current user action
-      nextTurnNumber // Pass current turn number
-    );
+    // 3. Set the internal state of the session.
+    this.currentUserId = userId;
+    this.currentSnapshot = snapshot;
+    this.currentPromptCard = card;
 
-  // MODIFIED: Create a cleaned request body for logging
-  const requestBodyForApi = {
-    model: promptCard.aiSettings.selectedConnectionId, // Placeholder; actual model slug comes from AiConnection
-    messages: messagesToSend.map(m => ({ role: m.role, content: m.content }))
-  };
-  const requestBodyForLog = { ...requestBodyForApi };
-  delete (requestBodyForLog as any).messages; // Remove messages for cleaner log
+    console.log(`GameSession: Successfully loaded game "${snapshot.title}" and card "${card.title}".`);
+  }
 
-  let aiRawOutput: string = "";
-  let aiResponseLatencyMs: number | null = null;
-  let aiModelSlugUsed: string = "";
-  let aiApiUrl: string | null = null;
-  // MODIFIED: Use the cleaned request body for the log
-  let aiApiRequestBody: string | null = JSON.stringify(requestBodyForLog, null, 2);
-  let aiApiResponseBody: string | null = null;
-  let aiTokenUsage: any = null;
+  /**
+ * Retrieves the current game state snapshot held by the session.
+ * @returns The current GameSnapshot or null if not initialized.
+ */
+public getCurrentGameSnapshot(): GameSnapshot | null {
+    return this.currentSnapshot;
+}
+
+
+  /**
+ * Saves the current game state to the repository.
+ * @param snapshot The GameSnapshot object to save.
+ * @returns A Promise resolving when the game is saved.
+ */
+public async saveGame(snapshot: GameSnapshot): Promise<void> {
+    if (!this.currentUserId) {
+        console.error("GameSession: Cannot save game because userId is not set.");
+        throw new Error("User is not initialized in the game session.");
+    }
+    if (!snapshot) {
+        console.warn("GameSession: saveGame was called with an empty snapshot.");
+        return;
+    }
 
     try {
-        const activeAiClient = useDummyNarrator ? this.dummyAiClient : this.realAiClient; // Choose AI client
-        let connection: AiConnection | undefined;
-
-        if (!useDummyNarrator) { // Only fetch real connection for real AI
-            connection = (await this.gameRepo.getAiConnections(userId)).find(c => c.id === promptCard.aiSettings.selectedConnectionId);
-            if (!connection) {
-                throw new Error(`AI connection ${promptCard.aiSettings.selectedConnectionId} not found.`);
-            }
-            aiModelSlugUsed = connection.modelSlug;
-            aiApiUrl = new URL("chat/completions", connection.apiUrl).href;
-        } else {
-            // Dummy connection details for logging
-            connection = {
-                id: 'dummy', displayName: 'Dummy Narrator', modelName: 'Dummy', modelSlug: 'dummy',
-                apiUrl: 'n/a', apiToken: 'n/a', functionCallingEnabled: false, createdAt: '', lastUpdated: ''
-            };
-            aiModelSlugUsed = 'dummy-narrator';
-            aiApiUrl = 'local-dummy-url';
-            aiApiRequestBody = "Dummy Request";
-        }
-
-        const startTime = performance.now();
-        // CALL TO AI CLIENT - will now return full response with token usage
-        const fullAiResponse = await activeAiClient.generateCompletion(
-            connection, // Pass the connection (even dummy one)
-            messagesToSend,
-            promptCard.aiSettings
-        );
-        aiResponseLatencyMs = Math.round(performance.now() - startTime);
-
-        let parsedAiJson;
-        try {
-            parsedAiJson = JSON.parse(fullAiResponse); // Attempt to parse if it's JSON string
-            aiRawOutput = parsedAiJson.choices?.[0]?.message?.content?.trim() || "";
-            // Extract token usage if available in the parsed JSON
-            aiTokenUsage = parsedAiJson.usage ? {
-                inputTokens: parsedAiJson.usage.prompt_tokens || 0,
-                outputTokens: parsedAiJson.usage.completion_tokens || 0,
-                totalTokens: parsedAiJson.usage.total_tokens || 0,
-                // cachedTokens: ... if your API provides this
-            } : null;
-            aiApiResponseBody = fullAiResponse; // Store raw response body
-        } catch (parseError) {
-            // If it's not JSON, assume it's just the content string directly
-            aiRawOutput = fullAiResponse;
-            aiApiResponseBody = fullAiResponse; // Store raw response body
-            console.warn("AI Client returned non-JSON string or malformed JSON. Assuming raw content.", parseError);
-        }
-
-        // Update conversation history with user message
-        currentSnapshot.conversationHistory.push({ role: 'user', content: action });
-
-    } catch (e: any) {
-        console.error("AI call failed:", e);
-        // Fallback or error handling
-        aiRawOutput = `AI system error: ${e.message}. Please try again or check settings.`;
-        // Update conversation history with assistant error message
-        currentSnapshot.conversationHistory.push({ role: 'assistant', content: aiRawOutput });
-        throw e; // Re-throw to indicate failure
+        // Use the game repository to persist the snapshot
+        await this.gameRepo.saveGameSnapshot(this.currentUserId, snapshot);
+        console.log(`GameSession: Successfully saved snapshot ${snapshot.id}.`);
+    } catch (e) {
+        console.error(`GameSession: An error occurred while saving snapshot ${snapshot.id}.`, e);
+        // Re-throw the error to be caught by the caller (e.g., the UI layer)
+        throw e;
     }
-
-    // 2. Process AI output with deltaParser
-    const parsedAiOutput = this.builder.parseNarratorOutput(aiRawOutput);
-
-    // Update conversation history with AI assistant response
-    currentSnapshot.conversationHistory.push({ role: 'assistant', content: parsedAiOutput.prose });
+}
 
 
-    // 3. Update Game State with deltas (Replicates GameState.applyDeltas)
-    const updatedGameState: GameState = { ...currentSnapshot.gameState };
-    if (parsedAiOutput.deltas) {
-      this.applyDeltasToGameState(updatedGameState, parsedAiOutput.deltas);
-    }
-    // Update SceneState based on parsed @scene block or deltas (Replicates SceneManager)
-    this.updateSceneState(updatedGameState.scene, parsedAiOutput.scene, parsedAiOutput.deltas, updatedGameState.worldState);
-
-
-    // 4. Create new LogEntry (Replicates TurnLogAssembler & DigestManager.addParsedLines)
-    const newLogEntry: LogEntry = this.logManager.assembleTurnLogEntry({
-      turnNumber: nextTurnNumber,
-      userInput: action,
-      rawNarratorOutput: aiRawOutput,
-      parsedOutput: parsedAiOutput,
-      contextSnapshot: JSON.stringify(messagesToSend), // Stringify the full messages array for context log
-      tokenUsage: aiTokenUsage,
-      aiSettings: promptCard.aiSettings,
-      apiRequestBody: aiApiRequestBody,
-      apiResponseBody: aiApiResponseBody, // Use captured response body
-      apiUrl: aiApiUrl,
-      latencyMs: aiResponseLatencyMs,
-      modelSlugUsed: aiModelSlugUsed,
-    });
-    currentSnapshot.logs.push(newLogEntry);
-
-
-    // 5. Update snapshot metadata and save
-    currentSnapshot.gameState = updatedGameState;
-    currentSnapshot.currentTurn = nextTurnNumber;
-    currentSnapshot.updatedAt = new Date().toISOString();
-    // Title is set once during initialization, no need to update per turn.
-
-    await this.saveGame(this.currentSnapshot);  // Save the full snapshot
-
-    return {
-      aiProse: parsedAiOutput.prose,
-      newLogEntries: [newLogEntry], // Return just the new one for UI, but snapshot has all
-      updatedSnapshot: this.currentSnapshot,
-    };
-  }
-
-  getCurrentGameSnapshot(): GameSnapshot | null {
-    console.log('GameSession: getCurrentGameSnapshot called. Returning snapshot with ID:', this.currentSnapshot?.id || 'null');
-    return this.currentSnapshot;
-  }
-
-  getCurrentPromptCard(): PromptCard | null {
-    return this.currentPromptCard; // Return the stored active card
-  }
-
-  getCurrentGameState(): GameState | null {
-    return this.currentSnapshot ? this.currentSnapshot.gameState : null;
-  }
-
-  getGameLogs(): LogEntry[] {
-    return this.currentSnapshot ? this.currentSnapshot.logs : [];
-  }
-
-  async saveGame(snapshotToSave: GameSnapshot): Promise<void> {
-    if (!this.currentUserId || !snapshotToSave) { // Use the passed snapshot
-      console.warn("GameSession: Cannot save game: user not initialized or no snapshot provided.");
-      return;
-    }
-    console.log(`GameSession: Saving game snapshot ${snapshotToSave.id} for user ${this.currentUserId}.`);
-    // Use the snapshot passed as an argument, not this.currentSnapshot
-    await this.gameRepo.saveGameSnapshot(this.currentUserId, snapshotToSave);
-    console.log(`GameSession: Game snapshot ${snapshotToSave.id} saved successfully.`);
-  }
-
-  // MODIFIED: Added userId parameter to loadGame
-  public async loadGame(userId: string, snapshotId: string): Promise<void> {
-    if (!userId) { // Check the passed userId
-      throw new Error("Cannot load game: user not initialized."); // This is line 435 in your original console output
-    }
-    // IMPORTANT: Set the internal currentUserId here.
-    // This ensures that the GameSession instance always knows which user it's operating for.
-    this.currentUserId = userId;
-    
-    console.log(`GameSession: Attempting to load game snapshot ${snapshotId} for user ${this.currentUserId}.`);
-    
-    // MODIFIED: Use the passed userId to retrieve the snapshot from the repository
-    const snapshot = await this.gameRepo.getGameSnapshot(userId, snapshotId); 
-    if (!snapshot) {
-      console.error(`GameSession: Game snapshot ${snapshotId} not found for user ${userId}.`);
-      throw new Error(`Game snapshot ${snapshotId} not found for user ${userId}.`);
-    }
-    this.currentSnapshot = snapshot;
-    // Also load the associated PromptCard when a game is loaded
-    const card = await this.cardRepo.getPromptCard(userId, snapshot.promptCardId); // Use passed userId
-    if (!card) {
-        console.warn(`GameSession: PromptCard ${snapshot.promptCardId} for loaded game ${snapshotId} not found.`);
-        this.currentPromptCard = null;
-    } else {
-        this.currentPromptCard = card;
-        console.log(`GameSession: Associated PromptCard "${card.title}" loaded for snapshot ${snapshotId}.`);
-    }
-
-    console.log(`GameSession: Game snapshot ${snapshotId} loaded. Current turn: ${this.currentSnapshot.currentTurn}.`);
-  }
 
   /**
    * Applies DeltaInstruction objects to the game's worldState.
@@ -2042,7 +1955,7 @@ export class GameSession implements IGameSession { // Export the class
           const prevAddValue = typeof currentLevel[lastPart] === 'number' ? currentLevel[lastPart] : 0;
           const addValue = typeof instruction.value === 'number' ? instruction.value : 0;
           currentLevel[lastPart] = prevAddValue + addValue;
-          console.log(`GameSession: Delta ADD: ${instruction.key} from ${prevAddValue} to ${currentLevel[lastPart]}`);
+          console.log(`GameSession: Delta ADD: ${instruction.key} from $ to ${currentLevel[lastPart]}`);
           break;
         case 'assign':
           currentLevel[lastPart] = instruction.value;
@@ -2079,7 +1992,7 @@ export class GameSession implements IGameSession { // Export the class
     if (parsedScene) {
       if (parsedScene.location !== undefined) {
         newLocation = typeof parsedScene.location === 'string' ? parsedScene.location : null;
-        console.log(`GameSession: Scene updated by @scene block: location = ${newLocation}`);
+        console.log(`GameSession: Scene updated by @scene block: location = $`);
       }
       if (Array.isArray(parsedScene.present)) {
         newPresent = parsedScene.present.filter((item: any) => typeof item === 'string');
@@ -2101,13 +2014,13 @@ export class GameSession implements IGameSession { // Export the class
               // Check if the declared value has a 'tag' property indicative of character/location
               const valueObj = instruction.value as Record<string, any>;
               if (valueObj && (valueObj.tag === 'character' || valueObj.tag === 'location')) {
-                inferredPresent.add(`${category}.${entity}`);
-                console.log(`GameSession: Inferred present entity from delta: ${category}.${entity}`);
+                inferredPresent.add(`$.$`);
+                console.log(`GameSession: Inferred present entity from delta: $.$`);
               }
             }
             if (instruction.key === "world.location" && typeof instruction.value === 'string') {
               newLocation = instruction.value;
-              console.log(`GameSession: Inferred location from delta: ${newLocation}`);
+              console.log(`GameSession: Inferred location from delta: $`);
             }
           }
         }
@@ -2122,7 +2035,6 @@ export class GameSession implements IGameSession { // Export the class
 }
 
 // Export the GameSession class to be instantiated in main.tsx
-// REMOVED: export const gameSession = new GameSession(...);
 @@FILE: src/logic/logManager.ts
 // src/logic/logManager.ts
 
@@ -3311,26 +3223,33 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   initializeGame: async (userId, cardId, existingSnapshotId) => {
     console.log('GameStateStore: initializeGame action started.');
     set({ gameLoading: true, gameError: null });
+
+    // *** MODIFICATION START ***
+    // Get the dummy narrator setting from the settings store
+    const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
+    // *** MODIFICATION END ***
+
     try {
-      // Access gameSessionInstance directly here to ensure latest reference
       const gameSessionInstance = window.gameSessionInstance;
       if (!gameSessionInstance) {
-          throw new Error("Game session instance not found on window. Ensure main.tsx has initialized it.");
+        throw new Error("Game session instance not found on window. Ensure main.tsx has initialized it.");
       }
 
       console.log('GameStateStore: Calling gameSession.initializeGame...');
-      await gameSessionInstance.initializeGame(userId, cardId, existingSnapshotId);
+      
+      // *** MODIFICATION START ***
+      // Pass the useDummyNarrator flag to the game session
+      await gameSessionInstance.initializeGame(userId, cardId, existingSnapshotId, useDummyNarrator);
+      // *** MODIFICATION END ***
+      
       console.log('GameStateStore: gameSession.initializeGame completed.');
-
-      console.log('GameStateStore: DIRECT INSPECTION of gameSession instance:', gameSessionInstance);
 
       const snapshot = gameSessionInstance.getCurrentGameSnapshot();
       console.log('GameStateStore: Retrieved snapshot from gameSession:', snapshot);
-
       if (snapshot) {
         set({
           currentSnapshot: snapshot,
-          currentPromptCardId: snapshot.promptCardId, // Use snapshot's ID for consistency
+          currentPromptCardId: snapshot.promptCardId,
           currentGameState: snapshot.gameState,
           gameLogs: snapshot.logs || [],
           conversationHistory: snapshot.conversationHistory || [],
@@ -7146,12 +7065,17 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
               promptCards.map((card) => (
                 <ListItem
                   key={card.id}
-                  button
-                  component="li"
                   selected={activePromptCard?.id === card.id}
                   onClick={() => handleCardSelect(card)}
-                  sx={{ py: 1, pr: 0 }}
-                >
+                  sx={{ 
+                      py: 1, 
+                      pr: 0, 
+                      cursor: 'pointer', // Add cursor to show it's clickable
+                      '&:hover': {
+                          backgroundColor: 'action.hover'
+                      }
+                  }}
+              >
                   <ListItemText
                     primary={card.title}
                     secondary={card.description || 'No description'}
