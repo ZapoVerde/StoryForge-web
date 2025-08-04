@@ -31,7 +31,8 @@ interface GameStateStore {
   initializeGame: (userId: string, cardId: string, existingSnapshotId?: string) => Promise<void>;
   processPlayerAction: (action: string) => Promise<void>;
   saveGame: () => Promise<void>;
-  loadGame: (snapshotId: string) => Promise<void>;
+  loadGame: (userId: string, snapshotId: string) => Promise<void>;
+  loadLastActiveGame: (userId: string) => Promise<boolean>; // NEW: Load the most recent game
 
   // Pinning actions
   toggleWorldStatePin: (keyPath: string, type: PinToggleType) => void;
@@ -143,31 +144,32 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
     }
     const currentSnapshot = get().currentSnapshot;
     if (currentSnapshot) {
-        // Before saving, ensure the gameSession's internal snapshot reflects the current pinned keys from Zustand.
-        // This is important because `toggleWorldStatePin` directly updates the store's `currentSnapshot` object,
-        // but `gameSession` might not immediately reflect that change in its *own* internal `currentSnapshot`.
-        // A direct way to do this is to ensure `gameSession.currentSnapshot` is explicitly updated.
-        // For now, `processPlayerAction` already sets `gameSession.currentSnapshot = updatedSnapshot`,
-        // and `toggleWorldStatePin` also updates the `currentSnapshot` within the Zustand store.
-        // So, when `saveGame` is called, `gameSession.getCurrentGameSnapshot()` will return the
-        // Zustand-updated snapshot (if the reference is the same, which it is if Immer is used to update the whole object).
-        // To be explicit, we could pass the currentSnapshot:
-        // await gameSession.saveGame(currentSnapshot); // (Requires modifying IGameSession.saveGame)
-        // For now, relying on the fact that `currentSnapshot` in GameSession points to the same object as in store after updates.
+        // Before calling gameSession.saveGame, ensure the store's currentSnapshot
+        // has its `updatedAt` field up-to-date locally, even though Firestore's
+        // `serverTimestamp()` will overwrite it. This ensures consistency.
+        set(produce((state: GameStateStore) => {
+            if (state.currentSnapshot) {
+                state.currentSnapshot.updatedAt = new Date().toISOString();
+                // Ensure pinned keys are synced to the snapshot object
+                state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+            }
+        }));
         await gameSessionInstance.saveGame();
     } else {
         console.warn("No current snapshot to save.");
     }
   },
-  loadGame: async (snapshotId) => {
+
+  loadGame: async (userId, snapshotId) => {
     const gameSessionInstance = window.gameSessionInstance;
-    if (!gameSessionInstance || !get().currentUserId) {
+    if (!gameSessionInstance || !userId) {
         set({ gameError: "Game session not initialized or user not logged in.", gameLoading: false });
         return;
     }
     set({ gameLoading: true, gameError: null });
     try {
-      await gameSessionInstance.loadGame(snapshotId);
+      // Pass the userId to the session's loadGame method
+      await gameSessionInstance.loadGame(userId, snapshotId);
       const snapshot = gameSessionInstance.getCurrentGameSnapshot();
       if (snapshot) {
         set({
@@ -176,7 +178,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
           currentGameState: snapshot.gameState,
           gameLogs: snapshot.logs || [],
           conversationHistory: snapshot.conversationHistory || [],
-          worldStatePinnedKeys: snapshot.worldStatePinnedKeys || [], // Load pinned keys
+          worldStatePinnedKeys: snapshot.worldStatePinnedKeys || [],
         });
       }
       set({ gameLoading: false });
@@ -186,6 +188,46 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
     }
   },
 
+  // NEW: Action to load the last active game
+  loadLastActiveGame: async (userId: string): Promise<boolean> => {
+    set({ gameLoading: true, gameError: null });
+    try {
+        const gameSessionInstance = window.gameSessionInstance;
+        if (!gameSessionInstance) {
+            throw new Error("Game session instance not found on window.");
+        }
+
+        const allSnapshots = await (gameSessionInstance as any).gameRepo.getAllGameSnapshots(userId);
+        if (allSnapshots.length > 0) {
+            const lastActiveSnapshot = allSnapshots[0];
+            console.log(`GameStateStore: Found last active game: ${lastActiveSnapshot.id}. Loading...`);
+            // Pass the userId to the session's loadGame method
+            await gameSessionInstance.loadGame(userId, lastActiveSnapshot.id);
+            const loadedSnapshot = gameSessionInstance.getCurrentGameSnapshot();
+            if (loadedSnapshot) {
+                set({
+                    currentSnapshot: loadedSnapshot,
+                    currentPromptCardId: loadedSnapshot.promptCardId,
+                    currentGameState: loadedSnapshot.gameState,
+                    gameLogs: loadedSnapshot.logs || [],
+                    conversationHistory: loadedSnapshot.conversationHistory || [],
+                    worldStatePinnedKeys: loadedSnapshot.worldStatePinnedKeys || [],
+                });
+                console.log(`GameStateStore: Successfully loaded last active game: ${loadedSnapshot.id}`);
+                set({ gameLoading: false });
+                return true;
+            }
+        }
+        console.log("GameStateStore: No last active game found for user.");
+        set({ gameLoading: false, currentSnapshot: null, currentPromptCardId: null, currentGameState: null, gameLogs: [], conversationHistory: [], worldStatePinnedKeys: [] });
+        return false;
+    } catch (error: any) {
+        console.error("GameStateStore: Error loading last active game:", error);
+        set({ gameError: error.message, gameLoading: false });
+        return false;
+    }
+  },
+  
   toggleWorldStatePin: (keyPath: string, type: PinToggleType) => {
     set(produce((state: GameStateStore) => { // Use immer's produce for immutable updates
       const currentWorldState = state.currentGameState?.worldState || {};

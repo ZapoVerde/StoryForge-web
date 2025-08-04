@@ -29,20 +29,20 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import { useNavigate } from 'react-router-dom';
 
 import { usePromptCardStore } from '../../state/usePromptCardStore';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
-import { useSettingsStore } from '../../state/useSettingsStore'; // Import useSettingsStore to pass AI connections
+import { useSettingsStore } from '../../state/useSettingsStore';
 import { PromptCard, NewPromptCardData } from '../../models/index';
-import PromptCardEditor from './PromptCardEditor'; // Editor component
+import PromptCardEditor from './PromptCardEditor';
 
-import { // NEW: Import all default values
+import {
   DEFAULT_FIRST_TURN_PROMPT_BLOCK,
   DEFAULT_EMIT_SKELETON_STRING,
   defaultStackInstructions,
-  defaultAiSettingsInCard, // Although AI settings are merged in CardManager, it's good to be explicit here
+  defaultAiSettingsInCard,
 } from '../../data/config/promptCardDefaults';
 
 
@@ -68,27 +68,26 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
     exportPromptCard,
   } = usePromptCardStore();
   const { initializeGame } = useGameStateStore();
-  const { aiConnections, fetchAiConnections } = useSettingsStore(); // Get aiConnections from settings store
+  const { aiConnections, fetchAiConnections } = useSettingsStore();
 
   const [localEditedCard, setLocalEditedCard] = useState<PromptCard | null>(null);
   const [isCardDirty, setIsCardDirty] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveAsNewTitle, setSaveAsNewTitle] = useState('');
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
-  const [snackbarOpen, setSnackbarOpen] = useState(false); // Controlled open state for Snackbar
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'info' | 'warning'>('info');
 
   useEffect(() => {
     if (user?.uid) {
       fetchPromptCards(user.uid);
-      fetchAiConnections(user.uid); // Fetch AI connections here
+      fetchAiConnections(user.uid);
     }
-  }, [user?.uid, fetchPromptCards, fetchAiConnections]); // Depend on fetchAiConnections
+  }, [user?.uid, fetchPromptCards, fetchAiConnections]);
 
   useEffect(() => {
-    // Sync localEditedCard with activePromptCard
     setLocalEditedCard(activePromptCard ? { ...activePromptCard } : null);
-    setIsCardDirty(false); // Reset dirty state when active card changes
+    setIsCardDirty(false);
   }, [activePromptCard]);
 
   const showSnackbar = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
@@ -107,9 +106,7 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
 
   const handleCardSelect = (card: PromptCard) => {
     if (isCardDirty) {
-      // Potentially warn user about unsaved changes
       showSnackbar('Unsaved changes will be lost if you switch cards.', 'warning');
-      // For now, proceed directly, but a confirmation dialog could be added here.
     }
     setActivePromptCard(card);
   };
@@ -119,16 +116,14 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
       showSnackbar('Must be logged in to create a new card.', 'error');
       return;
     }
-    // Pre-select the default AI connection if available
     const defaultConnectionId = aiConnections.length > 0 ? aiConnections[0].id : "";
 
-    // NEW: Explicitly set all default values
     const newCardData: NewPromptCardData = {
       title: "New Prompt Card",
       prompt: "This is a new prompt card. Describe the setting and your character's starting situation.",
       description: null,
       firstTurnOnlyBlock: DEFAULT_FIRST_TURN_PROMPT_BLOCK,
-      stackInstructions: defaultStackInstructions, // Pass the object, cardManager will stringify
+      stackInstructions: defaultStackInstructions,
       emitSkeleton: DEFAULT_EMIT_SKELETON_STRING,
       worldStateInit: '',
       gameRules: '',
@@ -140,7 +135,7 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
         ...defaultAiSettingsInCard,
         selectedConnectionId: defaultConnectionId,
       },
-      isHelperAiEnabled: false, // NEW: Default to disabled
+      isHelperAiEnabled: false,
       tags: [],
       isExample: false,
       functionDefs: '',
@@ -166,16 +161,14 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
         const newCardData: NewPromptCardData = {
           ...localEditedCard,
           title: saveAsNewTitle || `${localEditedCard.title} (Copy)`,
-          // Explicitly clear ID, timestamps, ownerId, and lineage for a truly new copy
-          // These will be regenerated by `addPromptCard`
           id: '',
           rootId: '',
           parentId: null,
           createdAt: '',
           updatedAt: '',
-          ownerId: user.uid, // Ensure new owner is current user
-          isExample: false, // New copies are user-owned, not examples
-          isPublic: false, // New copies are private by default
+          ownerId: user.uid,
+          isExample: false,
+          isPublic: false,
         };
         savedCard = await addPromptCard(user.uid, newCardData);
       } else {
@@ -183,7 +176,7 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
       }
 
       if (savedCard) {
-        setActivePromptCard(savedCard); // Update active card to the newly saved/updated version
+        setActivePromptCard(savedCard);
         showSnackbar('Card saved successfully!', 'success');
       }
     } catch (e) {
@@ -203,28 +196,8 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
   };
 
   const handlePushToLive = () => {
-    // "Push to Live" simply means ensuring the currently displayed/edited card
-    // is the one set as the `activePromptCard` in the store.
-    // If localEditedCard is different from activePromptCard in the store,
-    // this action effectively "applies" the changes to the active card without saving to DB.
-    // Saving to DB is a separate step.
-    if (localEditedCard && activePromptCard?.id !== localEditedCard.id) {
-        // If they are editing a *different* card, setting it as active would switch context.
-        // This is usually implied by selecting from the left list.
-        // The "Push to Live" button generally means, "apply these *current edits*
-        // to the *currently active card* (which might be in the store as `activePromptCard`).
-        // It's more about local state consistency than DB save.
-        // Given the dirty state logic, this button would appear when `localEditedCard`
-        // is different from `activePromptCard`.
-        setActivePromptCard(localEditedCard);
-        setIsCardDirty(false);
-        showSnackbar('Changes applied to live editor view.', 'success');
-    } else if (localEditedCard && isCardDirty) {
-        // If it's the same card but dirty, just re-set it to mark it as clean (for the store's perspective)
-        // A save operation would typically make it non-dirty. This button might be redundant if
-        // the intent is always to save. Let's make it explicitly save as well to avoid confusion.
-        // Or, rename this button to "Save Changes" and remove `handleSaveCard(false)`
-        handleSaveCard(false); // Now "Push to Live" also saves
+    if (localEditedCard && isCardDirty) {
+        handleSaveCard(false);
     }
   };
 
@@ -251,26 +224,28 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
     }
   };
 
-const handleStartGame = async () => {
-  console.log('PromptCardManager: handleStartGame called. User:', user?.uid, 'Active Card:', activePromptCard?.id);
-  if (!user?.uid || !activePromptCard) {
-    // ...
-  }
-  if (isCardDirty) {
-    // ...
-  }
-  try {
-    console.log('PromptCardManager: Calling initializeGame...');
-    await initializeGame(user.uid, activePromptCard.id);
-    console.log('PromptCardManager: initializeGame AWAITED successfully. Now navigating to /game.');
-    showSnackbar('Game initialized! Navigating to game screen...', 'success');
-    navigate('/game');
-  }
-  catch (e: any) { // Ensure 'e' is typed as 'any'
-    console.error('PromptCardManager: Error during game initialization:', e);
-    showSnackbar(`Failed to start game: ${e.message || 'Unknown error'}`, 'error');
-  }
-};
+  const handleStartGame = async () => {
+    console.log('PromptCardManager: handleStartGame called. User:', user?.uid, 'Active Card:', activePromptCard?.id);
+    if (!user?.uid || !activePromptCard) {
+      showSnackbar('Please log in and select a prompt card to start a game.', 'warning');
+      return;
+    }
+    if (isCardDirty) {
+      showSnackbar('Please save or revert changes before starting a game.', 'warning');
+      return;
+    }
+    try {
+      console.log('PromptCardManager: Calling initializeGame...');
+      await initializeGame(user.uid, activePromptCard.id);
+      console.log('PromptCardManager: initializeGame AWAITED successfully. Now navigating to /game.');
+      showSnackbar('Game initialized! Navigating to game screen...', 'success');
+      navigate('/game');
+    }
+    catch (e: any) {
+      console.error('PromptCardManager: Error during game initialization:', e);
+      showSnackbar(`Failed to start game: ${e.message || 'Unknown error'}`, 'error');
+    }
+  };
 
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -280,7 +255,6 @@ const handleStartGame = async () => {
     reader.onload = async (e) => {
       try {
         const content = e.target?.result as string;
-        // Check if it's a single object or an array
         let parsed: NewPromptCardData | NewPromptCardData[];
         try {
             parsed = JSON.parse(content);
@@ -297,7 +271,6 @@ const handleStartGame = async () => {
         showSnackbar(`Failed to import cards: ${err instanceof Error ? e.message : 'Invalid JSON'}`, 'error');
         console.error("Import error:", err);
       } finally {
-        // Clear the file input
         event.target.value = '';
       }
     };
@@ -338,7 +311,6 @@ const handleStartGame = async () => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
-      {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5" component="h1">
           Prompt Cards
@@ -348,7 +320,6 @@ const handleStartGame = async () => {
         </IconButton>
       </Box>
 
-      {/* Game Library & New Card Actions */}
       <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
         <Button variant="contained" onClick={handleNewCard} startIcon={<AddIcon />}>
           New Card
@@ -366,7 +337,6 @@ const handleStartGame = async () => {
       )}
 
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden', gap: 2 }}>
-        {/* Left Panel: Card List */}
         <Paper elevation={1} sx={{ flex: 1, minWidth: 250, maxWidth: 350, overflowY: 'auto' }}>
           <Typography variant="h6" sx={{ p: 2, pb: 1 }}>Your Cards</Typography>
           <Divider />
@@ -380,6 +350,7 @@ const handleStartGame = async () => {
                 <ListItem
                   key={card.id}
                   button
+                  component="li"
                   selected={activePromptCard?.id === card.id}
                   onClick={() => handleCardSelect(card)}
                   sx={{ py: 1, pr: 0 }}
@@ -405,7 +376,6 @@ const handleStartGame = async () => {
           </List>
         </Paper>
 
-        {/* Right Panel: Active Card Editor/Viewer */}
         <Paper elevation={1} sx={{ flex: 2, p: 2, overflowY: 'auto' }}>
           {!activePromptCard || !localEditedCard ? (
             <Box sx={{ textAlign: 'center', mt: 4 }}>
@@ -428,9 +398,7 @@ const handleStartGame = async () => {
                       <Button variant="outlined" onClick={() => setShowSaveDialog(true)}>
                         Save
                       </Button>
-                      {/* The "Push to Live" button becomes more like an immediate save if changes are dirty */}
-                      {/* If the intent is just to apply without saving, this needs careful state management */}
-                      <Button variant="contained" onClick={() => handleSaveCard(false)}> {/* Now directly saves */}
+                      <Button variant="contained" onClick={() => handleSaveCard(false)}>
                         Apply Changes
                       </Button>
                     </>
@@ -452,8 +420,6 @@ const handleStartGame = async () => {
                 card={localEditedCard}
                 onCardChange={(updatedCard) => {
                   setLocalEditedCard(updatedCard);
-                  // Check dirty state against activePromptCard (the "saved" version)
-                  // Use content hash for robust dirty checking
                   setIsCardDirty(JSON.stringify(updatedCard) !== JSON.stringify(activePromptCard));
                 }}
                 availableConnections={aiConnections}
@@ -463,7 +429,6 @@ const handleStartGame = async () => {
         </Paper>
       </Box>
 
-      {/* Save Dialog */}
       <Dialog open={showSaveDialog} onClose={() => setShowSaveDialog(false)}>
         <DialogTitle>Save Prompt Card</DialogTitle>
         <DialogContent>
@@ -487,7 +452,6 @@ const handleStartGame = async () => {
         </DialogActions>
       </Dialog>
 
-      {/* Snackbar */}
       <Snackbar
         open={snackbarOpen}
         autoHideDuration={6000}

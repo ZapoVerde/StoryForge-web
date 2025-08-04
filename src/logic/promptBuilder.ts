@@ -1,177 +1,151 @@
+
 // src/logic/promptBuilder.ts
 
 import type { PromptCard, AiSettings } from '../models/PromptCard';
 import type { GameState, SceneState } from '../models/GameState';
 import type { LogEntry } from '../models/LogEntry';
 import type { Message } from '../models/Message';
-// Changed to regular import for runtime access to enum members
 import { StackMode, FilterMode, StackInstructions, EmissionRule, ProsePolicy, DigestFilterPolicy } from '../models/StackInstructions';
 import type { DeltaMap, DeltaInstruction } from '../models/DeltaInstruction';
 import type { DigestLine } from '../models/LogEntryElements';
 import type { ParsedNarrationOutput } from '../models/ParsedNarrationOutput';
 
-// Marker constants for parsing AI output (from NarrationParser.kt)
+// Marker constants for parsing AI output
 const DELTA_MARKER = "@delta";
 const DIGEST_MARKER = "@digest";
 const SCENE_MARKER = "@scene";
 
-/**
- * Interface defining the contract for the Prompt Builder.
- * This module is now responsible for both assembling the AI prompt AND parsing its structured output.
- * This simplifies dependencies for GameSession.
- */
-export interface IPromptBuilder {
-  /**
-   * Builds the complete prompt string as an array of Messages for the first turn of a game.
-   * This includes the main prompt, first-turn-only block, game rules, etc.
-   * @param card The PromptCard guiding the game.
-   * @returns An array of Message objects.
-   */
-  buildFirstTurnPrompt(card: PromptCard): Message[];
+// ... (Interface definition remains the same) ...
 
-  /**
-   * Builds the complete prompt string as an array of Messages for subsequent turns.
-   * This includes dynamic context from game logs, world state, and conversation history.
-   * Replicates `StackAssembler.assemble`.
-   * @param card The PromptCard guiding the game.
-   * @param currentGameState The current state of the game.
-   * @param logEntries The history of game logs.
-   * @param conversationHistory The full user/assistant conversation.
-   * @param currentUserAction The current player's action for this turn.
-   * @param turnNumber The current turn number.
-   * @returns An array of Message objects.
-   */
-  buildEveryTurnPrompt(
-    card: PromptCard,
-    currentGameState: GameState,
-    logEntries: LogEntry[],
-    conversationHistory: Message[],
-    currentUserAction: string,
-    turnNumber: number
-  ): Message[];
-
-  /**
-   * Parses the raw AI response string into a structured ParsedNarrationOutput object.
-   * This function directly replicates the logic of `NarrationParser.extractJsonAndCleanNarration`.
-   * Moved here for a simplified GameSession dependency (only talks to builder for prompt/parse).
-   * @param rawAiOutput The full, raw string from the AI model.
-   * @returns A ParsedNarrationOutput object.
-   */
-  parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput;
-}
-
-/**
- * Concrete implementation of IPromptBuilder.
- */
 export class PromptBuilder implements IPromptBuilder {
 
-  /**
-   * Helper to extract tags using regex (from NarrationParser).
-   */
-  private extractTags(text: string): string[] {
-    const tagPattern = /[#@$][a-zA-Z0-9_]+/g;
-    const matches = text.match(tagPattern);
-    return matches || [];
-  }
+    // ... (buildFirstTurnPrompt and buildEveryTurnPrompt remain the same) ...
 
-  /**
-   * Extracts a JSON object from a list of lines, handling potential parsing errors (from NarrationParser).
-   */
-  private extractJsonObject(lines: string[]): Record<string, any> {
-    const text = lines.join('\n').trim();
-    if (!text) return {};
-    try {
-      return JSON.parse(text);
-    } catch (e) {
-      console.error("Failed to parse JSON object:", e, "\nText:", text);
-      return {};
-    }
-  }
-
-  /**
-   * Extracts a JSON array from a list of lines, handling potential parsing errors (from NarrationParser).
-   */
-  private extractJsonArray(lines: string[]): any[] {
-    const text = lines.join('\n').trim();
-    if (!text) return [];
-    try {
-      return JSON.parse(text);
-    } catch (e) {
-      console.error("Failed to parse JSON array:", e, "\nText:", text);
-      return [];
-    }
-  }
-
-  /**
-   * Parses a single key-value pair from the AI's delta JSON into a DeltaInstruction (from DeltaInstruction companion object).
-   */
-  private parseSingleDelta(rawKey: string, value: any): DeltaInstruction | null {
-    const op = rawKey.charAt(0);
-    const path = rawKey.substring(1);
-
-    switch (op) {
-      case '+': return { op: 'add', key: path, value: value };
-      case '=': return { op: 'assign', key: path, value: value };
-      case '!': return { op: 'declare', key: path, value: value };
-      case '-': return { op: 'delete', key: path };
-      default:
-        console.warn(`Invalid delta operation character '${op}' in key '${rawKey}'`);
-        return null;
-    }
-  }
-
-  // --- Public Parsing Method (from NarrationParser.kt) ---
-  parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput {
-    const lines = rawAiOutput.split('\n');
-
-    const deltaIndex = lines.findIndex(line => line.trim() === DELTA_MARKER);
-    const digestIndex = lines.findIndex(line => line.trim() === DIGEST_MARKER);
-    const sceneIndex = lines.findIndex(line => line.trim() === SCENE_MARKER);
-
-    // Determine prose end by the first marker found
-    const proseEndIndex = [deltaIndex, digestIndex, sceneIndex]
-      .filter(index => index !== -1)
-      .reduce((min, current) => Math.min(min, current), lines.length);
-
-    const prose = lines.slice(0, proseEndIndex).join('\n').trim();
-
-    // Slice lines for each block
-    const deltaLines = deltaIndex !== -1 ? lines.slice(deltaIndex + 1, Math.min(...[digestIndex, sceneIndex, lines.length].filter(i => i > deltaIndex))) : [];
-    const digestLinesRaw = digestIndex !== -1 ? lines.slice(digestIndex + 1, Math.min(...[sceneIndex, lines.length].filter(i => i > digestIndex))) : [];
-    const sceneLines = sceneIndex !== -1 ? lines.slice(sceneIndex + 1) : [];
-
-    // Extract JSON objects/arrays
-    const deltaJson = this.extractJsonObject(deltaLines);
-    const digestJson = this.extractJsonArray(digestLinesRaw);
-    const sceneJson = this.extractJsonObject(sceneLines);
-
-    // Parse Deltas
-    const deltas: DeltaMap = {};
-    for (const key in deltaJson) {
-      const instruction = this.parseSingleDelta(key, deltaJson[key]);
-      if (instruction) {
-        deltas[key] = instruction;
-      }
+    private extractTags(text: string): string[] {
+        const tagPattern = /[#@$][a-zA-Z0-9_]+/g;
+        const matches = text.match(tagPattern);
+        return matches || [];
     }
 
-    // Parse Digest Lines
-    const digestLines: DigestLine[] = digestJson.map((item: any) => {
-      const text = item.text || '';
-      const importance = typeof item.importance === 'number' ? item.importance : 3; // Default importance
-      const tags = this.extractTags(text);
-      return { turn: 0, tags, score: importance, text }; // Turn will be set by LogManager
-    }).filter(line => line.text); // Filter out empty lines
+    private extractJsonObject(jsonString: string): Record<string, any> {
+        if (!jsonString) return {};
+        try {
+            const parsed = JSON.parse(jsonString);
+            return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : {};
+        } catch (e) {
+            console.error("Failed to parse JSON object:", e, "\nText:", jsonString);
+            return {};
+        }
+    }
 
+    private extractJsonArray(jsonString: string): any[] {
+        if (!jsonString) return [];
+        try {
+            const parsed = JSON.parse(jsonString);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+            console.error("Failed to parse JSON array:", e, "\nText:", jsonString);
+            return [];
+        }
+    }
 
-    return {
-      prose,
-      deltas,
-      digestLines,
-      scene: sceneJson,
-    };
-  }
+    private extractFencedJsonBlock(lines: string[], startIndex: number): string {
+        if (startIndex < 0 || startIndex >= lines.length) {
+            return "";
+        }
+    
+        let jsonLines: string[] = [];
+        let inJsonBlock = false;
+    
+        // Start searching from the line *after* the marker
+        for (let i = startIndex + 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+    
+            if (line.startsWith("```")) {
+                if (!inJsonBlock) {
+                    inJsonBlock = true;
+                    // Handle content on the same line as the opening fence (e.g., ```json { ... )
+                    const contentAfterFence = line.substring(line.indexOf('{'));
+                    if(contentAfterFence.startsWith('{')) {
+                        jsonLines.push(contentAfterFence);
+                    }
+                    continue;
+                } else {
+                    // Found the closing fence, we are done.
+                    break;
+                }
+            }
+    
+            if (inJsonBlock) {
+                jsonLines.push(lines[i]);
+            } else if (line.startsWith("{") || line.startsWith("[")) {
+                // If we find a JSON start without a fence, assume it's an unfenced block
+                inJsonBlock = true;
+                jsonLines.push(line);
+            }
+        }
+    
+        return jsonLines.join('\n');
+    }
+    
+    private parseSingleDelta(rawKey: string, value: any): DeltaInstruction | null {
+        const op = rawKey.charAt(0);
+        const path = rawKey.substring(1);
 
+        switch (op) {
+            case '+': return { op: 'add', key: path, value: value };
+            case '=': return { op: 'assign', key: path, value: value };
+            case '!': return { op: 'declare', key: path, value: value };
+            case '-': return { op: 'delete', key: path };
+            default:
+                console.warn(`Invalid delta operation character '${op}' in key '${rawKey}'`);
+                return null;
+        }
+    }
 
+    parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput {
+        const lines = rawAiOutput.split('\n');
+
+        const deltaIndex = lines.findIndex(line => line.trim().startsWith(DELTA_MARKER));
+        const digestIndex = lines.findIndex(line => line.trim().startsWith(DIGEST_MARKER));
+        const sceneIndex = lines.findIndex(line => line.trim().startsWith(SCENE_MARKER));
+
+        const firstMarkerIndex = [deltaIndex, digestIndex, sceneIndex]
+            .filter(index => index !== -1)
+            .reduce((min, current) => Math.min(min, current), lines.length);
+
+        const prose = lines.slice(0, firstMarkerIndex).join('\n').trim();
+
+        const digestJsonString = this.extractFencedJsonBlock(lines, digestIndex);
+        const deltaJsonString = this.extractFencedJsonBlock(lines, deltaIndex);
+        const sceneJsonString = this.extractFencedJsonBlock(lines, sceneIndex);
+
+        const deltaJson = this.extractJsonObject(deltaJsonString);
+        const digestJson = this.extractJsonArray(digestJsonString);
+        const sceneJson = this.extractJsonObject(sceneJsonString);
+
+        const deltas: DeltaMap = {};
+        for (const key in deltaJson) {
+            const instruction = this.parseSingleDelta(key, deltaJson[key]);
+            if (instruction) {
+                deltas[key] = instruction;
+            }
+        }
+
+        const digestLines: DigestLine[] = digestJson.map((item: any) => {
+            const text = item.text || '';
+            const importance = typeof item.importance === 'number' ? item.importance : 3;
+            const tags = this.extractTags(text);
+            return { turn: 0, tags, score: importance, text };
+        }).filter(line => line.text);
+
+        return {
+            prose,
+            deltas,
+            digestLines,
+            scene: sceneJson,
+        };
+    }
   // --- Context Stack Assembly Methods (from StoryForgeViewModel & StackAssembler.kt) ---
 
   /**

@@ -1,7 +1,8 @@
+
 // src/App.tsx
 
-import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import {
   Drawer,
   List,
@@ -15,12 +16,13 @@ import {
   Typography,
   Divider
 } from '@mui/material';
-import DashboardIcon from '@mui/icons-material/Dashboard';
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
+import StyleIcon from '@mui/icons-material/Style'; // Changed icon for Prompt Cards
 import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import HistoryIcon from '@mui/icons-material/History';
+import DataObjectIcon from '@mui/icons-material/DataObject'; // For World State
 import LoginScreen from './ui/screens/LoginScreen';
 import GameLibraryScreen from './ui/screens/GameLibraryScreen';
 import PromptCardManager from './ui/screens/PromptCardManager';
@@ -31,23 +33,50 @@ import SettingsScreen from './ui/screens/SettingsScreen';
 import { useAuthStore } from './state/useAuthStore';
 import { useTheme, ThemeProvider, createTheme } from '@mui/material/styles';
 import { useSettingsStore } from './state/useSettingsStore';
+import { useGameStateStore } from './state/useGameStateStore';
 import SourceDump from './ui/screens/SourceDump';
 
 
 const drawerWidth = 240;
 const AppContent: React.FC = () => {
   const { user, isLoading: authLoading, signOut } = useAuthStore();
+  const { currentSnapshot, loadLastActiveGame, gameLoading } = useGameStateStore();
   const navigate = useNavigate();
+  const location = useLocation(); // Get current location
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [initialLoadChecked, setInitialLoadChecked] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const publicPaths = ['/login', '/sourcedump'];
-    if (!user && !publicPaths.includes(window.location.pathname)) {
-      navigate('/login');
-    } else if (user && window.location.pathname === '/login') {
-      navigate('/library');
+
+    if (authLoading) return;
+
+    if (!user) {
+      if (!publicPaths.includes(location.pathname)) {
+        navigate('/login');
+      }
+      return;
     }
-  }, [user, navigate]);
+
+    if (!initialLoadChecked) {
+      console.log("AppContent: User logged in, attempting to load last active game...");
+      loadLastActiveGame(user.uid).then((gameLoaded) => {
+        setInitialLoadChecked(true);
+        if (gameLoaded) {
+          // If a game was loaded and we are not already on a game-related page, navigate to it.
+          if (!['/game', '/world-state', '/logs'].includes(location.pathname)) {
+            navigate('/game');
+          }
+        } else {
+          // If no game loaded, and we are trying to access a game page, redirect to library.
+          if (['/game', '/world-state', '/logs'].includes(location.pathname)) {
+            navigate('/library');
+          }
+        }
+      });
+    }
+  }, [user, authLoading, navigate, initialLoadChecked, loadLastActiveGame, location.pathname]);
+
 
   const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
 
@@ -56,20 +85,21 @@ const AppContent: React.FC = () => {
     navigate('/login');
   };
 
+  // MODIFIED: Corrected and clarified nav items
   const navItems = [
-    { text: 'Game Library', icon: <LibraryBooksIcon />, path: '/library', requiresAuth: true },
-    { text: 'Prompt Cards', icon: <DashboardIcon />, path: '/cards', requiresAuth: true },
-    { text: 'Game Session', icon: <TravelExploreIcon />, path: '/game', requiresAuth: true },
-    { text: 'World State', icon: <TravelExploreIcon />, path: '/world-state', requiresAuth: true },
-    { text: 'Log Viewer', icon: <HistoryIcon />, path: '/logs', requiresAuth: true },
+    { text: 'Saved Games', icon: <LibraryBooksIcon />, path: '/library', requiresAuth: true },
+    { text: 'Prompt Cards', icon: <StyleIcon />, path: '/cards', requiresAuth: true },
+    { text: 'Current Game', icon: <TravelExploreIcon />, path: '/game', requiresAuth: true, disabled: !currentSnapshot },
+    { text: 'World State', icon: <DataObjectIcon />, path: '/world-state', requiresAuth: true, disabled: !currentSnapshot },
+    { text: 'Log Viewer', icon: <HistoryIcon />, path: '/logs', requiresAuth: true, disabled: !currentSnapshot },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings', requiresAuth: true },
   ];
 
-  if (authLoading) {
+  if (authLoading || (user && !initialLoadChecked)) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
-        <Typography variant="h6" ml={2}>Authenticating...</Typography>
+        <Typography variant="h6" ml={2}>Authenticating & Loading Session...</Typography>
       </Box>
     );
   }
@@ -81,7 +111,7 @@ const AppContent: React.FC = () => {
       <List>
         {navItems.filter(item => user ? true : !item.requiresAuth).map((item) => (
           <ListItem key={item.text} disablePadding>
-            <ListItemButton onClick={() => navigate(item.path)}>
+            <ListItemButton onClick={() => navigate(item.path)} disabled={item.disabled}>
               <ListItemIcon>{item.icon}</ListItemIcon>
               <ListItemText primary={item.text} />
             </ListItemButton>
@@ -109,33 +139,17 @@ const AppContent: React.FC = () => {
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}>
       <CssBaseline />
-
-      {/* Single Drawer for both mobile and desktop, controlled by mobileOpen */}
       <Drawer
         variant="temporary"
         open={mobileOpen}
         onClose={handleDrawerToggle}
         ModalProps={{ keepMounted: true }}
-        sx={{
-          '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
-        }}
+        sx={{ '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth }, }}
       >
         {drawer}
       </Drawer>
 
-      {/* Main content area */}
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          p: 0,
-          transition: 'margin .3s ease-out, width .3s ease-out',
-          // Dynamically adjust marginLeft and width based on drawer open state
-          marginLeft: mobileOpen ? `${drawerWidth}px` : '0px',
-          width: mobileOpen ? `calc(100% - ${drawerWidth}px)` : '100%',
-          height: '100%',
-        }}
-      >
+      <Box component="main" sx={{ flexGrow: 1, p: 0, width: `calc(100% - ${mobileOpen ? drawerWidth : 0}px)`, height: '100%' }}>
         <Routes>
           <Route path="/sourcedump" element={<SourceDump />} />
           <Route path="/login" element={<LoginScreen />} />
@@ -143,9 +157,18 @@ const AppContent: React.FC = () => {
             <>
               <Route path="/library" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
               <Route path="/cards" element={<PromptCardManager onNavToggle={handleDrawerToggle} />} />
-              <Route path="/game" element={<GameScreen onNavToggle={handleDrawerToggle} />} />
-              <Route path="/world-state" element={<WorldStateScreen onNavToggle={handleDrawerToggle} />} />
-              <Route path="/logs" element={<LogViewerScreen onNavToggle={handleDrawerToggle} />} />
+              {/* Conditionally render game-related routes only if a snapshot is loaded */}
+              {currentSnapshot ? (
+                <>
+                    <Route path="/game" element={<GameScreen onNavToggle={handleDrawerToggle} />} />
+                    <Route path="/world-state" element={<WorldStateScreen onNavToggle={handleDrawerToggle} />} />
+                    <Route path="/logs" element={<LogViewerScreen onNavToggle={handleDrawerToggle} />} />
+                </>
+              ) : (
+                // If no snapshot, these routes could show a "No game loaded" message or redirect
+                // For now, they won't match, and the wildcard will catch it.
+                null
+              )}
               <Route path="/settings" element={<SettingsScreen onNavToggle={handleDrawerToggle} />} />
               <Route path="/" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
               <Route path="*" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
@@ -158,7 +181,6 @@ const AppContent: React.FC = () => {
     </Box>
   );
 };
-
 
 const App: React.FC = () => {
   const { themeMode } = useSettingsStore(); // Get theme mode from settings store

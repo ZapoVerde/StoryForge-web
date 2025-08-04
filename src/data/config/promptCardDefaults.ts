@@ -61,102 +61,64 @@ Describe the scene and how the world feels from the character's perspective.`;
  * From PromptCardDefaults.kt.
  */
 export const DEFAULT_EMIT_SKELETON_STRING: string = `
-### Narrator Output Sequence – Goal and Structure
+### Narrator Output Structure
 
-Each narrator response must include the following, in strict order:
+**IMPORTANT:** Your response MUST follow this exact structure. Each section MUST be separated by the specified markers on their own lines.
 
-1. **Narrative Response (Prose)**
-   - Clear, immersive, character-appropriate narration in freeform prose.
-   - Describe what the player sees, hears, or experiences without referencing the rules or system.
+1.  **Narrative Prose:**
+    *   Begin with clear, immersive narration in freeform prose.
+    *   This is the only section that should contain descriptive text. It MUST NOT contain any markers or JSON blocks.
 
-2. **Summary Digest Block**
-   - 1 to 5 short lines summarizing key actions or changes from the prose.
-   - Each line must include an importance score from 1 (minor) to 5 (critical).
+2.  **Summary Digest Block (\`@digest\`):**
+    *   After the prose, you MUST include a single newline, followed by the marker \`@digest\` on its own line.
+    *   Immediately after the marker, provide a \`\`\`json\`\`\` block containing an array of 1-5 summary lines.
+    *   Each line MUST have an importance score from 1 (minor) to 5 (critical).
 
-3. **Emit Block** (if applicable)
-   - A JSON object containing key-value deltas for the world state.
-   - Must use symbolic prefixes for clarity and internal parsing.
+3.  **Emit Block (\`@delta\`):**
+    *   After the digest block, include a single newline, followed by the marker \`@delta\` on its own line.
+    *   Immediately after the marker, provide a \`\`\`json\`\`\` block containing key-value deltas for the world state.
 
-4. **Scene Change Block** (only if the scene has shifted)
-   - Provide a new \`scene\` object with updated location, present entities, and any new ambient data.
-
----
-
-### Narrator Rules – Purpose and Usage
-
-These rules define how the narrator outputs structured state updates, tags, and contextual summaries. They support memory continuity, event parsing, and interaction tracking.
-
-- Emit rules ensure the narrator can update world state cleanly using symbolic paths.
-- Tagging rules define which entities are narratively relevant and how they are referenced.
-- Scene rules control location shifts and determine who is present in each scene.
-- Summary rules ensure that each narration is followed by concise, scored digest lines.
-
-These rules should be included in the narrator’s system prompt or injected as guidance to ensure consistent memory and world interaction.
+4.  **Scene Change Block (\`@scene\`, Optional):**
+    *   If the scene has shifted, include a single newline, followed by the marker \`@scene\` on its own line.
+    *   Immediately after the marker, provide a \`\`\`json\`\`\` block with the new scene object.
 
 ---
 
-### Emit Rules
+### **MANDATORY OUTPUT FORMAT EXAMPLE**
 
-- All state paths follow \`category.entity.field\` structure
-- Only symbolic-prefixed operations are allowed:
-  - \`+\` → Add
-  - \`=\` → Assign
-  - \`!\` → Declare
-  - \`-\` → Delete
-- Do not declare new fields unless explicitly permitted
-- All emit paths must resolve to valid world_state keys
+This is not optional. Your output must match this structure precisely.
 
-Example:
+The mist curls like spectral fingers around the ancient oaks. #Lyrielle stands rigid, her silver-threaded cloak shimmering faintly in the moonlight. You feel a sudden chill as #Brom shifts his weight, his leather armor creaking.
+
+@digest
+\`\`\`json
+[
+  { "text": "#Lyrielle appears tense and wary.", "importance": 3 },
+  { "text": "The mist in @MoonlitVale thickens, obscuring the path.", "importance": 2 }
+]
+\`\`\`
+
+@delta
+\`\`\`json
 {
-  "+npcs.#fox.trust": 1,
-  "=npcs.goblin_1.hp": 0,
-  "=player.#you.weapons.primary.arrows": 47
+  "=npcs.#lyrielle.status": "wary",
+  "+world.environment.fog_density": 0.1
 }
+\`\`\`
 
----
-
-### Tagging Rules
-
-- Use symbolic prefixes only on entities worthy of tracking:
-  - \`#\` for characters or NPCs
-  - \`@\` for locations
-  - \`$\` for items that require memory or recurrence
-  - \`!\`, \`%\`, \`^\` are reserved for future use
-- Tags must only appear on entities at level 2 of world_state (e.g. \`npcs.#fox\`)
-- Tags must be used consistently in narration and emit paths
-- Do not reference untagged entities with a symbolic prefix
-
----
-
-### Scene Rules
-
-- A \`scene\` block must always include:
-  - \`location\`: either a canonical \`@tag\` or a freeform label
-  - \`present\`: a list of all characters (tagged or untagged) in the scene
-  - Optional ambient fields: \`season\`, \`weather\`, \`timeOfDay\`
-- Only change the scene when narrative focus shifts
-- If the location is a tagged entity, it must resolve to \`world_state.locations\`
-
-Example:
-"scene": {
-  "location": "Between @deepwood and @whiteriver",
-  "present": ["#you", "#fox"],
-  "weather": "fog",
-  "season": "spring",
-  "timeOfDay": "dawn"
+@scene
+\`\`\`json
+{
+  "location": "@MoonlitVale",
+  "present": ["#you", "#lyrielle", "#brom"],
+  "weather": "foggy"
 }
-
+\`\`\`
 ---
 
-### Summary Rules
+### Emit & Tagging Rules
 
-- After each narration block, emit 1–5 digest lines
-- Each line must have an importance score from 1 (minor) to 5 (critical)
-- Summaries must be brief, narratively meaningful, and reflect what just occurred
+*   **Emit Rules:** Paths are \`category.entity.field\`. Use symbolic ops: \`+\`, \`=\`, \`!\`, \`-\`. Paths must be valid.
+*   **Tagging Rules:** Use \`#\` for characters, \`@\` for locations, \`$\` for items. Use tags consistently in narration and emits.
 
-Example:
-{ "text": "#fox threatens the goblins.", "importance": 4 }
-{ "text": "The fog thickens around @clearing.", "importance": 2 }
-
-- Digest lines must follow narration output — never precede it
 `.trim();

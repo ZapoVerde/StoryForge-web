@@ -106,8 +106,9 @@ class FirestoreGameRepository implements IGameRepository {
     console.log(`FirestoreGameRepository: Attempting to setDoc for GameSnapshot ${snapshot.id} for user ${userId}.`);
     try {
       await setDoc(snapshotDocRef, {
+        // Pass all snapshot data, including the new 'title'
         ...snapshot,
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp() // Always update timestamp on save
       }, { merge: true });
       console.log(`FirestoreGameRepository: Successfully setDoc for GameSnapshot ${snapshot.id}.`);
     } catch (e) {
@@ -122,7 +123,8 @@ class FirestoreGameRepository implements IGameRepository {
 
     if (snapshotSnap.exists()) {
       const data = snapshotSnap.data();
-      return this.convertTimestamps<GameSnapshot>(data);
+      // Ensure title is retrieved
+      return this.convertTimestamps<GameSnapshot>(data) as GameSnapshot;
     } else {
       console.log(`No GameSnapshot found with ID: ${snapshotId} for user ${userId}`);
       return null;
@@ -137,7 +139,8 @@ class FirestoreGameRepository implements IGameRepository {
     const querySnapshot = await getDocs(q);
     const snapshots: GameSnapshot[] = [];
     querySnapshot.forEach((doc) => {
-      snapshots.push(this.convertTimestamps<GameSnapshot>(doc.data()));
+      // Ensure title is retrieved
+      snapshots.push(this.convertTimestamps<GameSnapshot>(doc.data()) as GameSnapshot);
     });
     return snapshots;
   }

@@ -1,4 +1,5 @@
 // src/ui/screens/GameLibraryScreen.tsx
+// NEW: This screen lists saved games (snapshots)
 
 import React, { useEffect, useState } from 'react';
 import {
@@ -15,106 +16,115 @@ import {
   Divider,
   CircularProgress,
   Alert,
-  TextField,
-  InputAdornment,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
-import SearchIcon from '@mui/icons-material/Search';
-import AddIcon from '@mui/icons-material/Add';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { usePromptCardStore } from '../../state/usePromptCardStore';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
-import { PromptCard } from '../../models/index';
+import { gameRepository } from '../../data/repositories/gameRepository';
+import { GameSnapshot } from '../../models/GameSnapshot';
+import { useNavigate } from 'react-router-dom';
 import Snackbar from '@mui/material/Snackbar';
-import { useNavigate } from 'react-router-dom'; // <--- ADD THIS IMPORT
-
-
+import { formatIsoDateForDisplay } from '../../utils/formatDate';
 
 interface GameLibraryScreenProps {
   onNavToggle: () => void;
-  // onNavigateToEditor: (cardId?: string) => void; // To navigate to editor with a specific card
 }
 
 const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) => {
-  const { user } = useAuthStore();
-  const navigate = useNavigate(); // <--- INITIALIZE useNavigate HOOK
-  const {
-    promptCards,
-    isLoading,
-    error,
-    fetchPromptCards,
-    setActivePromptCard,
-    deletePromptCard,
-  } = usePromptCardStore();
-  const { initializeGame } = useGameStateStore();
+  const { user } = useAuthStore(); // Ensure user is available here
+  const navigate = useNavigate();
+  const { loadGame, gameLoading } = useGameStateStore();
 
-  const [searchTerm, setSearchTerm] = useState('');
+  const [savedGames, setSavedGames] = useState<GameSnapshot[]>([]);
+  const [loadingSavedGames, setLoadingSavedGames] = useState(true);
+  const [savedGamesError, setSavedGamesError] = useState<string | null>(null);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
-  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'info'>('info');
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'info' | 'warning'>('info');
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
 
+  const fetchSavedGames = async (userId: string) => {
+    setLoadingSavedGames(true);
+    setSavedGamesError(null);
+    try {
+      const games = await gameRepository.getAllGameSnapshots(userId);
+      setSavedGames(games);
+    } catch (e: any) {
+      setSavedGamesError(e.message || 'Failed to fetch saved games.');
+    } finally {
+      setLoadingSavedGames(false);
+    }
+  };
 
   useEffect(() => {
     if (user?.uid) {
-      fetchPromptCards(user.uid);
+      fetchSavedGames(user.uid);
     }
-  }, [user?.uid, fetchPromptCards]);
+  }, [user?.uid]);
 
-  const filteredCards = promptCards.filter(card =>
-    card.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    card.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    card.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-
-  const handleEditCard = (card: PromptCard) => {
-    setActivePromptCard(card);
-    // TODO: Navigate to PromptCardManager/Editor screen
-    setSnackbarMessage(`Editing "${card.title}"`);
-    setSnackbarSeverity('info');
-    console.log(`Navigating to editor for card: ${card.id}`);
+  const showSnackbar = (
+    message: string,
+    severity: 'success' | 'error' | 'info' | 'warning' = 'info'
+  ) => {
+    setSnackbarMessage(message);
+    setSnackbarSeverity(severity);
+    setSnackbarOpen(true);
   };
 
-  const handleDeleteCard = async (cardId: string) => {
-    if (!user?.uid) return;
-    try {
-      await deletePromptCard(user.uid, cardId);
-      setSnackbarMessage('Card deleted successfully!');
-      setSnackbarSeverity('success');
-    } catch (e) {
-      setSnackbarMessage(`Failed to delete card: ${e instanceof Error ? e.message : 'Unknown error'}`);
-      setSnackbarSeverity('error');
+  const handleSnackbarClose = (event?: React.SyntheticEvent | Event, reason?: string) => {
+    if (reason === 'clickaway') {
+      return;
     }
+    setSnackbarOpen(false);
   };
 
-  const handleStartGame = async (card: PromptCard) => {
+  const handleLoadGame = async (snapshotId: string) => {
     if (!user?.uid) {
-      setSnackbarMessage('Must be logged in to start a game.');
-      setSnackbarSeverity('error');
+      showSnackbar('Must be logged in to load a game.', 'error');
       return;
     }
     try {
-      // First, set the active card, then initialize game
-      setActivePromptCard(card);
-      await initializeGame(user.uid, card.id);
-      setSnackbarMessage(`Game "${card.title}" initialized! Navigating to game...`);
-      setSnackbarSeverity('success');
-      navigate('/game'); // <--- ADD THIS LINE TO NAVIGATE TO THE GAME SCREEN
-      // TODO: Navigate to GameScreen
-      console.log(`Game "${card.title}" started! Navigating to GameScreen.`);
+      // MODIFIED: Pass user.uid as the first argument
+      await loadGame(user.uid, snapshotId); 
+      showSnackbar('Game loaded successfully! Navigating to game...', 'success');
+      navigate('/game');
     } catch (e) {
-      setSnackbarMessage(`Failed to start game: ${e instanceof Error ? e.message : 'Unknown error'}`);
-      setSnackbarSeverity('error');
+      showSnackbar(
+        `Failed to load game: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        'error'
+      );
     }
   };
 
+  const handleDeleteGame = async (snapshotId: string) => {
+    if (!user?.uid) return;
+    try {
+      await gameRepository.deleteGameSnapshot(user.uid, snapshotId);
+      fetchSavedGames(user.uid);
+      showSnackbar('Game deleted successfully!', 'success');
+    } catch (e) {
+      showSnackbar(
+        `Failed to delete game: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        'error'
+      );
+    }
+  };
 
-  if (isLoading && !promptCards.length) {
+  if (loadingSavedGames || gameLoading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+        }}
+      >
         <CircularProgress />
-        <Typography variant="h6" ml={2}>Loading Game Library...</Typography>
+        <Typography variant="h6" ml={2}>
+          Loading Games...
+        </Typography>
       </Box>
     );
   }
@@ -124,7 +134,7 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
       <AppBar position="static" elevation={1}>
         <Toolbar>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            Game Library
+            Game Library (Saved Games)
           </Typography>
           <IconButton edge="end" color="inherit" aria-label="menu" onClick={onNavToggle}>
             <MenuIcon />
@@ -132,63 +142,58 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
         </Toolbar>
       </AppBar>
 
-      {error && (
+      {savedGamesError && (
         <Alert severity="error" sx={{ m: 2 }}>
-          Error: {error}
+          Error: {savedGamesError}
         </Alert>
       )}
 
-      <Box sx={{ p: 2 }}>
-        <TextField
-          fullWidth
-          label="Search Cards"
-          variant="outlined"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
-          sx={{ mb: 2 }}
-        />
-        {/* Placeholder for "New Card" button, which we decided would be on PromptCardManager */}
-        {/* <Button variant="contained" startIcon={<AddIcon />} sx={{ mb: 2 }}>
-          Create New Card
-        </Button> */}
+      <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}>
+        <Button
+          variant="contained"
+          onClick={() => navigate('/cards')}
+          sx={{ mt: 2 }}
+        >
+          Start New Game (Select Prompt Card)
+        </Button>
       </Box>
 
       <Paper elevation={1} sx={{ flexGrow: 1, m: 2, overflowY: 'auto' }}>
-        {filteredCards.length === 0 ? (
+        {savedGames.length === 0 ? (
           <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
             <Typography variant="body1" color="text.secondary">
-              {searchTerm ? "No cards match your search." : "No cards available. Go to Prompt Cards to create one!"}
+              No saved games found. Start a new one!
             </Typography>
           </Box>
         ) : (
           <List>
-            {filteredCards.map((card) => (
-              <React.Fragment key={card.id}>
+            {savedGames.map((game) => (
+              <React.Fragment key={game.id}>
                 <ListItem
                   secondaryAction={
                     <Box>
-                      <IconButton edge="end" aria-label="start-game" onClick={() => handleStartGame(card)}>
+                      <IconButton
+                        edge="end"
+                        aria-label="load-game"
+                        onClick={() => handleLoadGame(game.id)}
+                      >
                         <PlayArrowIcon color="primary" />
                       </IconButton>
-                      <IconButton edge="end" aria-label="edit-card" onClick={() => handleEditCard(card)}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton edge="end" aria-label="delete-card" onClick={() => handleDeleteCard(card.id)}>
+                      <IconButton
+                        edge="end"
+                        aria-label="delete-game"
+                        onClick={() => handleDeleteGame(game.id)}
+                      >
                         <DeleteIcon color="error" />
                       </IconButton>
                     </Box>
                   }
                 >
                   <ListItemText
-                    primary={card.title}
-                    secondary={card.description || 'No description'}
+                    primary={game.title}
+                    secondary={`Turn: ${game.currentTurn} | Last Saved: ${formatIsoDateForDisplay(
+                      game.updatedAt
+                    )}`}
                     primaryTypographyProps={{ fontWeight: 'medium' }}
                   />
                 </ListItem>
@@ -198,13 +203,14 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
           </List>
         )}
       </Paper>
+
       <Snackbar
-        open={!!snackbarMessage}
+        open={snackbarOpen}
         autoHideDuration={6000}
-        onClose={() => setSnackbarMessage(null)}
+        onClose={handleSnackbarClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert onClose={() => setSnackbarMessage(null)} severity={snackbarSeverity} sx={{ width: '100%' }}>
+        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
           {snackbarMessage}
         </Alert>
       </Snackbar>

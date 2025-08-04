@@ -16,6 +16,7 @@ import { ILogManager } from './logManager';
 import { IPromptCardRepository } from '../data/repositories/promptCardRepository';
 import { IGameRepository } from '../data/repositories/gameRepository';
 import { generateUuid } from '../utils/uuid'; // Import generateUuid
+import { formatIsoDateForDisplay } from '../utils/formatDate'; // Import for consistent date formatting in title
 
 // Define a simple DummyAiClient for testing and dev
 class DummyAiClient implements IAiClient {
@@ -86,7 +87,7 @@ export interface IGameSession {
    * @param snapshotId The ID of the snapshot to load.
    * @returns A Promise resolving when the game is loaded.
    */
-  loadGame(snapshotId: string): Promise<void>;
+  loadGame(userId: string, snapshotId: string): Promise<void>; 
 
   /**
    * Provides access to the current PromptCard for UI purposes.
@@ -152,6 +153,8 @@ export class GameSession implements IGameSession { // Export the class
       console.log('GameSession: Starting a new game...');
       const newSnapshotId = generateUuid();
       const now = new Date().toISOString();
+      // Generate a title for the new game snapshot
+      const gameTitle = `${card.title} - ${formatIsoDateForDisplay(now)}`;
 
       const initialGameState: GameState = {
         narration: "A new adventure begins...",
@@ -213,6 +216,7 @@ export class GameSession implements IGameSession { // Export the class
         id: newSnapshotId,
         userId: userId,
         promptCardId: card.id,
+        title: gameTitle, // Set the generated title for the new game
         createdAt: now,
         updatedAt: now,
         currentTurn: 0,
@@ -221,7 +225,7 @@ export class GameSession implements IGameSession { // Export the class
         logs: [],
         worldStatePinnedKeys: [],
       };
-      console.log(`GameSession: Initialized new game snapshot with ID: ${newSnapshotId}.`);
+      console.log(`GameSession: Initialized new game snapshot with ID: ${newSnapshotId}. Title: "${gameTitle}".`);
 
       const initialLogEntry = this.logManager.assembleTurnLogEntry({
           turnNumber: 0,
@@ -388,6 +392,7 @@ export class GameSession implements IGameSession { // Export the class
     currentSnapshot.gameState = updatedGameState;
     currentSnapshot.currentTurn = nextTurnNumber;
     currentSnapshot.updatedAt = new Date().toISOString();
+    // Title is set once during initialization, no need to update per turn.
 
     await this.saveGame(); // Save the full snapshot
 
@@ -425,19 +430,26 @@ export class GameSession implements IGameSession { // Export the class
     console.log(`GameSession: Game snapshot ${this.currentSnapshot.id} saved successfully.`);
   }
 
-  async loadGame(snapshotId: string): Promise<void> {
-    if (!this.currentUserId) {
-      throw new Error("Cannot load game: user not initialized.");
+  // MODIFIED: Added userId parameter to loadGame
+  public async loadGame(userId: string, snapshotId: string): Promise<void> {
+    if (!userId) { // Check the passed userId
+      throw new Error("Cannot load game: user not initialized."); // This is line 435 in your original console output
     }
+    // IMPORTANT: Set the internal currentUserId here.
+    // This ensures that the GameSession instance always knows which user it's operating for.
+    this.currentUserId = userId;
+    
     console.log(`GameSession: Attempting to load game snapshot ${snapshotId} for user ${this.currentUserId}.`);
-    const snapshot = await this.gameRepo.getGameSnapshot(this.currentUserId, snapshotId);
+    
+    // MODIFIED: Use the passed userId to retrieve the snapshot from the repository
+    const snapshot = await this.gameRepo.getGameSnapshot(userId, snapshotId); 
     if (!snapshot) {
-      console.error(`GameSession: Game snapshot ${snapshotId} not found for user ${this.currentUserId}.`);
-      throw new Error(`Game snapshot ${snapshotId} not found for user ${this.currentUserId}.`);
+      console.error(`GameSession: Game snapshot ${snapshotId} not found for user ${userId}.`);
+      throw new Error(`Game snapshot ${snapshotId} not found for user ${userId}.`);
     }
     this.currentSnapshot = snapshot;
     // Also load the associated PromptCard when a game is loaded
-    const card = await this.cardRepo.getPromptCard(this.currentUserId, snapshot.promptCardId);
+    const card = await this.cardRepo.getPromptCard(userId, snapshot.promptCardId); // Use passed userId
     if (!card) {
         console.warn(`GameSession: PromptCard ${snapshot.promptCardId} for loaded game ${snapshotId} not found.`);
         this.currentPromptCard = null;

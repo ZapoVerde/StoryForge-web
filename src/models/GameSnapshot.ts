@@ -15,6 +15,7 @@ export interface GameSnapshot {
   id: string; // Unique ID for this snapshot/game session
   userId: string;
   promptCardId: string; // ID of the card used
+  title: string; // NEW: A human-readable title for the saved game
 
   // --- Timestamps ---
   createdAt: string; // When the game session was started

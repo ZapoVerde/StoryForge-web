@@ -43,10 +43,11 @@
 }
 
 @@FILE: src/App.tsx
+
 // src/App.tsx
 
-import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import {
   Drawer,
   List,
@@ -60,12 +61,13 @@ import {
   Typography,
   Divider
 } from '@mui/material';
-import DashboardIcon from '@mui/icons-material/Dashboard';
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
+import StyleIcon from '@mui/icons-material/Style'; // Changed icon for Prompt Cards
 import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import HistoryIcon from '@mui/icons-material/History';
+import DataObjectIcon from '@mui/icons-material/DataObject'; // For World State
 import LoginScreen from './ui/screens/LoginScreen';
 import GameLibraryScreen from './ui/screens/GameLibraryScreen';
 import PromptCardManager from './ui/screens/PromptCardManager';
@@ -76,23 +78,50 @@ import SettingsScreen from './ui/screens/SettingsScreen';
 import { useAuthStore } from './state/useAuthStore';
 import { useTheme, ThemeProvider, createTheme } from '@mui/material/styles';
 import { useSettingsStore } from './state/useSettingsStore';
+import { useGameStateStore } from './state/useGameStateStore';
 import SourceDump from './ui/screens/SourceDump';
 
 
 const drawerWidth = 240;
 const AppContent: React.FC = () => {
   const { user, isLoading: authLoading, signOut } = useAuthStore();
+  const { currentSnapshot, loadLastActiveGame, gameLoading } = useGameStateStore();
   const navigate = useNavigate();
+  const location = useLocation(); // Get current location
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [initialLoadChecked, setInitialLoadChecked] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const publicPaths = ['/login', '/sourcedump'];
-    if (!user && !publicPaths.includes(window.location.pathname)) {
-      navigate('/login');
-    } else if (user && window.location.pathname === '/login') {
-      navigate('/library');
+
+    if (authLoading) return;
+
+    if (!user) {
+      if (!publicPaths.includes(location.pathname)) {
+        navigate('/login');
+      }
+      return;
     }
-  }, [user, navigate]);
+
+    if (!initialLoadChecked) {
+      console.log("AppContent: User logged in, attempting to load last active game...");
+      loadLastActiveGame(user.uid).then((gameLoaded) => {
+        setInitialLoadChecked(true);
+        if (gameLoaded) {
+          // If a game was loaded and we are not already on a game-related page, navigate to it.
+          if (!['/game', '/world-state', '/logs'].includes(location.pathname)) {
+            navigate('/game');
+          }
+        } else {
+          // If no game loaded, and we are trying to access a game page, redirect to library.
+          if (['/game', '/world-state', '/logs'].includes(location.pathname)) {
+            navigate('/library');
+          }
+        }
+      });
+    }
+  }, [user, authLoading, navigate, initialLoadChecked, loadLastActiveGame, location.pathname]);
+
 
   const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
 
@@ -101,20 +130,21 @@ const AppContent: React.FC = () => {
     navigate('/login');
   };
 
+  // MODIFIED: Corrected and clarified nav items
   const navItems = [
-    { text: 'Game Library', icon: <LibraryBooksIcon />, path: '/library', requiresAuth: true },
-    { text: 'Prompt Cards', icon: <DashboardIcon />, path: '/cards', requiresAuth: true },
-    { text: 'Game Session', icon: <TravelExploreIcon />, path: '/game', requiresAuth: true },
-    { text: 'World State', icon: <TravelExploreIcon />, path: '/world-state', requiresAuth: true },
-    { text: 'Log Viewer', icon: <HistoryIcon />, path: '/logs', requiresAuth: true },
+    { text: 'Saved Games', icon: <LibraryBooksIcon />, path: '/library', requiresAuth: true },
+    { text: 'Prompt Cards', icon: <StyleIcon />, path: '/cards', requiresAuth: true },
+    { text: 'Current Game', icon: <TravelExploreIcon />, path: '/game', requiresAuth: true, disabled: !currentSnapshot },
+    { text: 'World State', icon: <DataObjectIcon />, path: '/world-state', requiresAuth: true, disabled: !currentSnapshot },
+    { text: 'Log Viewer', icon: <HistoryIcon />, path: '/logs', requiresAuth: true, disabled: !currentSnapshot },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings', requiresAuth: true },
   ];
 
-  if (authLoading) {
+  if (authLoading || (user && !initialLoadChecked)) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
-        <Typography variant="h6" ml={2}>Authenticating...</Typography>
+        <Typography variant="h6" ml={2}>Authenticating & Loading Session...</Typography>
       </Box>
     );
   }
@@ -126,7 +156,7 @@ const AppContent: React.FC = () => {
       <List>
         {navItems.filter(item => user ? true : !item.requiresAuth).map((item) => (
           <ListItem key={item.text} disablePadding>
-            <ListItemButton onClick={() => navigate(item.path)}>
+            <ListItemButton onClick={() => navigate(item.path)} disabled={item.disabled}>
               <ListItemIcon>{item.icon}</ListItemIcon>
               <ListItemText primary={item.text} />
             </ListItemButton>
@@ -154,33 +184,17 @@ const AppContent: React.FC = () => {
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}>
       <CssBaseline />
-
-      {/* Single Drawer for both mobile and desktop, controlled by mobileOpen */}
       <Drawer
         variant="temporary"
         open={mobileOpen}
         onClose={handleDrawerToggle}
         ModalProps={{ keepMounted: true }}
-        sx={{
-          '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth },
-        }}
+        sx={{ '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth }, }}
       >
         {drawer}
       </Drawer>
 
-      {/* Main content area */}
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          p: 0,
-          transition: 'margin .3s ease-out, width .3s ease-out',
-          // Dynamically adjust marginLeft and width based on drawer open state
-          marginLeft: mobileOpen ? `${drawerWidth}px` : '0px',
-          width: mobileOpen ? `calc(100% - ${drawerWidth}px)` : '100%',
-          height: '100%',
-        }}
-      >
+      <Box component="main" sx={{ flexGrow: 1, p: 0, width: `calc(100% - ${mobileOpen ? drawerWidth : 0}px)`, height: '100%' }}>
         <Routes>
           <Route path="/sourcedump" element={<SourceDump />} />
           <Route path="/login" element={<LoginScreen />} />
@@ -188,9 +202,18 @@ const AppContent: React.FC = () => {
             <>
               <Route path="/library" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
               <Route path="/cards" element={<PromptCardManager onNavToggle={handleDrawerToggle} />} />
-              <Route path="/game" element={<GameScreen onNavToggle={handleDrawerToggle} />} />
-              <Route path="/world-state" element={<WorldStateScreen onNavToggle={handleDrawerToggle} />} />
-              <Route path="/logs" element={<LogViewerScreen onNavToggle={handleDrawerToggle} />} />
+              {/* Conditionally render game-related routes only if a snapshot is loaded */}
+              {currentSnapshot ? (
+                <>
+                    <Route path="/game" element={<GameScreen onNavToggle={handleDrawerToggle} />} />
+                    <Route path="/world-state" element={<WorldStateScreen onNavToggle={handleDrawerToggle} />} />
+                    <Route path="/logs" element={<LogViewerScreen onNavToggle={handleDrawerToggle} />} />
+                </>
+              ) : (
+                // If no snapshot, these routes could show a "No game loaded" message or redirect
+                // For now, they won't match, and the wildcard will catch it.
+                null
+              )}
               <Route path="/settings" element={<SettingsScreen onNavToggle={handleDrawerToggle} />} />
               <Route path="/" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
               <Route path="*" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
@@ -203,7 +226,6 @@ const AppContent: React.FC = () => {
     </Box>
   );
 };
-
 
 const App: React.FC = () => {
   const { themeMode } = useSettingsStore(); // Get theme mode from settings store
@@ -400,104 +422,66 @@ Describe the scene and how the world feels from the character's perspective.`;
  * From PromptCardDefaults.kt.
  */
 export const DEFAULT_EMIT_SKELETON_STRING: string = `
-### Narrator Output Sequence – Goal and Structure
+### Narrator Output Structure
 
-Each narrator response must include the following, in strict order:
+**IMPORTANT:** Your response MUST follow this exact structure. Each section MUST be separated by the specified markers on their own lines.
 
-1. **Narrative Response (Prose)**
-   - Clear, immersive, character-appropriate narration in freeform prose.
-   - Describe what the player sees, hears, or experiences without referencing the rules or system.
+1.  **Narrative Prose:**
+    *   Begin with clear, immersive narration in freeform prose.
+    *   This is the only section that should contain descriptive text. It MUST NOT contain any markers or JSON blocks.
 
-2. **Summary Digest Block**
-   - 1 to 5 short lines summarizing key actions or changes from the prose.
-   - Each line must include an importance score from 1 (minor) to 5 (critical).
+2.  **Summary Digest Block (\`@digest\`):**
+    *   After the prose, you MUST include a single newline, followed by the marker \`@digest\` on its own line.
+    *   Immediately after the marker, provide a \`\`\`json\`\`\` block containing an array of 1-5 summary lines.
+    *   Each line MUST have an importance score from 1 (minor) to 5 (critical).
 
-3. **Emit Block** (if applicable)
-   - A JSON object containing key-value deltas for the world state.
-   - Must use symbolic prefixes for clarity and internal parsing.
+3.  **Emit Block (\`@delta\`):**
+    *   After the digest block, include a single newline, followed by the marker \`@delta\` on its own line.
+    *   Immediately after the marker, provide a \`\`\`json\`\`\` block containing key-value deltas for the world state.
 
-4. **Scene Change Block** (only if the scene has shifted)
-   - Provide a new \`scene\` object with updated location, present entities, and any new ambient data.
-
----
-
-### Narrator Rules – Purpose and Usage
-
-These rules define how the narrator outputs structured state updates, tags, and contextual summaries. They support memory continuity, event parsing, and interaction tracking.
-
-- Emit rules ensure the narrator can update world state cleanly using symbolic paths.
-- Tagging rules define which entities are narratively relevant and how they are referenced.
-- Scene rules control location shifts and determine who is present in each scene.
-- Summary rules ensure that each narration is followed by concise, scored digest lines.
-
-These rules should be included in the narrator’s system prompt or injected as guidance to ensure consistent memory and world interaction.
+4.  **Scene Change Block (\`@scene\`, Optional):**
+    *   If the scene has shifted, include a single newline, followed by the marker \`@scene\` on its own line.
+    *   Immediately after the marker, provide a \`\`\`json\`\`\` block with the new scene object.
 
 ---
 
-### Emit Rules
+### **MANDATORY OUTPUT FORMAT EXAMPLE**
 
-- All state paths follow \`category.entity.field\` structure
-- Only symbolic-prefixed operations are allowed:
-  - \`+\` → Add
-  - \`=\` → Assign
-  - \`!\` → Declare
-  - \`-\` → Delete
-- Do not declare new fields unless explicitly permitted
-- All emit paths must resolve to valid world_state keys
+This is not optional. Your output must match this structure precisely.
 
-Example:
+The mist curls like spectral fingers around the ancient oaks. #Lyrielle stands rigid, her silver-threaded cloak shimmering faintly in the moonlight. You feel a sudden chill as #Brom shifts his weight, his leather armor creaking.
+
+@digest
+\`\`\`json
+[
+  { "text": "#Lyrielle appears tense and wary.", "importance": 3 },
+  { "text": "The mist in @MoonlitVale thickens, obscuring the path.", "importance": 2 }
+]
+\`\`\`
+
+@delta
+\`\`\`json
 {
-  "+npcs.#fox.trust": 1,
-  "=npcs.goblin_1.hp": 0,
-  "=player.#you.weapons.primary.arrows": 47
+  "=npcs.#lyrielle.status": "wary",
+  "+world.environment.fog_density": 0.1
 }
+\`\`\`
 
----
-
-### Tagging Rules
-
-- Use symbolic prefixes only on entities worthy of tracking:
-  - \`#\` for characters or NPCs
-  - \`@\` for locations
-  - \`$\` for items that require memory or recurrence
-  - \`!\`, \`%\`, \`^\` are reserved for future use
-- Tags must only appear on entities at level 2 of world_state (e.g. \`npcs.#fox\`)
-- Tags must be used consistently in narration and emit paths
-- Do not reference untagged entities with a symbolic prefix
-
----
-
-### Scene Rules
-
-- A \`scene\` block must always include:
-  - \`location\`: either a canonical \`@tag\` or a freeform label
-  - \`present\`: a list of all characters (tagged or untagged) in the scene
-  - Optional ambient fields: \`season\`, \`weather\`, \`timeOfDay\`
-- Only change the scene when narrative focus shifts
-- If the location is a tagged entity, it must resolve to \`world_state.locations\`
-
-Example:
-"scene": {
-  "location": "Between @deepwood and @whiteriver",
-  "present": ["#you", "#fox"],
-  "weather": "fog",
-  "season": "spring",
-  "timeOfDay": "dawn"
+@scene
+\`\`\`json
+{
+  "location": "@MoonlitVale",
+  "present": ["#you", "#lyrielle", "#brom"],
+  "weather": "foggy"
 }
-
+\`\`\`
 ---
 
-### Summary Rules
+### Emit & Tagging Rules
 
-- After each narration block, emit 1–5 digest lines
-- Each line must have an importance score from 1 (minor) to 5 (critical)
-- Summaries must be brief, narratively meaningful, and reflect what just occurred
+*   **Emit Rules:** Paths are \`category.entity.field\`. Use symbolic ops: \`+\`, \`=\`, \`!\`, \`-\`. Paths must be valid.
+*   **Tagging Rules:** Use \`#\` for characters, \`@\` for locations, \`$\` for items. Use tags consistently in narration and emits.
 
-Example:
-{ "text": "#fox threatens the goblins.", "importance": 4 }
-{ "text": "The fog thickens around @clearing.", "importance": 2 }
-
-- Digest lines must follow narration output — never precede it
 `.trim();
 @@FOLDER: src/data/infrastructure
 @@FILE: src/data/infrastructure/firebaseClient.ts
@@ -712,8 +696,9 @@ class FirestoreGameRepository implements IGameRepository {
     console.log(`FirestoreGameRepository: Attempting to setDoc for GameSnapshot ${snapshot.id} for user ${userId}.`);
     try {
       await setDoc(snapshotDocRef, {
+        // Pass all snapshot data, including the new 'title'
         ...snapshot,
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp() // Always update timestamp on save
       }, { merge: true });
       console.log(`FirestoreGameRepository: Successfully setDoc for GameSnapshot ${snapshot.id}.`);
     } catch (e) {
@@ -728,7 +713,8 @@ class FirestoreGameRepository implements IGameRepository {
 
     if (snapshotSnap.exists()) {
       const data = snapshotSnap.data();
-      return this.convertTimestamps<GameSnapshot>(data);
+      // Ensure title is retrieved
+      return this.convertTimestamps<GameSnapshot>(data) as GameSnapshot;
     } else {
       console.log(`No GameSnapshot found with ID: ${snapshotId} for user ${userId}`);
       return null;
@@ -743,7 +729,8 @@ class FirestoreGameRepository implements IGameRepository {
     const querySnapshot = await getDocs(q);
     const snapshots: GameSnapshot[] = [];
     querySnapshot.forEach((doc) => {
-      snapshots.push(this.convertTimestamps<GameSnapshot>(doc.data()));
+      // Ensure title is retrieved
+      snapshots.push(this.convertTimestamps<GameSnapshot>(doc.data()) as GameSnapshot);
     });
     return snapshots;
   }
@@ -1560,6 +1547,7 @@ import { ILogManager } from './logManager';
 import { IPromptCardRepository } from '../data/repositories/promptCardRepository';
 import { IGameRepository } from '../data/repositories/gameRepository';
 import { generateUuid } from '../utils/uuid'; // Import generateUuid
+import { formatIsoDateForDisplay } from '../utils/formatDate'; // Import for consistent date formatting in title
 
 // Define a simple DummyAiClient for testing and dev
 class DummyAiClient implements IAiClient {
@@ -1630,7 +1618,7 @@ export interface IGameSession {
    * @param snapshotId The ID of the snapshot to load.
    * @returns A Promise resolving when the game is loaded.
    */
-  loadGame(snapshotId: string): Promise<void>;
+  loadGame(userId: string, snapshotId: string): Promise<void>; 
 
   /**
    * Provides access to the current PromptCard for UI purposes.
@@ -1696,6 +1684,8 @@ export class GameSession implements IGameSession { // Export the class
       console.log('GameSession: Starting a new game...');
       const newSnapshotId = generateUuid();
       const now = new Date().toISOString();
+      // Generate a title for the new game snapshot
+      const gameTitle = `${card.title} - ${formatIsoDateForDisplay(now)}`;
 
       const initialGameState: GameState = {
         narration: "A new adventure begins...",
@@ -1757,6 +1747,7 @@ export class GameSession implements IGameSession { // Export the class
         id: newSnapshotId,
         userId: userId,
         promptCardId: card.id,
+        title: gameTitle, // Set the generated title for the new game
         createdAt: now,
         updatedAt: now,
         currentTurn: 0,
@@ -1765,7 +1756,7 @@ export class GameSession implements IGameSession { // Export the class
         logs: [],
         worldStatePinnedKeys: [],
       };
-      console.log(`GameSession: Initialized new game snapshot with ID: ${newSnapshotId}.`);
+      console.log(`GameSession: Initialized new game snapshot with ID: ${newSnapshotId}. Title: "${gameTitle}".`);
 
       const initialLogEntry = this.logManager.assembleTurnLogEntry({
           turnNumber: 0,
@@ -1932,6 +1923,7 @@ export class GameSession implements IGameSession { // Export the class
     currentSnapshot.gameState = updatedGameState;
     currentSnapshot.currentTurn = nextTurnNumber;
     currentSnapshot.updatedAt = new Date().toISOString();
+    // Title is set once during initialization, no need to update per turn.
 
     await this.saveGame(); // Save the full snapshot
 
@@ -1969,19 +1961,26 @@ export class GameSession implements IGameSession { // Export the class
     console.log(`GameSession: Game snapshot ${this.currentSnapshot.id} saved successfully.`);
   }
 
-  async loadGame(snapshotId: string): Promise<void> {
-    if (!this.currentUserId) {
-      throw new Error("Cannot load game: user not initialized.");
+  // MODIFIED: Added userId parameter to loadGame
+  public async loadGame(userId: string, snapshotId: string): Promise<void> {
+    if (!userId) { // Check the passed userId
+      throw new Error("Cannot load game: user not initialized."); // This is line 435 in your original console output
     }
+    // IMPORTANT: Set the internal currentUserId here.
+    // This ensures that the GameSession instance always knows which user it's operating for.
+    this.currentUserId = userId;
+    
     console.log(`GameSession: Attempting to load game snapshot ${snapshotId} for user ${this.currentUserId}.`);
-    const snapshot = await this.gameRepo.getGameSnapshot(this.currentUserId, snapshotId);
+    
+    // MODIFIED: Use the passed userId to retrieve the snapshot from the repository
+    const snapshot = await this.gameRepo.getGameSnapshot(userId, snapshotId); 
     if (!snapshot) {
-      console.error(`GameSession: Game snapshot ${snapshotId} not found for user ${this.currentUserId}.`);
-      throw new Error(`Game snapshot ${snapshotId} not found for user ${this.currentUserId}.`);
+      console.error(`GameSession: Game snapshot ${snapshotId} not found for user ${userId}.`);
+      throw new Error(`Game snapshot ${snapshotId} not found for user ${userId}.`);
     }
     this.currentSnapshot = snapshot;
     // Also load the associated PromptCard when a game is loaded
-    const card = await this.cardRepo.getPromptCard(this.currentUserId, snapshot.promptCardId);
+    const card = await this.cardRepo.getPromptCard(userId, snapshot.promptCardId); // Use passed userId
     if (!card) {
         console.warn(`GameSession: PromptCard ${snapshot.promptCardId} for loaded game ${snapshotId} not found.`);
         this.currentPromptCard = null;
@@ -2121,35 +2120,35 @@ import { DELTA_MARKER } from './deltaParser'; // Import DELTA_MARKER
  * Interface defining the contract for the Log Manager.
  */
 export interface ILogManager {
-  /**
-   * Assembles a complete LogEntry for a single turn of the game.
-   * This centralizes the logic from TurnLogAssembler and DigestManager.addParsedLines.
-   * @param params An object containing all necessary data for the log entry.
-   * @returns A fully constructed LogEntry object.
-   */
-  assembleTurnLogEntry(params: {
-    turnNumber: number;
-    userInput: string;
-    rawNarratorOutput: string;
-    parsedOutput: ParsedNarrationOutput; // Output from deltaParser.ts
-    contextSnapshot: string; // The full prompt string sent to AI
-    tokenUsage: TokenSummary | null;
-    aiSettings: AiSettings; // The AI settings used for this turn
-    apiRequestBody: string | null;
-    apiResponseBody: string | null;
-    apiUrl: string | null;
-    latencyMs: number | null;
-    modelSlugUsed: string;
-  }): LogEntry;
+ /**
+  * Assembles a complete LogEntry for a single turn of the game.
+  * This centralizes the logic from TurnLogAssembler and DigestManager.addParsedLines.
+  * @param params An object containing all necessary data for the log entry.
+  * @returns A fully constructed LogEntry object.
+  */
+ assembleTurnLogEntry(params: {
+  turnNumber: number;
+  userInput: string;
+  rawNarratorOutput: string;
+  parsedOutput: ParsedNarrationOutput; // Output from deltaParser.ts
+  contextSnapshot: string; // The full prompt string sent to AI
+  tokenUsage: TokenSummary | null;
+  aiSettings: AiSettings; // The AI settings used for this turn
+  apiRequestBody: string | null;
+  apiResponseBody: string | null;
+  apiUrl: string | null;
+  latencyMs: number | null;
+  modelSlugUsed: string;
+ }): LogEntry;
 
-  /**
-   * Infers digest lines from deltas if no explicit digest was provided by the AI.
-   * Replicates logic from DigestManager.addParsedLines.
-   * @param deltas The map of DeltaInstruction objects.
-   * @param prose Optional: the prose of the turn, for extracting first line as digest.
-   * @returns An array of inferred DigestLine objects.
-   */
-  inferDigestLinesFromDeltas(deltas: DeltaMap, prose?: string): DigestLine[];
+ /**
+  * Infers digest lines from deltas if no explicit digest was provided by the AI.
+  * Replicates logic from DigestManager.addParsedLines.
+  * @param deltas The map of DeltaInstruction objects.
+  * @param prose Optional: the prose of the turn, for extracting first line as digest.
+  * @returns An array of inferred DigestLine objects.
+  */
+ inferDigestLinesFromDeltas(deltas: DeltaMap, prose?: string): DigestLine[];
 }
 
 /**
@@ -2157,320 +2156,295 @@ export interface ILogManager {
  */
 class LogManager implements ILogManager {
 
-  inferDigestLinesFromDeltas(deltas: DeltaMap, prose?: string): DigestLine[] {
-    const inferredDigests: DigestLine[] = [];
+ inferDigestLinesFromDeltas(deltas: DeltaMap, prose?: string): DigestLine[] {
+  const inferredDigests: DigestLine[] = [];
 
-    if (Object.keys(deltas).length === 0) {
-      return inferredDigests;
-    }
-
-    for (const rawKey in deltas) {
-      const instruction = deltas[rawKey];
-      let score = 1; // Default low importance
-
-      // Logic from DigestManager.addParsedLines to infer importance
-      if (rawKey.startsWith("player.")) {
-        score = 5; // Player-related changes are critical
-      } else if (rawKey.startsWith("world.")) {
-        score = 5; // World-related changes are critical
-      } else if (rawKey.includes(".flags.")) {
-        score = 4;
-      } else if (rawKey.includes(".status")) {
-        score = 3;
-      } else if (rawKey.startsWith("+") || rawKey.startsWith("!")) {
-        score = 2; // Add or Declare operations
-      }
-
-      // Logic from DeltaInstruction.toLogValue() for summary text
-      let summaryText = `Unknown delta operation: ${rawKey}`;
-      if (instruction.op === 'assign') {
-        summaryText = `Set ${instruction.key} = ${JSON.stringify(instruction.value)}`;
-      } else if (instruction.op === 'add') {
-        summaryText = `Added to ${instruction.key}: ${JSON.stringify(instruction.value)}`;
-      } else if (instruction.op === 'declare') {
-        // Inferred tag logic, similar to DigestManager
-        let taggableKey = instruction.key;
-        const pathParts = instruction.key.split(".");
-        if (pathParts.length >= 2) {
-            const category = pathParts[0];
-            const entity = pathParts[1];
-            // Infer if this is a character or location declaration for a summary
-            const valueAsObject = instruction.value as Record<string, any>;
-            if (valueAsObject && (valueAsObject.tag === "character" || valueAsObject.tag === "location")) {
-                taggableKey = (valueAsObject.tag === "character" ? "#" : "@") + entity;
-            }
-        }
-        summaryText = `Declared ${taggableKey} as ${JSON.stringify(instruction.value)}`;
-      } else if (instruction.op === 'delete') {
-        summaryText = `Removed ${instruction.key}`;
-      }
-
-      const tags = this.extractTags(summaryText); // Extract tags from the generated summary
-      inferredDigests.push({ turn: 0, tags, score, text: summaryText }); // Turn will be set by assembleTurnLogEntry
-    }
-
-    // Optional prose line extraction from DigestManager.addParsedLines
-    if (prose && prose.trim().length > 10) {
-      const firstLine = prose.trim().split(/[.!?\n]/).find(line => line.trim().length > 10)?.trim();
-      if (firstLine) {
-        const tags = this.extractTags(firstLine);
-        inferredDigests.push({ turn: 0, tags, score: 3, text: firstLine });
-      }
-    }
-
-    // Assign consistent turn number AFTER all are collected
-    return inferredDigests.map(d => ({ ...d, turn: 0 })); // We'll update `turn` in assembleTurnLogEntry
+  if (Object.keys(deltas).length === 0) {
+   return inferredDigests;
   }
 
-  private extractTags(text: string): string[] {
-    const tagPattern = /[#@$][a-zA-Z0-9_]+/g; // Global flag to find all matches
-    const matches = text.match(tagPattern);
-    return matches || [];
+  for (const rawKey in deltas) {
+   const instruction = deltas[rawKey];
+   let score = 1; // Default low importance
+
+   // Logic from DigestManager.addParsedLines to infer importance
+   if (rawKey.startsWith("player.")) {
+    score = 5; // Player-related changes are critical
+   } else if (rawKey.startsWith("world.")) {
+    score = 5; // World-related changes are critical
+   } else if (rawKey.includes(".flags.")) {
+    score = 4;
+   } else if (rawKey.includes(".status")) {
+    score = 3;
+   } else if (rawKey.startsWith("+") || rawKey.startsWith("!")) {
+    score = 2; // Add or Declare operations
+   }
+
+   // Logic from DeltaInstruction.toLogValue() for summary text
+   let summaryText = `Unknown delta operation: ${rawKey}`;
+   if (instruction.op === 'assign') {
+    summaryText = `Set ${instruction.key} = ${JSON.stringify(instruction.value)}`;
+   } else if (instruction.op === 'add') {
+    summaryText = `Added to ${instruction.key}: ${JSON.stringify(instruction.value)}`;
+   } else if (instruction.op === 'declare') {
+    // Inferred tag logic, similar to DigestManager
+    let taggableKey = instruction.key;
+    const pathParts = instruction.key.split(".");
+    if (pathParts.length >= 2) {
+      const category = pathParts[0];
+      const entity = pathParts[1];
+      // Infer if this is a character or location declaration for a summary
+      const valueAsObject = instruction.value as Record<string, any>;
+      if (valueAsObject && (valueAsObject.tag === "character" || valueAsObject.tag === "location")) {
+        taggableKey = (valueAsObject.tag === "character" ? "#" : "@") + entity;
+      }
+    }
+    summaryText = `Declared ${taggableKey} as ${JSON.stringify(instruction.value)}`;
+   } else if (instruction.op === 'delete') {
+    summaryText = `Removed ${instruction.key}`;
+   }
+
+   const tags = this.extractTags(summaryText); // Extract tags from the generated summary
+   inferredDigests.push({ turn: 0, tags, score, text: summaryText }); // Turn will be set by assembleTurnLogEntry
   }
 
-  assembleTurnLogEntry(params: {
-    turnNumber: number;
-    userInput: string;
-    rawNarratorOutput: string;
-    parsedOutput: ParsedNarrationOutput;
-    contextSnapshot: string;
-    tokenUsage: TokenSummary | null;
-    aiSettings: AiSettings;
-    apiRequestBody: string | null;
-    apiResponseBody: string | null;
-    apiUrl: string | null;
-    latencyMs: number | null;
-    modelSlugUsed: string;
-  }): LogEntry {
-    const now = new Date().toISOString();
-    const {
-      turnNumber, userInput, rawNarratorOutput, parsedOutput,
-      contextSnapshot, tokenUsage, aiSettings, apiRequestBody,
-      apiResponseBody, apiUrl, latencyMs, modelSlugUsed
-    } = params;
-
-    let digestLines: DigestLine[] = parsedOutput.digestLines || [];
-    if (digestLines.length === 0 && parsedOutput.deltas) {
-      // If AI didn't provide digest, infer from deltas
-      digestLines = this.inferDigestLinesFromDeltas(parsedOutput.deltas, parsedOutput.prose);
-    }
-    // Ensure correct turn number for inferred digests
-    digestLines = digestLines.map(d => ({ ...d, turn: turnNumber }));
-
-
-    const errorFlags: LogErrorFlag[] = [];
-    // Basic error checking (can be expanded)
-    if (!parsedOutput.prose) {
-      errorFlags.push('MISSING_PROSE');
-    }
-    // Now using DELTA_MARKER imported from deltaParser
-    if (parsedOutput.deltas && Object.keys(parsedOutput.deltas).length === 0 && rawNarratorOutput.includes(DELTA_MARKER)) {
-        // If the delta marker was present but no deltas were parsed
-        errorFlags.push('INVALID_JSON_DELTA');
-    }
-    if (!tokenUsage || tokenUsage.totalTokens <= 0) {
-      errorFlags.push('INVALID_TOKEN_USAGE');
-    }
-    // Add more validation based on your `LogErrorFlag` enum/sealed class
-    // e.g., if (rawNarratorOutput.length < 50) { errorFlags.push('AI_RESPONSE_TOO_SHORT'); }
-
-
-    return {
-      turnNumber: turnNumber,
-      timestamp: now,
-      userInput: userInput,
-      narratorOutput: rawNarratorOutput,
-      digestLines: digestLines, // Now an array
-      deltas: parsedOutput.deltas,
-      contextSnapshot: contextSnapshot,
-      tokenUsage: tokenUsage,
-      apiRequestBody: apiRequestBody,
-      apiResponseBody: apiResponseBody,
-      apiUrl: apiUrl,
-      latencyMs: latencyMs,
-      aiSettings: aiSettings,
-      errorFlags: errorFlags,
-      modelSlugUsed: modelSlugUsed,
-    };
+  // Optional prose line extraction from DigestManager.addParsedLines
+  if (prose && prose.trim().length > 10) {
+   const firstLine = prose.trim().split(/[.!?\n]/).find(line => line.trim().length > 10)?.trim();
+   if (firstLine) {
+    const tags = this.extractTags(firstLine);
+    inferredDigests.push({ turn: 0, tags, score: 3, text: firstLine });
+   }
   }
+
+  // Assign consistent turn number AFTER all are collected
+  return inferredDigests.map(d => ({ ...d, turn: 0 })); // We'll update `turn` in assembleTurnLogEntry
+ }
+
+ private extractTags(text: string): string[] {
+  const tagPattern = /[#@$][a-zA-Z0-9_]+/g; // Global flag to find all matches
+  const matches = text.match(tagPattern);
+  return matches || [];
+ }
+
+ assembleTurnLogEntry(params: {
+  turnNumber: number;
+  userInput: string;
+  rawNarratorOutput: string;
+  parsedOutput: ParsedNarrationOutput;
+  contextSnapshot: string;
+  tokenUsage: TokenSummary | null;
+  aiSettings: AiSettings;
+  apiRequestBody: string | null;
+  apiResponseBody: string | null;
+  apiUrl: string | null;
+  latencyMs: number | null;
+  modelSlugUsed: string;
+ }): LogEntry {
+  const now = new Date().toISOString();
+  const {
+   turnNumber, userInput, rawNarratorOutput, parsedOutput,
+   contextSnapshot, tokenUsage, aiSettings, apiRequestBody,
+   apiResponseBody, apiUrl, latencyMs, modelSlugUsed
+  } = params;
+
+  let digestLines: DigestLine[] = parsedOutput.digestLines || [];
+  if (digestLines.length === 0 && parsedOutput.deltas) {
+   // If AI didn't provide digest, infer from deltas
+   digestLines = this.inferDigestLinesFromDeltas(parsedOutput.deltas, parsedOutput.prose);
+  }
+  // Ensure correct turn number for inferred digests
+  digestLines = digestLines.map(d => ({ ...d, turn: turnNumber }));
+
+
+  const errorFlags: LogErrorFlag[] = [];
+  // Basic error checking (can be expanded)
+  if (!parsedOutput.prose) {
+   errorFlags.push('MISSING_PROSE');
+  }
+  // Now using DELTA_MARKER imported from deltaParser
+  if (parsedOutput.deltas && Object.keys(parsedOutput.deltas).length === 0 && rawNarratorOutput.includes(DELTA_MARKER)) {
+    // If the delta marker was present but no deltas were parsed
+    errorFlags.push('INVALID_JSON_DELTA');
+  }
+  if (!tokenUsage || tokenUsage.totalTokens <= 0) {
+   errorFlags.push('INVALID_TOKEN_USAGE');
+  }
+  // Add more validation based on your `LogErrorFlag` enum/sealed class
+  // e.g., if (rawNarratorOutput.length < 50) { errorFlags.push('AI_RESPONSE_TOO_SHORT'); }
+
+
+  return {
+   turnNumber: turnNumber,
+   timestamp: now,
+   userInput: userInput,
+   narratorOutput: rawNarratorOutput,
+   prose: parsedOutput.prose, // ADDED: Save the clean prose here
+   digestLines: digestLines, // Now an array
+   deltas: parsedOutput.deltas,
+   contextSnapshot: contextSnapshot,
+   tokenUsage: tokenUsage,
+   apiRequestBody: apiRequestBody,
+   apiResponseBody: apiResponseBody,
+   apiUrl: apiUrl,
+   latencyMs: latencyMs,
+   aiSettings: aiSettings,
+   errorFlags: errorFlags,
+   modelSlugUsed: modelSlugUsed,
+  };
+ }
 }
 
 export const logManager = new LogManager();
 @@FILE: src/logic/promptBuilder.ts
+
 // src/logic/promptBuilder.ts
 
 import type { PromptCard, AiSettings } from '../models/PromptCard';
 import type { GameState, SceneState } from '../models/GameState';
 import type { LogEntry } from '../models/LogEntry';
 import type { Message } from '../models/Message';
-// Changed to regular import for runtime access to enum members
 import { StackMode, FilterMode, StackInstructions, EmissionRule, ProsePolicy, DigestFilterPolicy } from '../models/StackInstructions';
 import type { DeltaMap, DeltaInstruction } from '../models/DeltaInstruction';
 import type { DigestLine } from '../models/LogEntryElements';
 import type { ParsedNarrationOutput } from '../models/ParsedNarrationOutput';
 
-// Marker constants for parsing AI output (from NarrationParser.kt)
+// Marker constants for parsing AI output
 const DELTA_MARKER = "@delta";
 const DIGEST_MARKER = "@digest";
 const SCENE_MARKER = "@scene";
 
-/**
- * Interface defining the contract for the Prompt Builder.
- * This module is now responsible for both assembling the AI prompt AND parsing its structured output.
- * This simplifies dependencies for GameSession.
- */
-export interface IPromptBuilder {
-  /**
-   * Builds the complete prompt string as an array of Messages for the first turn of a game.
-   * This includes the main prompt, first-turn-only block, game rules, etc.
-   * @param card The PromptCard guiding the game.
-   * @returns An array of Message objects.
-   */
-  buildFirstTurnPrompt(card: PromptCard): Message[];
+// ... (Interface definition remains the same) ...
 
-  /**
-   * Builds the complete prompt string as an array of Messages for subsequent turns.
-   * This includes dynamic context from game logs, world state, and conversation history.
-   * Replicates `StackAssembler.assemble`.
-   * @param card The PromptCard guiding the game.
-   * @param currentGameState The current state of the game.
-   * @param logEntries The history of game logs.
-   * @param conversationHistory The full user/assistant conversation.
-   * @param currentUserAction The current player's action for this turn.
-   * @param turnNumber The current turn number.
-   * @returns An array of Message objects.
-   */
-  buildEveryTurnPrompt(
-    card: PromptCard,
-    currentGameState: GameState,
-    logEntries: LogEntry[],
-    conversationHistory: Message[],
-    currentUserAction: string,
-    turnNumber: number
-  ): Message[];
-
-  /**
-   * Parses the raw AI response string into a structured ParsedNarrationOutput object.
-   * This function directly replicates the logic of `NarrationParser.extractJsonAndCleanNarration`.
-   * Moved here for a simplified GameSession dependency (only talks to builder for prompt/parse).
-   * @param rawAiOutput The full, raw string from the AI model.
-   * @returns A ParsedNarrationOutput object.
-   */
-  parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput;
-}
-
-/**
- * Concrete implementation of IPromptBuilder.
- */
 export class PromptBuilder implements IPromptBuilder {
 
-  /**
-   * Helper to extract tags using regex (from NarrationParser).
-   */
-  private extractTags(text: string): string[] {
-    const tagPattern = /[#@$][a-zA-Z0-9_]+/g;
-    const matches = text.match(tagPattern);
-    return matches || [];
-  }
+    // ... (buildFirstTurnPrompt and buildEveryTurnPrompt remain the same) ...
 
-  /**
-   * Extracts a JSON object from a list of lines, handling potential parsing errors (from NarrationParser).
-   */
-  private extractJsonObject(lines: string[]): Record<string, any> {
-    const text = lines.join('\n').trim();
-    if (!text) return {};
-    try {
-      return JSON.parse(text);
-    } catch (e) {
-      console.error("Failed to parse JSON object:", e, "\nText:", text);
-      return {};
-    }
-  }
-
-  /**
-   * Extracts a JSON array from a list of lines, handling potential parsing errors (from NarrationParser).
-   */
-  private extractJsonArray(lines: string[]): any[] {
-    const text = lines.join('\n').trim();
-    if (!text) return [];
-    try {
-      return JSON.parse(text);
-    } catch (e) {
-      console.error("Failed to parse JSON array:", e, "\nText:", text);
-      return [];
-    }
-  }
-
-  /**
-   * Parses a single key-value pair from the AI's delta JSON into a DeltaInstruction (from DeltaInstruction companion object).
-   */
-  private parseSingleDelta(rawKey: string, value: any): DeltaInstruction | null {
-    const op = rawKey.charAt(0);
-    const path = rawKey.substring(1);
-
-    switch (op) {
-      case '+': return { op: 'add', key: path, value: value };
-      case '=': return { op: 'assign', key: path, value: value };
-      case '!': return { op: 'declare', key: path, value: value };
-      case '-': return { op: 'delete', key: path };
-      default:
-        console.warn(`Invalid delta operation character '${op}' in key '${rawKey}'`);
-        return null;
-    }
-  }
-
-  // --- Public Parsing Method (from NarrationParser.kt) ---
-  parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput {
-    const lines = rawAiOutput.split('\n');
-
-    const deltaIndex = lines.findIndex(line => line.trim() === DELTA_MARKER);
-    const digestIndex = lines.findIndex(line => line.trim() === DIGEST_MARKER);
-    const sceneIndex = lines.findIndex(line => line.trim() === SCENE_MARKER);
-
-    // Determine prose end by the first marker found
-    const proseEndIndex = [deltaIndex, digestIndex, sceneIndex]
-      .filter(index => index !== -1)
-      .reduce((min, current) => Math.min(min, current), lines.length);
-
-    const prose = lines.slice(0, proseEndIndex).join('\n').trim();
-
-    // Slice lines for each block
-    const deltaLines = deltaIndex !== -1 ? lines.slice(deltaIndex + 1, Math.min(...[digestIndex, sceneIndex, lines.length].filter(i => i > deltaIndex))) : [];
-    const digestLinesRaw = digestIndex !== -1 ? lines.slice(digestIndex + 1, Math.min(...[sceneIndex, lines.length].filter(i => i > digestIndex))) : [];
-    const sceneLines = sceneIndex !== -1 ? lines.slice(sceneIndex + 1) : [];
-
-    // Extract JSON objects/arrays
-    const deltaJson = this.extractJsonObject(deltaLines);
-    const digestJson = this.extractJsonArray(digestLinesRaw);
-    const sceneJson = this.extractJsonObject(sceneLines);
-
-    // Parse Deltas
-    const deltas: DeltaMap = {};
-    for (const key in deltaJson) {
-      const instruction = this.parseSingleDelta(key, deltaJson[key]);
-      if (instruction) {
-        deltas[key] = instruction;
-      }
+    private extractTags(text: string): string[] {
+        const tagPattern = /[#@$][a-zA-Z0-9_]+/g;
+        const matches = text.match(tagPattern);
+        return matches || [];
     }
 
-    // Parse Digest Lines
-    const digestLines: DigestLine[] = digestJson.map((item: any) => {
-      const text = item.text || '';
-      const importance = typeof item.importance === 'number' ? item.importance : 3; // Default importance
-      const tags = this.extractTags(text);
-      return { turn: 0, tags, score: importance, text }; // Turn will be set by LogManager
-    }).filter(line => line.text); // Filter out empty lines
+    private extractJsonObject(jsonString: string): Record<string, any> {
+        if (!jsonString) return {};
+        try {
+            const parsed = JSON.parse(jsonString);
+            return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : {};
+        } catch (e) {
+            console.error("Failed to parse JSON object:", e, "\nText:", jsonString);
+            return {};
+        }
+    }
 
+    private extractJsonArray(jsonString: string): any[] {
+        if (!jsonString) return [];
+        try {
+            const parsed = JSON.parse(jsonString);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+            console.error("Failed to parse JSON array:", e, "\nText:", jsonString);
+            return [];
+        }
+    }
 
-    return {
-      prose,
-      deltas,
-      digestLines,
-      scene: sceneJson,
-    };
-  }
+    private extractFencedJsonBlock(lines: string[], startIndex: number): string {
+        if (startIndex < 0 || startIndex >= lines.length) {
+            return "";
+        }
+    
+        let jsonLines: string[] = [];
+        let inJsonBlock = false;
+    
+        // Start searching from the line *after* the marker
+        for (let i = startIndex + 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+    
+            if (line.startsWith("```")) {
+                if (!inJsonBlock) {
+                    inJsonBlock = true;
+                    // Handle content on the same line as the opening fence (e.g., ```json { ... )
+                    const contentAfterFence = line.substring(line.indexOf('{'));
+                    if(contentAfterFence.startsWith('{')) {
+                        jsonLines.push(contentAfterFence);
+                    }
+                    continue;
+                } else {
+                    // Found the closing fence, we are done.
+                    break;
+                }
+            }
+    
+            if (inJsonBlock) {
+                jsonLines.push(lines[i]);
+            } else if (line.startsWith("{") || line.startsWith("[")) {
+                // If we find a JSON start without a fence, assume it's an unfenced block
+                inJsonBlock = true;
+                jsonLines.push(line);
+            }
+        }
+    
+        return jsonLines.join('\n');
+    }
+    
+    private parseSingleDelta(rawKey: string, value: any): DeltaInstruction | null {
+        const op = rawKey.charAt(0);
+        const path = rawKey.substring(1);
 
+        switch (op) {
+            case '+': return { op: 'add', key: path, value: value };
+            case '=': return { op: 'assign', key: path, value: value };
+            case '!': return { op: 'declare', key: path, value: value };
+            case '-': return { op: 'delete', key: path };
+            default:
+                console.warn(`Invalid delta operation character '${op}' in key '${rawKey}'`);
+                return null;
+        }
+    }
 
+    parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput {
+        const lines = rawAiOutput.split('\n');
+
+        const deltaIndex = lines.findIndex(line => line.trim().startsWith(DELTA_MARKER));
+        const digestIndex = lines.findIndex(line => line.trim().startsWith(DIGEST_MARKER));
+        const sceneIndex = lines.findIndex(line => line.trim().startsWith(SCENE_MARKER));
+
+        const firstMarkerIndex = [deltaIndex, digestIndex, sceneIndex]
+            .filter(index => index !== -1)
+            .reduce((min, current) => Math.min(min, current), lines.length);
+
+        const prose = lines.slice(0, firstMarkerIndex).join('\n').trim();
+
+        const digestJsonString = this.extractFencedJsonBlock(lines, digestIndex);
+        const deltaJsonString = this.extractFencedJsonBlock(lines, deltaIndex);
+        const sceneJsonString = this.extractFencedJsonBlock(lines, sceneIndex);
+
+        const deltaJson = this.extractJsonObject(deltaJsonString);
+        const digestJson = this.extractJsonArray(digestJsonString);
+        const sceneJson = this.extractJsonObject(sceneJsonString);
+
+        const deltas: DeltaMap = {};
+        for (const key in deltaJson) {
+            const instruction = this.parseSingleDelta(key, deltaJson[key]);
+            if (instruction) {
+                deltas[key] = instruction;
+            }
+        }
+
+        const digestLines: DigestLine[] = digestJson.map((item: any) => {
+            const text = item.text || '';
+            const importance = typeof item.importance === 'number' ? item.importance : 3;
+            const tags = this.extractTags(text);
+            return { turn: 0, tags, score: importance, text };
+        }).filter(line => line.text);
+
+        return {
+            prose,
+            deltas,
+            digestLines,
+            scene: sceneJson,
+        };
+    }
   // --- Context Stack Assembly Methods (from StoryForgeViewModel & StackAssembler.kt) ---
 
   /**
@@ -2837,6 +2811,7 @@ export interface GameSnapshot {
   id: string; // Unique ID for this snapshot/game session
   userId: string;
   promptCardId: string; // ID of the card used
+  title: string; // NEW: A human-readable title for the saved game
 
   // --- Timestamps ---
   createdAt: string; // When the game session was started
@@ -2888,26 +2863,26 @@ import { AiSettingsInCard } from './PromptCard';
  * Corresponds to TurnLogEntry.kt, enhanced with insights from DigestManager.
  */
 export interface LogEntry {
-  turnNumber: number;
-  timestamp: string;
+ turnNumber: number;
+ timestamp: string;
 
-  userInput: string;
-  narratorOutput: string;
+ userInput: string;
+ narratorOutput: string; // The raw, full output from the AI
+ prose: string; 
 
-  // CHANGED: digestLines is now an array to hold multiple digests per turn
-  digestLines: DigestLine[];
-  deltas?: DeltaMap | null;
+ digestLines: DigestLine[];
+ deltas?: DeltaMap | null;
 
-  contextSnapshot?: string | null;
-  tokenUsage?: TokenSummary | null;
-  apiRequestBody?: string | null;
-  apiResponseBody?: string | null;
-  apiUrl?: string | null;
-  latencyMs?: number | null;
+ contextSnapshot?: string | null;
+ tokenUsage?: TokenSummary | null;
+ apiRequestBody?: string | null;
+ apiResponseBody?: string | null;
+ apiUrl?: string | null;
+ latencyMs?: number | null;
 
-  aiSettings?: AiSettingsInCard | null;
-  errorFlags: LogErrorFlag[];
-  modelSlugUsed: string;
+ aiSettings?: AiSettingsInCard | null;
+ errorFlags: LogErrorFlag[];
+ modelSlugUsed: string;
 }
 @@FILE: src/models/LogEntryElements.ts
 // src/models/LogEntryElements.ts
@@ -3280,7 +3255,8 @@ interface GameStateStore {
   initializeGame: (userId: string, cardId: string, existingSnapshotId?: string) => Promise<void>;
   processPlayerAction: (action: string) => Promise<void>;
   saveGame: () => Promise<void>;
-  loadGame: (snapshotId: string) => Promise<void>;
+  loadGame: (userId: string, snapshotId: string) => Promise<void>;
+  loadLastActiveGame: (userId: string) => Promise<boolean>; // NEW: Load the most recent game
 
   // Pinning actions
   toggleWorldStatePin: (keyPath: string, type: PinToggleType) => void;
@@ -3392,31 +3368,32 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
     }
     const currentSnapshot = get().currentSnapshot;
     if (currentSnapshot) {
-        // Before saving, ensure the gameSession's internal snapshot reflects the current pinned keys from Zustand.
-        // This is important because `toggleWorldStatePin` directly updates the store's `currentSnapshot` object,
-        // but `gameSession` might not immediately reflect that change in its *own* internal `currentSnapshot`.
-        // A direct way to do this is to ensure `gameSession.currentSnapshot` is explicitly updated.
-        // For now, `processPlayerAction` already sets `gameSession.currentSnapshot = updatedSnapshot`,
-        // and `toggleWorldStatePin` also updates the `currentSnapshot` within the Zustand store.
-        // So, when `saveGame` is called, `gameSession.getCurrentGameSnapshot()` will return the
-        // Zustand-updated snapshot (if the reference is the same, which it is if Immer is used to update the whole object).
-        // To be explicit, we could pass the currentSnapshot:
-        // await gameSession.saveGame(currentSnapshot); // (Requires modifying IGameSession.saveGame)
-        // For now, relying on the fact that `currentSnapshot` in GameSession points to the same object as in store after updates.
+        // Before calling gameSession.saveGame, ensure the store's currentSnapshot
+        // has its `updatedAt` field up-to-date locally, even though Firestore's
+        // `serverTimestamp()` will overwrite it. This ensures consistency.
+        set(produce((state: GameStateStore) => {
+            if (state.currentSnapshot) {
+                state.currentSnapshot.updatedAt = new Date().toISOString();
+                // Ensure pinned keys are synced to the snapshot object
+                state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
+            }
+        }));
         await gameSessionInstance.saveGame();
     } else {
         console.warn("No current snapshot to save.");
     }
   },
-  loadGame: async (snapshotId) => {
+
+  loadGame: async (userId, snapshotId) => {
     const gameSessionInstance = window.gameSessionInstance;
-    if (!gameSessionInstance || !get().currentUserId) {
+    if (!gameSessionInstance || !userId) {
         set({ gameError: "Game session not initialized or user not logged in.", gameLoading: false });
         return;
     }
     set({ gameLoading: true, gameError: null });
     try {
-      await gameSessionInstance.loadGame(snapshotId);
+      // Pass the userId to the session's loadGame method
+      await gameSessionInstance.loadGame(userId, snapshotId);
       const snapshot = gameSessionInstance.getCurrentGameSnapshot();
       if (snapshot) {
         set({
@@ -3425,7 +3402,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
           currentGameState: snapshot.gameState,
           gameLogs: snapshot.logs || [],
           conversationHistory: snapshot.conversationHistory || [],
-          worldStatePinnedKeys: snapshot.worldStatePinnedKeys || [], // Load pinned keys
+          worldStatePinnedKeys: snapshot.worldStatePinnedKeys || [],
         });
       }
       set({ gameLoading: false });
@@ -3435,6 +3412,46 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
     }
   },
 
+  // NEW: Action to load the last active game
+  loadLastActiveGame: async (userId: string): Promise<boolean> => {
+    set({ gameLoading: true, gameError: null });
+    try {
+        const gameSessionInstance = window.gameSessionInstance;
+        if (!gameSessionInstance) {
+            throw new Error("Game session instance not found on window.");
+        }
+
+        const allSnapshots = await (gameSessionInstance as any).gameRepo.getAllGameSnapshots(userId);
+        if (allSnapshots.length > 0) {
+            const lastActiveSnapshot = allSnapshots[0];
+            console.log(`GameStateStore: Found last active game: ${lastActiveSnapshot.id}. Loading...`);
+            // Pass the userId to the session's loadGame method
+            await gameSessionInstance.loadGame(userId, lastActiveSnapshot.id);
+            const loadedSnapshot = gameSessionInstance.getCurrentGameSnapshot();
+            if (loadedSnapshot) {
+                set({
+                    currentSnapshot: loadedSnapshot,
+                    currentPromptCardId: loadedSnapshot.promptCardId,
+                    currentGameState: loadedSnapshot.gameState,
+                    gameLogs: loadedSnapshot.logs || [],
+                    conversationHistory: loadedSnapshot.conversationHistory || [],
+                    worldStatePinnedKeys: loadedSnapshot.worldStatePinnedKeys || [],
+                });
+                console.log(`GameStateStore: Successfully loaded last active game: ${loadedSnapshot.id}`);
+                set({ gameLoading: false });
+                return true;
+            }
+        }
+        console.log("GameStateStore: No last active game found for user.");
+        set({ gameLoading: false, currentSnapshot: null, currentPromptCardId: null, currentGameState: null, gameLogs: [], conversationHistory: [], worldStatePinnedKeys: [] });
+        return false;
+    } catch (error: any) {
+        console.error("GameStateStore: Error loading last active game:", error);
+        set({ gameError: error.message, gameLoading: false });
+        return false;
+    }
+  },
+  
   toggleWorldStatePin: (keyPath: string, type: PinToggleType) => {
     set(produce((state: GameStateStore) => { // Use immer's produce for immutable updates
       const currentWorldState = state.currentGameState?.worldState || {};
@@ -4396,40 +4413,42 @@ import { Box, Typography, Paper } from '@mui/material';
 import { LogEntry } from '../../models/LogEntry'; // Assuming LogEntry model
 
 interface LogViewProps {
-  logEntries: LogEntry[];
+ logEntries: LogEntry[];
 }
 
 export const LogView: React.FC<LogViewProps> = ({ logEntries }) => {
-  return (
-    <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
-      {logEntries.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 4 }}>
-          No turns logged yet. Start playing!
+ return (
+  <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
+   {logEntries.length === 0 ? (
+    <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 4 }}>
+     No turns logged yet. Start playing!
+    </Typography>
+   ) : (
+    logEntries.map((entry, index) => (
+     <Paper key={index} elevation={0} sx={{ p: 1.5, mb: 1.5, backgroundColor: 'transparent' }}>
+      <Typography variant="body2" sx={{ fontWeight: 'bold', color: (theme) => theme.palette.primary.dark }}>
+       You (Turn {entry.turnNumber}):
+      </Typography>
+      <Typography variant="body1" sx={{ mb: 1 }}>
+       {entry.userInput}
+      </Typography>
+      {/* MODIFIED: Check for entry.prose instead of entry.narratorOutput */}
+      {entry.prose && (
+       <>
+        <Typography variant="body2" sx={{ fontWeight: 'bold', color: (theme) => theme.palette.secondary.dark }}>
+         AI Narrator:
         </Typography>
-      ) : (
-        logEntries.map((entry, index) => (
-          <Paper key={index} elevation={0} sx={{ p: 1.5, mb: 1.5, backgroundColor: 'transparent' }}>
-            <Typography variant="body2" sx={{ fontWeight: 'bold', color: (theme) => theme.palette.primary.dark }}>
-              You (Turn {entry.turnNumber}):
-            </Typography>
-            <Typography variant="body1" sx={{ mb: 1 }}>
-              {entry.userInput}
-            </Typography>
-            {entry.narratorOutput && (
-              <>
-                <Typography variant="body2" sx={{ fontWeight: 'bold', color: (theme) => theme.palette.secondary.dark }}>
-                  AI Narrator:
-                </Typography>
-                <Typography variant="body1">
-                  {entry.narratorOutput}
-                </Typography>
-              </>
-            )}
-          </Paper>
-        ))
+        <Typography variant="body1">
+         {/* MODIFIED: Display the clean prose. Fallback to raw output if prose is missing (for older data). */}
+         {entry.prose || entry.narratorOutput}
+        </Typography>
+       </>
       )}
-    </Box>
-  );
+     </Paper>
+    ))
+   )}
+  </Box>
+ );
 };
 @@FILE: src/ui/components/PinnedItemsView.tsx
 // src/ui/components/PinnedItemsView.tsx
@@ -5362,8 +5381,9 @@ export const WorldStateItemRow: React.FC<WorldStateItemRowProps> = ({
   );
 };
 @@FOLDER: src/ui/screens
-@@FILE: src/ui/screens/GameLibraryScreen.tsx
-// src/ui/screens/GameLibraryScreen.tsx
+@@FILE: src/ui/screens/CardLibraryScreen.tsx
+// src/ui/screens/PromptCardLibraryScreen.tsx
+// RENAMED from GameLibraryScreen.tsx
 
 import React, { useEffect, useState } from 'react';
 import {
@@ -5394,18 +5414,17 @@ import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { PromptCard } from '../../models/index';
 import Snackbar from '@mui/material/Snackbar';
-import { useNavigate } from 'react-router-dom'; // <--- ADD THIS IMPORT
+import { useNavigate } from 'react-router-dom';
 
 
-
-interface GameLibraryScreenProps {
+interface PromptCardLibraryScreenProps { // RENAMED interface
   onNavToggle: () => void;
   // onNavigateToEditor: (cardId?: string) => void; // To navigate to editor with a specific card
 }
 
-const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) => {
+const PromptCardLibraryScreen: React.FC<PromptCardLibraryScreenProps> = ({ onNavToggle }) => { // RENAMED component
   const { user } = useAuthStore();
-  const navigate = useNavigate(); // <--- INITIALIZE useNavigate HOOK
+  const navigate = useNavigate();
   const {
     promptCards,
     isLoading,
@@ -5435,7 +5454,8 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
 
   const handleEditCard = (card: PromptCard) => {
     setActivePromptCard(card);
-    // TODO: Navigate to PromptCardManager/Editor screen
+    // Navigate to PromptCardManager/Editor screen
+    navigate('/cards'); // Navigate to the PromptCardManager
     setSnackbarMessage(`Editing "${card.title}"`);
     setSnackbarSeverity('info');
     console.log(`Navigating to editor for card: ${card.id}`);
@@ -5465,8 +5485,7 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
       await initializeGame(user.uid, card.id);
       setSnackbarMessage(`Game "${card.title}" initialized! Navigating to game...`);
       setSnackbarSeverity('success');
-      navigate('/game'); // <--- ADD THIS LINE TO NAVIGATE TO THE GAME SCREEN
-      // TODO: Navigate to GameScreen
+      navigate('/game'); // Navigate to the GameScreen
       console.log(`Game "${card.title}" started! Navigating to GameScreen.`);
     } catch (e) {
       setSnackbarMessage(`Failed to start game: ${e instanceof Error ? e.message : 'Unknown error'}`);
@@ -5479,7 +5498,7 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
-        <Typography variant="h6" ml={2}>Loading Game Library...</Typography>
+        <Typography variant="h6" ml={2}>Loading Prompt Card Library...</Typography>
       </Box>
     );
   }
@@ -5489,7 +5508,7 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
       <AppBar position="static" elevation={1}>
         <Toolbar>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            Game Library
+            Prompt Card Library
           </Typography>
           <IconButton edge="end" color="inherit" aria-label="menu" onClick={onNavToggle}>
             <MenuIcon />
@@ -5519,18 +5538,17 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
           }}
           sx={{ mb: 2 }}
         />
-        {/* Placeholder for "New Card" button, which we decided would be on PromptCardManager */}
-        {/* <Button variant="contained" startIcon={<AddIcon />} sx={{ mb: 2 }}>
-          Create New Card
-        </Button> */}
       </Box>
 
       <Paper elevation={1} sx={{ flexGrow: 1, m: 2, overflowY: 'auto' }}>
         {filteredCards.length === 0 ? (
           <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
             <Typography variant="body1" color="text.secondary">
-              {searchTerm ? "No cards match your search." : "No cards available. Go to Prompt Cards to create one!"}
+              {searchTerm ? "No cards match your search." : "No cards available. Go to Prompt Cards Manager to create one!"}
             </Typography>
+            <Button variant="contained" startIcon={<AddIcon />} sx={{ mt: 2 }} onClick={() => navigate('/cards')}>
+              Go to Prompt Card Manager
+            </Button>
           </Box>
         ) : (
           <List>
@@ -5577,7 +5595,230 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
   );
 };
 
+export default PromptCardLibraryScreen;
+@@FILE: src/ui/screens/GameLibraryScreen.tsx
+// src/ui/screens/GameLibraryScreen.tsx
+// NEW: This screen lists saved games (snapshots)
+
+import React, { useEffect, useState } from 'react';
+import {
+  Box,
+  Typography,
+  Button,
+  AppBar,
+  Toolbar,
+  IconButton,
+  List,
+  ListItem,
+  ListItemText,
+  Paper,
+  Divider,
+  CircularProgress,
+  Alert,
+} from '@mui/material';
+import MenuIcon from '@mui/icons-material/Menu';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import DeleteIcon from '@mui/icons-material/Delete';
+import { useAuthStore } from '../../state/useAuthStore';
+import { useGameStateStore } from '../../state/useGameStateStore';
+import { gameRepository } from '../../data/repositories/gameRepository';
+import { GameSnapshot } from '../../models/GameSnapshot';
+import { useNavigate } from 'react-router-dom';
+import Snackbar from '@mui/material/Snackbar';
+import { formatIsoDateForDisplay } from '../../utils/formatDate';
+
+interface GameLibraryScreenProps {
+  onNavToggle: () => void;
+}
+
+const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) => {
+  const { user } = useAuthStore(); // Ensure user is available here
+  const navigate = useNavigate();
+  const { loadGame, gameLoading } = useGameStateStore();
+
+  const [savedGames, setSavedGames] = useState<GameSnapshot[]>([]);
+  const [loadingSavedGames, setLoadingSavedGames] = useState(true);
+  const [savedGamesError, setSavedGamesError] = useState<string | null>(null);
+  const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'info' | 'warning'>('info');
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+
+  const fetchSavedGames = async (userId: string) => {
+    setLoadingSavedGames(true);
+    setSavedGamesError(null);
+    try {
+      const games = await gameRepository.getAllGameSnapshots(userId);
+      setSavedGames(games);
+    } catch (e: any) {
+      setSavedGamesError(e.message || 'Failed to fetch saved games.');
+    } finally {
+      setLoadingSavedGames(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.uid) {
+      fetchSavedGames(user.uid);
+    }
+  }, [user?.uid]);
+
+  const showSnackbar = (
+    message: string,
+    severity: 'success' | 'error' | 'info' | 'warning' = 'info'
+  ) => {
+    setSnackbarMessage(message);
+    setSnackbarSeverity(severity);
+    setSnackbarOpen(true);
+  };
+
+  const handleSnackbarClose = (event?: React.SyntheticEvent | Event, reason?: string) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setSnackbarOpen(false);
+  };
+
+  const handleLoadGame = async (snapshotId: string) => {
+    if (!user?.uid) {
+      showSnackbar('Must be logged in to load a game.', 'error');
+      return;
+    }
+    try {
+      // MODIFIED: Pass user.uid as the first argument
+      await loadGame(user.uid, snapshotId); 
+      showSnackbar('Game loaded successfully! Navigating to game...', 'success');
+      navigate('/game');
+    } catch (e) {
+      showSnackbar(
+        `Failed to load game: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        'error'
+      );
+    }
+  };
+
+  const handleDeleteGame = async (snapshotId: string) => {
+    if (!user?.uid) return;
+    try {
+      await gameRepository.deleteGameSnapshot(user.uid, snapshotId);
+      fetchSavedGames(user.uid);
+      showSnackbar('Game deleted successfully!', 'success');
+    } catch (e) {
+      showSnackbar(
+        `Failed to delete game: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        'error'
+      );
+    }
+  };
+
+  if (loadingSavedGames || gameLoading) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+        }}
+      >
+        <CircularProgress />
+        <Typography variant="h6" ml={2}>
+          Loading Games...
+        </Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
+      <AppBar position="static" elevation={1}>
+        <Toolbar>
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+            Game Library (Saved Games)
+          </Typography>
+          <IconButton edge="end" color="inherit" aria-label="menu" onClick={onNavToggle}>
+            <MenuIcon />
+          </IconButton>
+        </Toolbar>
+      </AppBar>
+
+      {savedGamesError && (
+        <Alert severity="error" sx={{ m: 2 }}>
+          Error: {savedGamesError}
+        </Alert>
+      )}
+
+      <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}>
+        <Button
+          variant="contained"
+          onClick={() => navigate('/cards')}
+          sx={{ mt: 2 }}
+        >
+          Start New Game (Select Prompt Card)
+        </Button>
+      </Box>
+
+      <Paper elevation={1} sx={{ flexGrow: 1, m: 2, overflowY: 'auto' }}>
+        {savedGames.length === 0 ? (
+          <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
+            <Typography variant="body1" color="text.secondary">
+              No saved games found. Start a new one!
+            </Typography>
+          </Box>
+        ) : (
+          <List>
+            {savedGames.map((game) => (
+              <React.Fragment key={game.id}>
+                <ListItem
+                  secondaryAction={
+                    <Box>
+                      <IconButton
+                        edge="end"
+                        aria-label="load-game"
+                        onClick={() => handleLoadGame(game.id)}
+                      >
+                        <PlayArrowIcon color="primary" />
+                      </IconButton>
+                      <IconButton
+                        edge="end"
+                        aria-label="delete-game"
+                        onClick={() => handleDeleteGame(game.id)}
+                      >
+                        <DeleteIcon color="error" />
+                      </IconButton>
+                    </Box>
+                  }
+                >
+                  <ListItemText
+                    primary={game.title}
+                    secondary={`Turn: ${game.currentTurn} | Last Saved: ${formatIsoDateForDisplay(
+                      game.updatedAt
+                    )}`}
+                    primaryTypographyProps={{ fontWeight: 'medium' }}
+                  />
+                </ListItem>
+                <Divider component="li" />
+              </React.Fragment>
+            ))}
+          </List>
+        )}
+      </Paper>
+
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
+    </Box>
+  );
+};
+
 export default GameLibraryScreen;
+
 @@FILE: src/ui/screens/GameScreen.tsx
 import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -6489,20 +6730,20 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import { useNavigate } from 'react-router-dom';
 
 import { usePromptCardStore } from '../../state/usePromptCardStore';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
-import { useSettingsStore } from '../../state/useSettingsStore'; // Import useSettingsStore to pass AI connections
+import { useSettingsStore } from '../../state/useSettingsStore';
 import { PromptCard, NewPromptCardData } from '../../models/index';
-import PromptCardEditor from './PromptCardEditor'; // Editor component
+import PromptCardEditor from './PromptCardEditor';
 
-import { // NEW: Import all default values
+import {
   DEFAULT_FIRST_TURN_PROMPT_BLOCK,
   DEFAULT_EMIT_SKELETON_STRING,
   defaultStackInstructions,
-  defaultAiSettingsInCard, // Although AI settings are merged in CardManager, it's good to be explicit here
+  defaultAiSettingsInCard,
 } from '../../data/config/promptCardDefaults';
 
 
@@ -6528,27 +6769,26 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
     exportPromptCard,
   } = usePromptCardStore();
   const { initializeGame } = useGameStateStore();
-  const { aiConnections, fetchAiConnections } = useSettingsStore(); // Get aiConnections from settings store
+  const { aiConnections, fetchAiConnections } = useSettingsStore();
 
   const [localEditedCard, setLocalEditedCard] = useState<PromptCard | null>(null);
   const [isCardDirty, setIsCardDirty] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveAsNewTitle, setSaveAsNewTitle] = useState('');
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
-  const [snackbarOpen, setSnackbarOpen] = useState(false); // Controlled open state for Snackbar
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'info' | 'warning'>('info');
 
   useEffect(() => {
     if (user?.uid) {
       fetchPromptCards(user.uid);
-      fetchAiConnections(user.uid); // Fetch AI connections here
+      fetchAiConnections(user.uid);
     }
-  }, [user?.uid, fetchPromptCards, fetchAiConnections]); // Depend on fetchAiConnections
+  }, [user?.uid, fetchPromptCards, fetchAiConnections]);
 
   useEffect(() => {
-    // Sync localEditedCard with activePromptCard
     setLocalEditedCard(activePromptCard ? { ...activePromptCard } : null);
-    setIsCardDirty(false); // Reset dirty state when active card changes
+    setIsCardDirty(false);
   }, [activePromptCard]);
 
   const showSnackbar = (message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
@@ -6567,9 +6807,7 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
 
   const handleCardSelect = (card: PromptCard) => {
     if (isCardDirty) {
-      // Potentially warn user about unsaved changes
       showSnackbar('Unsaved changes will be lost if you switch cards.', 'warning');
-      // For now, proceed directly, but a confirmation dialog could be added here.
     }
     setActivePromptCard(card);
   };
@@ -6579,16 +6817,14 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
       showSnackbar('Must be logged in to create a new card.', 'error');
       return;
     }
-    // Pre-select the default AI connection if available
     const defaultConnectionId = aiConnections.length > 0 ? aiConnections[0].id : "";
 
-    // NEW: Explicitly set all default values
     const newCardData: NewPromptCardData = {
       title: "New Prompt Card",
       prompt: "This is a new prompt card. Describe the setting and your character's starting situation.",
       description: null,
       firstTurnOnlyBlock: DEFAULT_FIRST_TURN_PROMPT_BLOCK,
-      stackInstructions: defaultStackInstructions, // Pass the object, cardManager will stringify
+      stackInstructions: defaultStackInstructions,
       emitSkeleton: DEFAULT_EMIT_SKELETON_STRING,
       worldStateInit: '',
       gameRules: '',
@@ -6600,7 +6836,7 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
         ...defaultAiSettingsInCard,
         selectedConnectionId: defaultConnectionId,
       },
-      isHelperAiEnabled: false, // NEW: Default to disabled
+      isHelperAiEnabled: false,
       tags: [],
       isExample: false,
       functionDefs: '',
@@ -6626,16 +6862,14 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
         const newCardData: NewPromptCardData = {
           ...localEditedCard,
           title: saveAsNewTitle || `${localEditedCard.title} (Copy)`,
-          // Explicitly clear ID, timestamps, ownerId, and lineage for a truly new copy
-          // These will be regenerated by `addPromptCard`
           id: '',
           rootId: '',
           parentId: null,
           createdAt: '',
           updatedAt: '',
-          ownerId: user.uid, // Ensure new owner is current user
-          isExample: false, // New copies are user-owned, not examples
-          isPublic: false, // New copies are private by default
+          ownerId: user.uid,
+          isExample: false,
+          isPublic: false,
         };
         savedCard = await addPromptCard(user.uid, newCardData);
       } else {
@@ -6643,7 +6877,7 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
       }
 
       if (savedCard) {
-        setActivePromptCard(savedCard); // Update active card to the newly saved/updated version
+        setActivePromptCard(savedCard);
         showSnackbar('Card saved successfully!', 'success');
       }
     } catch (e) {
@@ -6663,28 +6897,8 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
   };
 
   const handlePushToLive = () => {
-    // "Push to Live" simply means ensuring the currently displayed/edited card
-    // is the one set as the `activePromptCard` in the store.
-    // If localEditedCard is different from activePromptCard in the store,
-    // this action effectively "applies" the changes to the active card without saving to DB.
-    // Saving to DB is a separate step.
-    if (localEditedCard && activePromptCard?.id !== localEditedCard.id) {
-        // If they are editing a *different* card, setting it as active would switch context.
-        // This is usually implied by selecting from the left list.
-        // The "Push to Live" button generally means, "apply these *current edits*
-        // to the *currently active card* (which might be in the store as `activePromptCard`).
-        // It's more about local state consistency than DB save.
-        // Given the dirty state logic, this button would appear when `localEditedCard`
-        // is different from `activePromptCard`.
-        setActivePromptCard(localEditedCard);
-        setIsCardDirty(false);
-        showSnackbar('Changes applied to live editor view.', 'success');
-    } else if (localEditedCard && isCardDirty) {
-        // If it's the same card but dirty, just re-set it to mark it as clean (for the store's perspective)
-        // A save operation would typically make it non-dirty. This button might be redundant if
-        // the intent is always to save. Let's make it explicitly save as well to avoid confusion.
-        // Or, rename this button to "Save Changes" and remove `handleSaveCard(false)`
-        handleSaveCard(false); // Now "Push to Live" also saves
+    if (localEditedCard && isCardDirty) {
+        handleSaveCard(false);
     }
   };
 
@@ -6711,26 +6925,28 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
     }
   };
 
-const handleStartGame = async () => {
-  console.log('PromptCardManager: handleStartGame called. User:', user?.uid, 'Active Card:', activePromptCard?.id);
-  if (!user?.uid || !activePromptCard) {
-    // ...
-  }
-  if (isCardDirty) {
-    // ...
-  }
-  try {
-    console.log('PromptCardManager: Calling initializeGame...');
-    await initializeGame(user.uid, activePromptCard.id);
-    console.log('PromptCardManager: initializeGame AWAITED successfully. Now navigating to /game.');
-    showSnackbar('Game initialized! Navigating to game screen...', 'success');
-    navigate('/game');
-  }
-  catch (e: any) { // Ensure 'e' is typed as 'any'
-    console.error('PromptCardManager: Error during game initialization:', e);
-    showSnackbar(`Failed to start game: ${e.message || 'Unknown error'}`, 'error');
-  }
-};
+  const handleStartGame = async () => {
+    console.log('PromptCardManager: handleStartGame called. User:', user?.uid, 'Active Card:', activePromptCard?.id);
+    if (!user?.uid || !activePromptCard) {
+      showSnackbar('Please log in and select a prompt card to start a game.', 'warning');
+      return;
+    }
+    if (isCardDirty) {
+      showSnackbar('Please save or revert changes before starting a game.', 'warning');
+      return;
+    }
+    try {
+      console.log('PromptCardManager: Calling initializeGame...');
+      await initializeGame(user.uid, activePromptCard.id);
+      console.log('PromptCardManager: initializeGame AWAITED successfully. Now navigating to /game.');
+      showSnackbar('Game initialized! Navigating to game screen...', 'success');
+      navigate('/game');
+    }
+    catch (e: any) {
+      console.error('PromptCardManager: Error during game initialization:', e);
+      showSnackbar(`Failed to start game: ${e.message || 'Unknown error'}`, 'error');
+    }
+  };
 
   const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -6740,7 +6956,6 @@ const handleStartGame = async () => {
     reader.onload = async (e) => {
       try {
         const content = e.target?.result as string;
-        // Check if it's a single object or an array
         let parsed: NewPromptCardData | NewPromptCardData[];
         try {
             parsed = JSON.parse(content);
@@ -6757,7 +6972,6 @@ const handleStartGame = async () => {
         showSnackbar(`Failed to import cards: ${err instanceof Error ? e.message : 'Invalid JSON'}`, 'error');
         console.error("Import error:", err);
       } finally {
-        // Clear the file input
         event.target.value = '';
       }
     };
@@ -6798,7 +7012,6 @@ const handleStartGame = async () => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
-      {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h5" component="h1">
           Prompt Cards
@@ -6808,7 +7021,6 @@ const handleStartGame = async () => {
         </IconButton>
       </Box>
 
-      {/* Game Library & New Card Actions */}
       <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
         <Button variant="contained" onClick={handleNewCard} startIcon={<AddIcon />}>
           New Card
@@ -6826,7 +7038,6 @@ const handleStartGame = async () => {
       )}
 
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden', gap: 2 }}>
-        {/* Left Panel: Card List */}
         <Paper elevation={1} sx={{ flex: 1, minWidth: 250, maxWidth: 350, overflowY: 'auto' }}>
           <Typography variant="h6" sx={{ p: 2, pb: 1 }}>Your Cards</Typography>
           <Divider />
@@ -6840,6 +7051,7 @@ const handleStartGame = async () => {
                 <ListItem
                   key={card.id}
                   button
+                  component="li"
                   selected={activePromptCard?.id === card.id}
                   onClick={() => handleCardSelect(card)}
                   sx={{ py: 1, pr: 0 }}
@@ -6865,7 +7077,6 @@ const handleStartGame = async () => {
           </List>
         </Paper>
 
-        {/* Right Panel: Active Card Editor/Viewer */}
         <Paper elevation={1} sx={{ flex: 2, p: 2, overflowY: 'auto' }}>
           {!activePromptCard || !localEditedCard ? (
             <Box sx={{ textAlign: 'center', mt: 4 }}>
@@ -6888,9 +7099,7 @@ const handleStartGame = async () => {
                       <Button variant="outlined" onClick={() => setShowSaveDialog(true)}>
                         Save
                       </Button>
-                      {/* The "Push to Live" button becomes more like an immediate save if changes are dirty */}
-                      {/* If the intent is just to apply without saving, this needs careful state management */}
-                      <Button variant="contained" onClick={() => handleSaveCard(false)}> {/* Now directly saves */}
+                      <Button variant="contained" onClick={() => handleSaveCard(false)}>
                         Apply Changes
                       </Button>
                     </>
@@ -6912,8 +7121,6 @@ const handleStartGame = async () => {
                 card={localEditedCard}
                 onCardChange={(updatedCard) => {
                   setLocalEditedCard(updatedCard);
-                  // Check dirty state against activePromptCard (the "saved" version)
-                  // Use content hash for robust dirty checking
                   setIsCardDirty(JSON.stringify(updatedCard) !== JSON.stringify(activePromptCard));
                 }}
                 availableConnections={aiConnections}
@@ -6923,7 +7130,6 @@ const handleStartGame = async () => {
         </Paper>
       </Box>
 
-      {/* Save Dialog */}
       <Dialog open={showSaveDialog} onClose={() => setShowSaveDialog(false)}>
         <DialogTitle>Save Prompt Card</DialogTitle>
         <DialogContent>
@@ -6947,7 +7153,6 @@ const handleStartGame = async () => {
         </DialogActions>
       </Dialog>
 
-      {/* Snackbar */}
       <Snackbar
         open={snackbarOpen}
         autoHideDuration={6000}
@@ -8093,6 +8298,7 @@ export function formatIsoDateForDisplay(isoString: string): string {
     return "Error formatting date";
   }
 }
+
 @@FILE: src/utils/hash.test.ts
 // src/utils/hash.test.ts
 
