@@ -43,7 +43,6 @@
 }
 
 @@FILE: src/App.tsx
-
 // src/App.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -60,15 +59,16 @@ import {
   Box,
   CircularProgress,
   Typography,
-  Divider
+  Divider,
+  IconButton
 } from '@mui/material';
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
-import StyleIcon from '@mui/icons-material/Style'; // Changed icon for Prompt Cards
+import StyleIcon from '@mui/icons-material/Style';
 import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import HistoryIcon from '@mui/icons-material/History';
-import DataObjectIcon from '@mui/icons-material/DataObject'; // For World State
+import DataObjectIcon from '@mui/icons-material/DataObject';
 import LoginScreen from './ui/screens/LoginScreen';
 import GameLibraryScreen from './ui/screens/GameLibraryScreen';
 import PromptCardManager from './ui/screens/PromptCardManager';
@@ -81,6 +81,7 @@ import { useTheme, ThemeProvider, createTheme } from '@mui/material/styles';
 import { useSettingsStore } from './state/useSettingsStore';
 import { useGameStateStore } from './state/useGameStateStore';
 import SourceDump from './ui/screens/SourceDump';
+import MenuIcon from '@mui/icons-material/Menu'; // NEW: Import MenuIcon
 
 
 const drawerWidth = 240;
@@ -109,13 +110,15 @@ const AppContent: React.FC = () => {
       loadLastActiveGame(user.uid).then((gameLoaded) => {
         setInitialLoadChecked(true);
         if (gameLoaded) {
-          // If a game was loaded and we are not already on a game-related page, navigate to it.
-          // MODIFIED: Add '/sourcedump' to the list of allowed paths.
           if (!['/game', '/world-state', '/logs', '/sourcedump'].includes(location.pathname)) {
             navigate('/game');
           }
         } else {
-          // ... rest of the logic
+          // If no game was loaded and user is authenticated and not on a public path,
+          // direct them to the game library to start a new game or select one.
+          if (!publicPaths.includes(location.pathname)) {
+            navigate('/library');
+          }
         }
       });
     }
@@ -129,7 +132,6 @@ const AppContent: React.FC = () => {
     navigate('/login');
   };
 
-  // MODIFIED: Corrected and clarified nav items
   const navItems = [
     { text: 'Saved Games', icon: <LibraryBooksIcon />, path: '/library', requiresAuth: true },
     { text: 'Prompt Cards', icon: <StyleIcon />, path: '/cards', requiresAuth: true },
@@ -194,36 +196,59 @@ const AppContent: React.FC = () => {
         {drawer}
       </Drawer>
 
-      <Box component="main" sx={{ flexGrow: 1, p: 0, width: `calc(100% - ${mobileOpen ? drawerWidth : 0}px)`, height: '100%' }}>
-        <Routes>
-          <Route path="/sourcedump" element={<SourceDump />} />
-          <Route path="/login" element={<LoginScreen />} />
-          {user ? (
-            <>
-              <Route path="/library" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
-              <Route path="/cards" element={<PromptCardManager onNavToggle={handleDrawerToggle} />} />
-              {/* Conditionally render game-related routes only if a snapshot is loaded */}
-              {currentSnapshot ? (
-                <>
-                    <Route path="/game" element={<GameScreen onNavToggle={handleDrawerToggle} />} />
-                    <Route path="/world-state" element={<WorldStateScreen onNavToggle={handleDrawerToggle} />} />
-                    <Route path="/logs" element={<LogViewerScreen onNavToggle={handleDrawerToggle} />} />
-                </>
-              ) : (
-                // If no snapshot, these routes could show a "No game loaded" message or redirect
-                // For now, they won't match, and the wildcard will catch it.
-                null
-              )}
-              <Route path="/settings" element={<SettingsScreen onNavToggle={handleDrawerToggle} />} />
-              <Route path="/" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
-              <Route path="*" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
-            </>
-          ) : (
-            <Route path="*" element={<LoginScreen />} />
-          )}
-        </Routes>
+      {/* Main content area, now structured with its own AppBar */}
+      <Box component="main" sx={{ flexGrow: 1, height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <IconButton
+          color="inherit"
+          aria-label="open drawer"
+          onClick={handleDrawerToggle}
+          edge="start"
+          sx={{
+            position: 'fixed',
+            top: 16,
+            right: 16,
+            zIndex: (theme) => theme.zIndex.drawer + 1,
+            backgroundColor: (theme) => theme.palette.background.paper,
+            boxShadow: 2,
+            '&:hover': {
+              backgroundColor: (theme) => theme.palette.action.hover,
+            },
+          }}
+        >
+          <MenuIcon />
+        </IconButton>     
+          <Routes>
+            {/* IMPORTANT: Remove onNavToggle from individual route elements.
+                The AppContent's global AppBar now handles navigation toggling.
+                The screen components should adjust their headers accordingly. */}
+            <Route path="/sourcedump" element={<SourceDump onNavToggle={handleDrawerToggle} />} />
+            <Route path="/login" element={<LoginScreen onNavToggle={handleDrawerToggle} />} />
+
+            {user ? (
+              <>
+                {/* No `onNavToggle` prop needed on these components anymore */}
+                <Route path="/library" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
+                <Route path="/cards" element={<PromptCardManager onNavToggle={handleDrawerToggle} />} />
+
+                {currentSnapshot ? (
+                  <>
+                      <Route path="/game" element={<GameScreen onNavToggle={handleDrawerToggle} />} />
+                      <Route path="/world-state" element={<WorldStateScreen onNavToggle={handleDrawerToggle} />} />
+                      <Route path="/logs" element={<LogViewerScreen onNavToggle={handleDrawerToggle} />} />
+                  </>
+                ) : (
+                  null
+                )}
+                <Route path="/settings" element={<SettingsScreen onNavToggle={handleDrawerToggle} />} />
+                <Route path="/" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
+                <Route path="*" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
+              </>
+            ) : (
+              <Route path="*" element={<LoginScreen />} />
+            )}
+          </Routes>
+        </Box>
       </Box>
-    </Box>
   );
 };
 
@@ -356,6 +381,33 @@ export default App;
 @@FOLDER: src/assets
 @@FILE: src/assets/react.svg
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" class="iconify iconify--logos" width="35.93" height="32" preserveAspectRatio="xMidYMid meet" viewBox="0 0 256 228"><path fill="#00D8FF" d="M210.483 73.824a171.49 171.49 0 0 0-8.24-2.597c.465-1.9.893-3.777 1.273-5.621c6.238-30.281 2.16-54.676-11.769-62.708c-13.355-7.7-35.196.329-57.254 19.526a171.23 171.23 0 0 0-6.375 5.848a155.866 155.866 0 0 0-4.241-3.917C100.759 3.829 77.587-4.822 63.673 3.233C50.33 10.957 46.379 33.89 51.995 62.588a170.974 170.974 0 0 0 1.892 8.48c-3.28.932-6.445 1.924-9.474 2.98C17.309 83.498 0 98.307 0 113.668c0 15.865 18.582 31.778 46.812 41.427a145.52 145.52 0 0 0 6.921 2.165a167.467 167.467 0 0 0-2.01 9.138c-5.354 28.2-1.173 50.591 12.134 58.266c13.744 7.926 36.812-.22 59.273-19.855a145.567 145.567 0 0 0 5.342-4.923a168.064 168.064 0 0 0 6.92 6.314c21.758 18.722 43.246 26.282 56.54 18.586c13.731-7.949 18.194-32.003 12.4-61.268a145.016 145.016 0 0 0-1.535-6.842c1.62-.48 3.21-.974 4.76-1.488c29.348-9.723 48.443-25.443 48.443-41.52c0-15.417-17.868-30.326-45.517-39.844Zm-6.365 70.984c-1.4.463-2.836.91-4.3 1.345c-3.24-10.257-7.612-21.163-12.963-32.432c5.106-11 9.31-21.767 12.459-31.957c2.619.758 5.16 1.557 7.61 2.4c23.69 8.156 38.14 20.213 38.14 29.504c0 9.896-15.606 22.743-40.946 31.14Zm-10.514 20.834c2.562 12.94 2.927 24.64 1.23 33.787c-1.524 8.219-4.59 13.698-8.382 15.893c-8.067 4.67-25.32-1.4-43.927-17.412a156.726 156.726 0 0 1-6.437-5.87c7.214-7.889 14.423-17.06 21.459-27.246c12.376-1.098 24.068-2.894 34.671-5.345a134.17 134.17 0 0 1 1.386 6.193ZM87.276 214.515c-7.882 2.783-14.16 2.863-17.955.675c-8.075-4.657-11.432-22.636-6.853-46.752a156.923 156.923 0 0 1 1.869-8.499c10.486 2.32 22.093 3.988 34.498 4.994c7.084 9.967 14.501 19.128 21.976 27.15a134.668 134.668 0 0 1-4.877 4.492c-9.933 8.682-19.886 14.842-28.658 17.94ZM50.35 144.747c-12.483-4.267-22.792-9.812-29.858-15.863c-6.35-5.437-9.555-10.836-9.555-15.216c0-9.322 13.897-21.212 37.076-29.293c2.813-.98 5.757-1.905 8.812-2.773c3.204 10.42 7.406 21.315 12.477 32.332c-5.137 11.18-9.399 22.249-12.634 32.792a134.718 134.718 0 0 1-6.318-1.979Zm12.378-84.26c-4.811-24.587-1.616-43.134 6.425-47.789c8.564-4.958 27.502 2.111 47.463 19.835a144.318 144.318 0 0 1 3.841 3.545c-7.438 7.987-14.787 17.08-21.808 26.988c-12.04 1.116-23.565 2.908-34.161 5.309a160.342 160.342 0 0 1-1.76-7.887Zm110.427 27.268a347.8 347.8 0 0 0-7.785-12.803c8.168 1.033 15.994 2.404 23.343 4.08c-2.206 7.072-4.956 14.465-8.193 22.045a381.151 381.151 0 0 0-7.365-13.322Zm-45.032-43.861c5.044 5.465 10.096 11.566 15.065 18.186a322.04 322.04 0 0 0-30.257-.006c4.974-6.559 10.069-12.652 15.192-18.18ZM82.802 87.83a323.167 323.167 0 0 0-7.227 13.238c-3.184-7.553-5.909-14.98-8.134-22.152c7.304-1.634 15.093-2.97 23.209-3.984a321.524 321.524 0 0 0-7.848 12.897Zm8.081 65.352c-8.385-.936-16.291-2.203-23.593-3.793c2.26-7.3 5.045-14.885 8.298-22.6a321.187 321.187 0 0 0 7.257 13.246c2.594 4.48 5.28 8.868 8.038 13.147Zm37.542 31.03c-5.184-5.592-10.354-11.779-15.403-18.433c4.902.192 9.899.29 14.978.29c5.218 0 10.376-.117 15.453-.343c-4.985 6.774-10.018 12.97-15.028 18.486Zm52.198-57.817c3.422 7.8 6.306 15.345 8.596 22.52c-7.422 1.694-15.436 3.058-23.88 4.071a382.417 382.417 0 0 0 7.859-13.026a347.403 347.403 0 0 0 7.425-13.565Zm-16.898 8.101a358.557 358.557 0 0 1-12.281 19.815a329.4 329.4 0 0 1-23.444.823c-7.967 0-15.716-.248-23.178-.732a310.202 310.202 0 0 1-12.513-19.846h.001a307.41 307.41 0 0 1-10.923-20.627a310.278 310.278 0 0 1 10.89-20.637l-.001.001a307.318 307.318 0 0 1 12.413-19.761c7.613-.576 15.42-.876 23.31-.876H128c7.926 0 15.743.303 23.354.883a329.357 329.357 0 0 1 12.335 19.695a358.489 358.489 0 0 1 11.036 20.54a329.472 329.472 0 0 1-11 20.722Zm22.56-122.124c8.572 4.944 11.906 24.881 6.52 51.026c-.344 1.668-.73 3.367-1.15 5.09c-10.622-2.452-22.155-4.275-34.23-5.408c-7.034-10.017-14.323-19.124-21.64-27.008a160.789 160.789 0 0 1 5.888-5.4c18.9-16.447 36.564-22.941 44.612-18.3ZM128 90.808c12.625 0 22.86 10.235 22.86 22.86s-10.235 22.86-22.86 22.86s-22.86-10.235-22.86-22.86s10.235-22.86 22.86-22.86Z"></path></svg>
+@@FOLDER: src/contexts
+@@FILE: src/contexts/GameSessionContext.tsx
+// src/contexts/GameSessionContext.tsx
+
+import React, { createContext, useContext } from 'react';
+import { IGameSession } from '../logic/gameSession';
+
+// Define the context to hold the IGameSession instance
+const GameSessionContext = createContext<IGameSession | undefined>(undefined);
+
+// Provider component to wrap the application and provide the gameSession
+export const GameSessionProvider: React.FC<{ children: React.ReactNode; gameSession: IGameSession }> = ({ children, gameSession }) => {
+  return (
+    <GameSessionContext.Provider value={gameSession}>
+      {children}
+    </GameSessionContext.Provider>
+  );
+};
+
+// Custom hook to easily consume the gameSession from the context by React components
+export const useGameSession = () => {
+  const context = useContext(GameSessionContext);
+  if (context === undefined) {
+    throw new Error('useGameSession must be used within a GameSessionProvider');
+  }
+  return context;
+};
 @@FOLDER: src/data
 @@FOLDER: src/data/config
 @@FILE: src/data/config/promptCardDefaults.ts
@@ -1557,6 +1609,8 @@ import { IPromptCardRepository } from '../data/repositories/promptCardRepository
 import { IGameRepository } from '../data/repositories/gameRepository';
 import { generateUuid } from '../utils/uuid'; // Import generateUuid
 import { formatIsoDateForDisplay } from '../utils/formatDate'; // Import for consistent date formatting in title
+import { IPromptCardRepository } from './../data/repositories/promptCardRepository'; // Ensure this import is correct
+import { IGameRepository } from './../data/repositories/gameRepository'; // Import IGameRepository
 
 // Define a simple DummyAiClient for testing and dev
 class DummyAiClient implements IAiClient {
@@ -1653,6 +1707,9 @@ export interface IGameSession {
    * Provides access to the current LogEntries for UI purposes.
    */
   getGameLogs(): LogEntry[];
+
+  // NEW: Expose gameRepo for use by stores that need to query game data outside of turn processing.
+  gameRepo: IGameRepository;
 }
 
 /**
@@ -1665,13 +1722,17 @@ export class GameSession implements IGameSession { // Export the class
   private realAiClient: IAiClient;
   private dummyAiClient: IAiClient = new DummyAiClient();
 
+  // Make gameRepo a public property on the class to satisfy the interface
+  public gameRepo: IGameRepository;
+
   constructor(
     private cardRepo: IPromptCardRepository,
-    private gameRepo: IGameRepository,
+    gameRepoInstance: IGameRepository, // Accept the gameRepo instance
     private builder: IPromptBuilder,
     aiClientInstance: IAiClient,
     private logManager: ILogManager,
   ) {
+    this.gameRepo = gameRepoInstance; // Assign the injected instance to the public property
     this.realAiClient = aiClientInstance;
   }
 
@@ -2740,43 +2801,20 @@ The following information is provided to you in a specific order to help you pri
 export const promptBuilder = new PromptBuilder();
 @@FILE: src/main.tsx
 // src/main.tsx
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 
-// Import all necessary dependencies for GameSession
-import { GameSession } from './logic/gameSession';
-import { promptCardManager } from './logic/cardManager';
-import { promptBuilder } from './logic/promptBuilder';
-import { aiClient } from './logic/aiClient'; // The real AI client
-import { logManager } from './logic/logManager';
-import { gameRepository } from './data/repositories/gameRepository';
-import { promptCardRepository } from './data/repositories/promptCardRepository';
-
-// Instantiate GameSession with its dependencies
-const gameSessionInstance = new GameSession(
-  promptCardRepository,
-  gameRepository,
-  promptBuilder,
-  aiClient, // Pass the real aiClient instance
-  logManager
-);
-
-// Make the gameSession instance globally accessible.
-// This is done to avoid passing it down deeply through props or setting up complex React Context
-// for a single global service in an MVP.
-declare global {
-  interface Window {
-    gameSessionInstance: GameSession;
-  }
-}
-window.gameSessionInstance = gameSessionInstance;
+// Import the new provider that encapsulates GameSession creation and store initialization
+import { GameSessionAndStoreProvider } from './providers/GameSessionAndStoreProvider.tsx';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    {/* Wrap App with the provider */}
+    <GameSessionAndStoreProvider>
+      <App />
+    </GameSessionAndStoreProvider>
   </React.StrictMode>,
 );
 @@FOLDER: src/models
@@ -3185,6 +3223,49 @@ const SourceDump: React.FC = () => {
 
 export default SourceDump;
 
+@@FOLDER: src/providers
+@@FILE: src/providers/GameSessionAndStoreProvider.tsx
+// src/providers/GameSessionAndStoreProvider.tsx
+
+import React, { useRef } from 'react';
+import { GameSession, IGameSession } from '../logic/gameSession';
+import { promptCardManager } from '../logic/cardManager';
+import { promptBuilder } from '../logic/promptBuilder';
+import { aiClient } from '../logic/aiClient';
+import { logManager } from '../logic/logManager';
+import { gameRepository } from '../data/repositories/gameRepository';
+import { promptCardRepository } from '../data/repositories/promptCardRepository';
+import { initializeGameStateStore } from '../state/useGameStateStore';
+import { GameSessionProvider } from '../contexts/GameSessionContext'; // Import the context provider
+
+interface GameSessionAndStoreProviderProps {
+  children: React.ReactNode;
+}
+
+export const GameSessionAndStoreProvider: React.FC<GameSessionAndStoreProviderProps> = ({ children }) => {
+  // Use useRef to ensure gameSessionInstance is created only once across renders
+  const gameSessionInstanceRef = useRef<IGameSession | null>(null);
+
+  if (!gameSessionInstanceRef.current) {
+    console.log("GameSessionAndStoreProvider: Instantiating GameSession...");
+    gameSessionInstanceRef.current = new GameSession(
+      promptCardRepository,
+      gameRepository, // Passed as gameRepoInstance
+      promptBuilder,
+      aiClient,
+      logManager
+    );
+    // Inject the gameSession instance into the Zustand store's internal state
+    initializeGameStateStore(gameSessionInstanceRef.current);
+  }
+
+  // Provide the gameSession instance via React Context to any components that need it
+  return (
+    <GameSessionProvider gameSession={gameSessionInstanceRef.current}>
+      {children}
+    </GameSessionProvider>
+  );
+};
 @@FOLDER: src/state
 @@FILE: src/state/useAuthStore.ts
 // src/state/useAuthStore.ts
@@ -3253,15 +3334,30 @@ const unsubscribe = subscribeToAuthChanges((user) => {
 
 import { create } from 'zustand';
 import { GameSnapshot, GameState, LogEntry, Message } from '../models/index';
-// REMOVED: import { gameSession } from '../logic/gameSession'; // REMOVE this import
+// REMOVED: import { gameSession } from '../logic/gameSession'; // REMOVE this line
 import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
 import { produce } from 'immer'; // For immutable updates of nested objects
 import { useSettingsStore } from './useSettingsStore'; // Import the new settings store
 import { useCallback } from 'react'; // Import useCallback
 
-// Access the globally available gameSessionInstance.
-// This is now accessed directly within actions to ensure it's always live.
-// const gameSession = typeof window !== 'undefined' ? window.gameSessionInstance : null; // REMOVED
+import { IGameSession } from '../logic/gameSession'; // Import the IGameSession interface for type safety
+
+// Module-level variable to hold the injected GameSession instance
+let _gameSessionInstance: IGameSession;
+
+/**
+ * Initializes the GameStateStore with the GameSession instance.
+ * This function should be called once, typically from a provider component (e.g., GameSessionAndStoreProvider).
+ * It ensures that the Zustand store's actions can access the game session.
+ */
+export const initializeGameStateStore = (gameSession: IGameSession) => {
+  if (!_gameSessionInstance) {
+    _gameSessionInstance = gameSession;
+    console.log("GameStateStore: GameSession instance injected.");
+  } else {
+    console.warn("GameStateStore: Attempted to re-initialize GameSession instance. This should only happen once.");
+  }
+};
 
 // Define types for pinning
 type PinToggleType = 'variable' | 'entity' | 'category';
@@ -3278,13 +3374,14 @@ interface GameStateStore {
   gameError: string | null;
   gameLoading: boolean;
 
-  // Actions
+  // Actions - these no longer accept gameSession as a parameter.
+  // They will internally use the _gameSessionInstance module variable.
   initializeGame: (userId: string, cardId: string, existingSnapshotId?: string) => Promise<void>;
   processPlayerAction: (action: string) => Promise<void>;
   processFirstNarratorTurn: () => Promise<void>;
   saveGame: () => Promise<void>;
   loadGame: (userId: string, snapshotId: string) => Promise<void>;
-  loadLastActiveGame: (userId: string) => Promise<boolean>; // NEW: Load the most recent game
+  loadLastActiveGame: (userId: string) => Promise<boolean>;
 
   // Pinning actions
   toggleWorldStatePin: (keyPath: string, type: PinToggleType) => void;
@@ -3320,28 +3417,25 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
     console.log('GameStateStore: initializeGame action started.');
     set({ gameLoading: true, gameError: null });
 
-    // *** MODIFICATION START ***
-    // Get the dummy narrator setting from the settings store
+    // Ensure gameSession instance has been injected
+    if (!_gameSessionInstance) {
+      set({ gameError: "Game session instance not initialized.", gameLoading: false });
+      console.error("GameSession instance not found in useGameStateStore. Call initializeGameStateStore first.");
+      return;
+    }
+
     const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
-    // *** MODIFICATION END ***
 
     try {
-      const gameSessionInstance = window.gameSessionInstance;
-      if (!gameSessionInstance) {
-        throw new Error("Game session instance not found on window. Ensure main.tsx has initialized it.");
-      }
+      console.log('GameStateStore: Calling _gameSessionInstance.initializeGame...');
+      // Use the injected _gameSessionInstance
+      await _gameSessionInstance.initializeGame(userId, cardId, existingSnapshotId, useDummyNarrator);
 
-      console.log('GameStateStore: Calling gameSession.initializeGame...');
-      
-      // *** MODIFICATION START ***
-      // Pass the useDummyNarrator flag to the game session
-      await gameSessionInstance.initializeGame(userId, cardId, existingSnapshotId, useDummyNarrator);
-      // *** MODIFICATION END ***
-      
-      console.log('GameStateStore: gameSession.initializeGame completed.');
+      console.log('GameStateStore: _gameSessionInstance.initializeGame completed.');
 
-      const snapshot = gameSessionInstance.getCurrentGameSnapshot();
-      console.log('GameStateStore: Retrieved snapshot from gameSession:', snapshot);
+      // Retrieve state from the injected _gameSessionInstance
+      const snapshot = _gameSessionInstance.getCurrentGameSnapshot();
+      console.log('GameStateStore: Retrieved snapshot from _gameSessionInstance:', snapshot);
       if (snapshot) {
         set({
           currentSnapshot: snapshot,
@@ -3353,7 +3447,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
         });
         console.log('GameStateStore: Zustand state updated with snapshot. currentSnapshot:', get().currentSnapshot);
       } else {
-        console.warn('GameStateStore: gameSession.getCurrentGameSnapshot() returned null after initialization. Setting error.');
+        console.warn('GameStateStore: _gameSessionInstance.getCurrentGameSnapshot() returned null after initialization. Setting error.');
         set({ gameError: "Game state could not be loaded or initialized.", gameLoading: false });
       }
       set({ gameLoading: false });
@@ -3364,9 +3458,9 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   processFirstNarratorTurn: async () => {
-    const gameSessionInstance = window.gameSessionInstance;
-    if (!gameSessionInstance) {
-      set({ gameError: "Game session not initialized.", gameLoading: false });
+    // Ensure gameSession instance has been injected
+    if (!_gameSessionInstance) {
+      set({ gameError: "Game session instance not initialized.", gameLoading: false });
       return;
     }
     set({ gameLoading: true, gameError: null });
@@ -3374,11 +3468,11 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
     const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
 
     try {
-      // This method will now update the internal snapshot and save it.
-      await gameSessionInstance.processFirstTurn(useDummyNarrator);
+      // Use the injected _gameSessionInstance
+      await _gameSessionInstance.processFirstTurn(useDummyNarrator);
 
-      // After it's done, we get the updated snapshot and set our state
-      const updatedSnapshot = gameSessionInstance.getCurrentGameSnapshot();
+      // Retrieve state from the injected _gameSessionInstance
+      const updatedSnapshot = _gameSessionInstance.getCurrentGameSnapshot();
       if (updatedSnapshot) {
         set({
           currentSnapshot: updatedSnapshot,
@@ -3395,21 +3489,20 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   processPlayerAction: async (action) => {
-    const gameSessionInstance = window.gameSessionInstance;
-    if (!gameSessionInstance) {
-        set({ gameError: "Game session not initialized.", gameLoading: false });
+    // Ensure gameSession instance has been injected
+    if (!_gameSessionInstance) {
+        set({ gameError: "Game session instance not initialized.", gameLoading: false });
         return;
     }
     set({ gameLoading: true, gameError: null });
 
-    // Get the dummy narrator state from useSettingsStore
     const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
 
     try {
-      // Pass the dummy narrator flag to gameSession
-      const { aiProse, newLogEntries, updatedSnapshot } = await gameSessionInstance.processPlayerAction(
+      // Use the injected _gameSessionInstance
+      const { aiProse, newLogEntries, updatedSnapshot } = await _gameSessionInstance.processPlayerAction(
         action,
-        useDummyNarrator // Pass the flag
+        useDummyNarrator
       );
       set({
         currentSnapshot: updatedSnapshot,
@@ -3417,7 +3510,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
         gameLogs: updatedSnapshot.logs,
         conversationHistory: updatedSnapshot.conversationHistory,
         narratorInputText: '',
-        worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys || [], // Update pinned keys
+        worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys || [],
       });
       set({ gameLoading: false });
     } catch (error: any) {
@@ -3427,21 +3520,20 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   saveGame: async () => {
-    const gameSessionInstance = window.gameSessionInstance;
-    if (!gameSessionInstance) {
-      console.warn("Cannot save game: game session not initialized.");
-      return;
+    // Ensure gameSession instance has been injected
+    if (!_gameSessionInstance) {
+        console.error("GameSession: Cannot save game because gameSessionInstance is not set in store.");
+        throw new Error("Game session not initialized in store.");
     }
-    const currentSnapshot = get().currentSnapshot; // Get the definitive snapshot from the store's state
+    const currentSnapshot = get().currentSnapshot;
     if (currentSnapshot) {
       const snapshotToSave = produce(currentSnapshot, draft => {
-        // Ensure the store's latest pinned keys are on the object to be saved
         draft.worldStatePinnedKeys = get().worldStatePinnedKeys;
         draft.updatedAt = new Date().toISOString();
       });
 
-      // MODIFIED: Pass the store's snapshot to the saveGame method.
-      await gameSessionInstance.saveGame(snapshotToSave);
+      // Use the injected _gameSessionInstance
+      await _gameSessionInstance.saveGame(snapshotToSave);
       console.log('useGameStateStore: saveGame() finished.');
     } else {
       console.warn("No current snapshot in store to save.");
@@ -3449,16 +3541,17 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   loadGame: async (userId, snapshotId) => {
-    const gameSessionInstance = window.gameSessionInstance;
-    if (!gameSessionInstance || !userId) {
-        set({ gameError: "Game session not initialized or user not logged in.", gameLoading: false });
+    // Ensure gameSession instance has been injected
+    if (!_gameSessionInstance) {
+        set({ gameError: "Game session instance not initialized.", gameLoading: false });
         return;
     }
     set({ gameLoading: true, gameError: null });
     try {
-      // Pass the userId to the session's loadGame method
-      await gameSessionInstance.loadGame(userId, snapshotId);
-      const snapshot = gameSessionInstance.getCurrentGameSnapshot();
+      // Use the injected _gameSessionInstance
+      await _gameSessionInstance.loadGame(userId, snapshotId);
+      // Retrieve state from the injected _gameSessionInstance
+      const snapshot = _gameSessionInstance.getCurrentGameSnapshot();
       if (snapshot) {
         set({
           currentSnapshot: snapshot,
@@ -3476,22 +3569,23 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
     }
   },
 
-  // NEW: Action to load the last active game
   loadLastActiveGame: async (userId: string): Promise<boolean> => {
     set({ gameLoading: true, gameError: null });
     try {
-        const gameSessionInstance = window.gameSessionInstance;
-        if (!gameSessionInstance) {
-            throw new Error("Game session instance not found on window.");
+        // Ensure gameSession instance has been injected
+        if (!_gameSessionInstance) {
+            throw new Error("Game session instance not found in store.");
         }
 
-        const allSnapshots = await (gameSessionInstance as any).gameRepo.getAllGameSnapshots(userId);
+        // Access gameRepo via the injected _gameSessionInstance (now public on IGameSession)
+        const allSnapshots = await _gameSessionInstance.gameRepo.getAllGameSnapshots(userId);
         if (allSnapshots.length > 0) {
             const lastActiveSnapshot = allSnapshots[0];
             console.log(`GameStateStore: Found last active game: ${lastActiveSnapshot.id}. Loading...`);
-            // Pass the userId to the session's loadGame method
-            await gameSessionInstance.loadGame(userId, lastActiveSnapshot.id);
-            const loadedSnapshot = gameSessionInstance.getCurrentGameSnapshot();
+            // Use the injected _gameSessionInstance
+            await _gameSessionInstance.loadGame(userId, lastActiveSnapshot.id);
+            // Retrieve state from the injected _gameSessionInstance
+            const loadedSnapshot = _gameSessionInstance.getCurrentGameSnapshot();
             if (loadedSnapshot) {
                 set({
                     currentSnapshot: loadedSnapshot,
@@ -4555,7 +4649,7 @@ export const PinnedAttributeChip: React.FC<PinnedAttributeChipProps> = ({
 }) => {
   // CORRECT: Hook is at the top level of this component.
   // It calls the onUnpin function for this specific key.
-  const longPressProps = useLongPress(() => onUnpin(fullKey), undefined, { delay: 500 });
+  const longPressProps = useLongPress(() => onUnpin(fullKey));
 
   return (
     <Tooltip title={`Long-press to unpin '${label}'`} key={fullKey}>
@@ -6141,7 +6235,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
         <Typography variant="h5" component="h1">
           Narrator
         </Typography>
-        <IconButton onClick={onNavToggle} aria-label="menu">
+        <IconButton onClick={onNavToggle} aria-label="menu" sx={{ ml: 'auto' }}>
           <MenuIcon />
         </IconButton>
       </Box>

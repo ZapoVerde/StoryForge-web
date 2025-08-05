@@ -177,7 +177,7 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
         <Typography variant="h5" component="h1">
           Narrator
         </Typography>
-        <IconButton onClick={onNavToggle} aria-label="menu">
+        <IconButton onClick={onNavToggle} aria-label="menu" sx={{ ml: 'auto' }}>
           <MenuIcon />
         </IconButton>
       </Box>

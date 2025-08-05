@@ -1,4 +1,3 @@
-
 // src/App.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -15,15 +14,16 @@ import {
   Box,
   CircularProgress,
   Typography,
-  Divider
+  Divider,
+  IconButton
 } from '@mui/material';
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
-import StyleIcon from '@mui/icons-material/Style'; // Changed icon for Prompt Cards
+import StyleIcon from '@mui/icons-material/Style';
 import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import HistoryIcon from '@mui/icons-material/History';
-import DataObjectIcon from '@mui/icons-material/DataObject'; // For World State
+import DataObjectIcon from '@mui/icons-material/DataObject';
 import LoginScreen from './ui/screens/LoginScreen';
 import GameLibraryScreen from './ui/screens/GameLibraryScreen';
 import PromptCardManager from './ui/screens/PromptCardManager';
@@ -36,6 +36,7 @@ import { useTheme, ThemeProvider, createTheme } from '@mui/material/styles';
 import { useSettingsStore } from './state/useSettingsStore';
 import { useGameStateStore } from './state/useGameStateStore';
 import SourceDump from './ui/screens/SourceDump';
+import MenuIcon from '@mui/icons-material/Menu'; // NEW: Import MenuIcon
 
 
 const drawerWidth = 240;
@@ -64,13 +65,15 @@ const AppContent: React.FC = () => {
       loadLastActiveGame(user.uid).then((gameLoaded) => {
         setInitialLoadChecked(true);
         if (gameLoaded) {
-          // If a game was loaded and we are not already on a game-related page, navigate to it.
-          // MODIFIED: Add '/sourcedump' to the list of allowed paths.
           if (!['/game', '/world-state', '/logs', '/sourcedump'].includes(location.pathname)) {
             navigate('/game');
           }
         } else {
-          // ... rest of the logic
+          // If no game was loaded and user is authenticated and not on a public path,
+          // direct them to the game library to start a new game or select one.
+          if (!publicPaths.includes(location.pathname)) {
+            navigate('/library');
+          }
         }
       });
     }
@@ -84,7 +87,6 @@ const AppContent: React.FC = () => {
     navigate('/login');
   };
 
-  // MODIFIED: Corrected and clarified nav items
   const navItems = [
     { text: 'Saved Games', icon: <LibraryBooksIcon />, path: '/library', requiresAuth: true },
     { text: 'Prompt Cards', icon: <StyleIcon />, path: '/cards', requiresAuth: true },
@@ -149,36 +151,59 @@ const AppContent: React.FC = () => {
         {drawer}
       </Drawer>
 
-      <Box component="main" sx={{ flexGrow: 1, p: 0, width: `calc(100% - ${mobileOpen ? drawerWidth : 0}px)`, height: '100%' }}>
-        <Routes>
-          <Route path="/sourcedump" element={<SourceDump />} />
-          <Route path="/login" element={<LoginScreen />} />
-          {user ? (
-            <>
-              <Route path="/library" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
-              <Route path="/cards" element={<PromptCardManager onNavToggle={handleDrawerToggle} />} />
-              {/* Conditionally render game-related routes only if a snapshot is loaded */}
-              {currentSnapshot ? (
-                <>
-                    <Route path="/game" element={<GameScreen onNavToggle={handleDrawerToggle} />} />
-                    <Route path="/world-state" element={<WorldStateScreen onNavToggle={handleDrawerToggle} />} />
-                    <Route path="/logs" element={<LogViewerScreen onNavToggle={handleDrawerToggle} />} />
-                </>
-              ) : (
-                // If no snapshot, these routes could show a "No game loaded" message or redirect
-                // For now, they won't match, and the wildcard will catch it.
-                null
-              )}
-              <Route path="/settings" element={<SettingsScreen onNavToggle={handleDrawerToggle} />} />
-              <Route path="/" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
-              <Route path="*" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
-            </>
-          ) : (
-            <Route path="*" element={<LoginScreen />} />
-          )}
-        </Routes>
+      {/* Main content area, now structured with its own AppBar */}
+      <Box component="main" sx={{ flexGrow: 1, height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <IconButton
+          color="inherit"
+          aria-label="open drawer"
+          onClick={handleDrawerToggle}
+          edge="start"
+          sx={{
+            position: 'fixed',
+            top: 16,
+            right: 16,
+            zIndex: (theme) => theme.zIndex.drawer + 1,
+            backgroundColor: (theme) => theme.palette.background.paper,
+            boxShadow: 2,
+            '&:hover': {
+              backgroundColor: (theme) => theme.palette.action.hover,
+            },
+          }}
+        >
+          <MenuIcon />
+        </IconButton>     
+          <Routes>
+            {/* IMPORTANT: Remove onNavToggle from individual route elements.
+                The AppContent's global AppBar now handles navigation toggling.
+                The screen components should adjust their headers accordingly. */}
+            <Route path="/sourcedump" element={<SourceDump onNavToggle={handleDrawerToggle} />} />
+            <Route path="/login" element={<LoginScreen onNavToggle={handleDrawerToggle} />} />
+
+            {user ? (
+              <>
+                {/* No `onNavToggle` prop needed on these components anymore */}
+                <Route path="/library" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
+                <Route path="/cards" element={<PromptCardManager onNavToggle={handleDrawerToggle} />} />
+
+                {currentSnapshot ? (
+                  <>
+                      <Route path="/game" element={<GameScreen onNavToggle={handleDrawerToggle} />} />
+                      <Route path="/world-state" element={<WorldStateScreen onNavToggle={handleDrawerToggle} />} />
+                      <Route path="/logs" element={<LogViewerScreen onNavToggle={handleDrawerToggle} />} />
+                  </>
+                ) : (
+                  null
+                )}
+                <Route path="/settings" element={<SettingsScreen onNavToggle={handleDrawerToggle} />} />
+                <Route path="/" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
+                <Route path="*" element={<GameLibraryScreen onNavToggle={handleDrawerToggle} />} />
+              </>
+            ) : (
+              <Route path="*" element={<LoginScreen />} />
+            )}
+          </Routes>
+        </Box>
       </Box>
-    </Box>
   );
 };
 

@@ -17,6 +17,8 @@ import { IPromptCardRepository } from '../data/repositories/promptCardRepository
 import { IGameRepository } from '../data/repositories/gameRepository';
 import { generateUuid } from '../utils/uuid'; // Import generateUuid
 import { formatIsoDateForDisplay } from '../utils/formatDate'; // Import for consistent date formatting in title
+import { IPromptCardRepository } from './../data/repositories/promptCardRepository'; // Ensure this import is correct
+import { IGameRepository } from './../data/repositories/gameRepository'; // Import IGameRepository
 
 // Define a simple DummyAiClient for testing and dev
 class DummyAiClient implements IAiClient {
@@ -113,6 +115,9 @@ export interface IGameSession {
    * Provides access to the current LogEntries for UI purposes.
    */
   getGameLogs(): LogEntry[];
+
+  // NEW: Expose gameRepo for use by stores that need to query game data outside of turn processing.
+  gameRepo: IGameRepository;
 }
 
 /**
@@ -125,13 +130,17 @@ export class GameSession implements IGameSession { // Export the class
   private realAiClient: IAiClient;
   private dummyAiClient: IAiClient = new DummyAiClient();
 
+  // Make gameRepo a public property on the class to satisfy the interface
+  public gameRepo: IGameRepository;
+
   constructor(
     private cardRepo: IPromptCardRepository,
-    private gameRepo: IGameRepository,
+    gameRepoInstance: IGameRepository, // Accept the gameRepo instance
     private builder: IPromptBuilder,
     aiClientInstance: IAiClient,
     private logManager: ILogManager,
   ) {
+    this.gameRepo = gameRepoInstance; // Assign the injected instance to the public property
     this.realAiClient = aiClientInstance;
   }
 

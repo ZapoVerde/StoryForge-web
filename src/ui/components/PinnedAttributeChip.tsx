@@ -20,7 +20,7 @@ export const PinnedAttributeChip: React.FC<PinnedAttributeChipProps> = ({
 }) => {
   // CORRECT: Hook is at the top level of this component.
   // It calls the onUnpin function for this specific key.
-  const longPressProps = useLongPress(() => onUnpin(fullKey), undefined, { delay: 500 });
+  const longPressProps = useLongPress(() => onUnpin(fullKey));
 
   return (
     <Tooltip title={`Long-press to unpin '${label}'`} key={fullKey}>

@@ -2,15 +2,30 @@
 
 import { create } from 'zustand';
 import { GameSnapshot, GameState, LogEntry, Message } from '../models/index';
-// REMOVED: import { gameSession } from '../logic/gameSession'; // REMOVE this import
+// REMOVED: import { gameSession } from '../logic/gameSession'; // REMOVE this line
 import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
 import { produce } from 'immer'; // For immutable updates of nested objects
 import { useSettingsStore } from './useSettingsStore'; // Import the new settings store
 import { useCallback } from 'react'; // Import useCallback
 
-// Access the globally available gameSessionInstance.
-// This is now accessed directly within actions to ensure it's always live.
-// const gameSession = typeof window !== 'undefined' ? window.gameSessionInstance : null; // REMOVED
+import { IGameSession } from '../logic/gameSession'; // Import the IGameSession interface for type safety
+
+// Module-level variable to hold the injected GameSession instance
+let _gameSessionInstance: IGameSession;
+
+/**
+ * Initializes the GameStateStore with the GameSession instance.
+ * This function should be called once, typically from a provider component (e.g., GameSessionAndStoreProvider).
+ * It ensures that the Zustand store's actions can access the game session.
+ */
+export const initializeGameStateStore = (gameSession: IGameSession) => {
+  if (!_gameSessionInstance) {
+    _gameSessionInstance = gameSession;
+    console.log("GameStateStore: GameSession instance injected.");
+  } else {
+    console.warn("GameStateStore: Attempted to re-initialize GameSession instance. This should only happen once.");
+  }
+};
 
 // Define types for pinning
 type PinToggleType = 'variable' | 'entity' | 'category';
@@ -27,13 +42,14 @@ interface GameStateStore {
   gameError: string | null;
   gameLoading: boolean;
 
-  // Actions
+  // Actions - these no longer accept gameSession as a parameter.
+  // They will internally use the _gameSessionInstance module variable.
   initializeGame: (userId: string, cardId: string, existingSnapshotId?: string) => Promise<void>;
   processPlayerAction: (action: string) => Promise<void>;
   processFirstNarratorTurn: () => Promise<void>;
   saveGame: () => Promise<void>;
   loadGame: (userId: string, snapshotId: string) => Promise<void>;
-  loadLastActiveGame: (userId: string) => Promise<boolean>; // NEW: Load the most recent game
+  loadLastActiveGame: (userId: string) => Promise<boolean>;
 
   // Pinning actions
   toggleWorldStatePin: (keyPath: string, type: PinToggleType) => void;
@@ -69,28 +85,25 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
     console.log('GameStateStore: initializeGame action started.');
     set({ gameLoading: true, gameError: null });
 
-    // *** MODIFICATION START ***
-    // Get the dummy narrator setting from the settings store
+    // Ensure gameSession instance has been injected
+    if (!_gameSessionInstance) {
+      set({ gameError: "Game session instance not initialized.", gameLoading: false });
+      console.error("GameSession instance not found in useGameStateStore. Call initializeGameStateStore first.");
+      return;
+    }
+
     const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
-    // *** MODIFICATION END ***
 
     try {
-      const gameSessionInstance = window.gameSessionInstance;
-      if (!gameSessionInstance) {
-        throw new Error("Game session instance not found on window. Ensure main.tsx has initialized it.");
-      }
+      console.log('GameStateStore: Calling _gameSessionInstance.initializeGame...');
+      // Use the injected _gameSessionInstance
+      await _gameSessionInstance.initializeGame(userId, cardId, existingSnapshotId, useDummyNarrator);
 
-      console.log('GameStateStore: Calling gameSession.initializeGame...');
-      
-      // *** MODIFICATION START ***
-      // Pass the useDummyNarrator flag to the game session
-      await gameSessionInstance.initializeGame(userId, cardId, existingSnapshotId, useDummyNarrator);
-      // *** MODIFICATION END ***
-      
-      console.log('GameStateStore: gameSession.initializeGame completed.');
+      console.log('GameStateStore: _gameSessionInstance.initializeGame completed.');
 
-      const snapshot = gameSessionInstance.getCurrentGameSnapshot();
-      console.log('GameStateStore: Retrieved snapshot from gameSession:', snapshot);
+      // Retrieve state from the injected _gameSessionInstance
+      const snapshot = _gameSessionInstance.getCurrentGameSnapshot();
+      console.log('GameStateStore: Retrieved snapshot from _gameSessionInstance:', snapshot);
       if (snapshot) {
         set({
           currentSnapshot: snapshot,
@@ -102,7 +115,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
         });
         console.log('GameStateStore: Zustand state updated with snapshot. currentSnapshot:', get().currentSnapshot);
       } else {
-        console.warn('GameStateStore: gameSession.getCurrentGameSnapshot() returned null after initialization. Setting error.');
+        console.warn('GameStateStore: _gameSessionInstance.getCurrentGameSnapshot() returned null after initialization. Setting error.');
         set({ gameError: "Game state could not be loaded or initialized.", gameLoading: false });
       }
       set({ gameLoading: false });
@@ -113,9 +126,9 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   processFirstNarratorTurn: async () => {
-    const gameSessionInstance = window.gameSessionInstance;
-    if (!gameSessionInstance) {
-      set({ gameError: "Game session not initialized.", gameLoading: false });
+    // Ensure gameSession instance has been injected
+    if (!_gameSessionInstance) {
+      set({ gameError: "Game session instance not initialized.", gameLoading: false });
       return;
     }
     set({ gameLoading: true, gameError: null });
@@ -123,11 +136,11 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
     const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
 
     try {
-      // This method will now update the internal snapshot and save it.
-      await gameSessionInstance.processFirstTurn(useDummyNarrator);
+      // Use the injected _gameSessionInstance
+      await _gameSessionInstance.processFirstTurn(useDummyNarrator);
 
-      // After it's done, we get the updated snapshot and set our state
-      const updatedSnapshot = gameSessionInstance.getCurrentGameSnapshot();
+      // Retrieve state from the injected _gameSessionInstance
+      const updatedSnapshot = _gameSessionInstance.getCurrentGameSnapshot();
       if (updatedSnapshot) {
         set({
           currentSnapshot: updatedSnapshot,
@@ -144,21 +157,20 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   processPlayerAction: async (action) => {
-    const gameSessionInstance = window.gameSessionInstance;
-    if (!gameSessionInstance) {
-        set({ gameError: "Game session not initialized.", gameLoading: false });
+    // Ensure gameSession instance has been injected
+    if (!_gameSessionInstance) {
+        set({ gameError: "Game session instance not initialized.", gameLoading: false });
         return;
     }
     set({ gameLoading: true, gameError: null });
 
-    // Get the dummy narrator state from useSettingsStore
     const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
 
     try {
-      // Pass the dummy narrator flag to gameSession
-      const { aiProse, newLogEntries, updatedSnapshot } = await gameSessionInstance.processPlayerAction(
+      // Use the injected _gameSessionInstance
+      const { aiProse, newLogEntries, updatedSnapshot } = await _gameSessionInstance.processPlayerAction(
         action,
-        useDummyNarrator // Pass the flag
+        useDummyNarrator
       );
       set({
         currentSnapshot: updatedSnapshot,
@@ -166,7 +178,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
         gameLogs: updatedSnapshot.logs,
         conversationHistory: updatedSnapshot.conversationHistory,
         narratorInputText: '',
-        worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys || [], // Update pinned keys
+        worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys || [],
       });
       set({ gameLoading: false });
     } catch (error: any) {
@@ -176,21 +188,20 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   saveGame: async () => {
-    const gameSessionInstance = window.gameSessionInstance;
-    if (!gameSessionInstance) {
-      console.warn("Cannot save game: game session not initialized.");
-      return;
+    // Ensure gameSession instance has been injected
+    if (!_gameSessionInstance) {
+        console.error("GameSession: Cannot save game because gameSessionInstance is not set in store.");
+        throw new Error("Game session not initialized in store.");
     }
-    const currentSnapshot = get().currentSnapshot; // Get the definitive snapshot from the store's state
+    const currentSnapshot = get().currentSnapshot;
     if (currentSnapshot) {
       const snapshotToSave = produce(currentSnapshot, draft => {
-        // Ensure the store's latest pinned keys are on the object to be saved
         draft.worldStatePinnedKeys = get().worldStatePinnedKeys;
         draft.updatedAt = new Date().toISOString();
       });
 
-      // MODIFIED: Pass the store's snapshot to the saveGame method.
-      await gameSessionInstance.saveGame(snapshotToSave);
+      // Use the injected _gameSessionInstance
+      await _gameSessionInstance.saveGame(snapshotToSave);
       console.log('useGameStateStore: saveGame() finished.');
     } else {
       console.warn("No current snapshot in store to save.");
@@ -198,16 +209,17 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   loadGame: async (userId, snapshotId) => {
-    const gameSessionInstance = window.gameSessionInstance;
-    if (!gameSessionInstance || !userId) {
-        set({ gameError: "Game session not initialized or user not logged in.", gameLoading: false });
+    // Ensure gameSession instance has been injected
+    if (!_gameSessionInstance) {
+        set({ gameError: "Game session instance not initialized.", gameLoading: false });
         return;
     }
     set({ gameLoading: true, gameError: null });
     try {
-      // Pass the userId to the session's loadGame method
-      await gameSessionInstance.loadGame(userId, snapshotId);
-      const snapshot = gameSessionInstance.getCurrentGameSnapshot();
+      // Use the injected _gameSessionInstance
+      await _gameSessionInstance.loadGame(userId, snapshotId);
+      // Retrieve state from the injected _gameSessionInstance
+      const snapshot = _gameSessionInstance.getCurrentGameSnapshot();
       if (snapshot) {
         set({
           currentSnapshot: snapshot,
@@ -225,22 +237,23 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
     }
   },
 
-  // NEW: Action to load the last active game
   loadLastActiveGame: async (userId: string): Promise<boolean> => {
     set({ gameLoading: true, gameError: null });
     try {
-        const gameSessionInstance = window.gameSessionInstance;
-        if (!gameSessionInstance) {
-            throw new Error("Game session instance not found on window.");
+        // Ensure gameSession instance has been injected
+        if (!_gameSessionInstance) {
+            throw new Error("Game session instance not found in store.");
         }
 
-        const allSnapshots = await (gameSessionInstance as any).gameRepo.getAllGameSnapshots(userId);
+        // Access gameRepo via the injected _gameSessionInstance (now public on IGameSession)
+        const allSnapshots = await _gameSessionInstance.gameRepo.getAllGameSnapshots(userId);
         if (allSnapshots.length > 0) {
             const lastActiveSnapshot = allSnapshots[0];
             console.log(`GameStateStore: Found last active game: ${lastActiveSnapshot.id}. Loading...`);
-            // Pass the userId to the session's loadGame method
-            await gameSessionInstance.loadGame(userId, lastActiveSnapshot.id);
-            const loadedSnapshot = gameSessionInstance.getCurrentGameSnapshot();
+            // Use the injected _gameSessionInstance
+            await _gameSessionInstance.loadGame(userId, lastActiveSnapshot.id);
+            // Retrieve state from the injected _gameSessionInstance
+            const loadedSnapshot = _gameSessionInstance.getCurrentGameSnapshot();
             if (loadedSnapshot) {
                 set({
                     currentSnapshot: loadedSnapshot,
