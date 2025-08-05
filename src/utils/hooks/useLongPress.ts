@@ -19,8 +19,12 @@ export function useLongPress<T extends HTMLElement>(
 
   const start = useCallback(
     (event: React.MouseEvent<T> | React.TouchEvent<T>) => {
+      // Stop the event from bubbling to parent elements
+      event.stopPropagation();
+
       // Prevent context menu on long press on some browsers
       event.preventDefault();
+
       target.current = event.currentTarget as T;
       timeout.current = setTimeout(() => {
         onLongPress(event);
@@ -45,8 +49,8 @@ export function useLongPress<T extends HTMLElement>(
     onMouseDown: start,
     onTouchStart: start,
     onMouseUp: (e: React.MouseEvent<T>) => clear(e),
-    onMouseLeave: (e: React.MouseEvent<T>) => clear(e, false), // No click if mouse leaves
+    onMouseLeave: (e: React.MouseEvent<T>) => clear(e, false),
     onTouchEnd: (e: React.TouchEvent<T>) => clear(e),
-    onTouchCancel: (e: React.TouchEvent<T>) => clear(e, false), // No click if touch cancelled
+    onTouchCancel: (e: React.TouchEvent<T>) => clear(e, false),
   };
 }

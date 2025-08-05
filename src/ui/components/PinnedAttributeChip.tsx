@@ -1,6 +1,6 @@
 // src/ui/components/PinnedAttributeChip.tsx
 
-import React from 'react';
+import React from 'react'; // Keep React import
 import { Chip, Tooltip } from '@mui/material';
 import PushPinIcon from '@mui/icons-material/PushPin';
 import { useLongPress } from '../../utils/hooks/useLongPress';
@@ -12,13 +12,18 @@ interface PinnedAttributeChipProps {
   onUnpin: (key: string) => void;
 }
 
-export const PinnedAttributeChip: React.FC<PinnedAttributeChipProps> = ({
+// Wrap the component with React.memo
+
+export const PinnedAttributeChip: React.FC<PinnedAttributeChipProps> = React.memo(({
   fullKey,
   label,
   value,
   onUnpin,
 }) => {
-  const longPressProps = useLongPress(() => {
+  console.log(`[PinnedAttributeChip:${fullKey}] Rendering/Re-rendering.`);
+
+  const longPressProps = useLongPress((e) => {
+    e.stopPropagation(); // Double safety — ensures no parent listener fires
     console.log(`[PinnedAttributeChip] Long-pressed individual variable: "${fullKey}". Calling onUnpin (unpinIndividualVariable).`);
     onUnpin(fullKey);
   });
@@ -44,4 +49,4 @@ export const PinnedAttributeChip: React.FC<PinnedAttributeChipProps> = ({
       />
     </Tooltip>
   );
-};
+});
