@@ -23,11 +23,12 @@ export const PinnedEntityGroup: React.FC<PinnedEntityGroupProps> = ({
   entityPath,
   attributes,
   onUnpinEntity,
-  onUnpinVariable,
+  onUnpinVariable, // This prop is passed down but also available here
 }) => {
-  // Correct: Hook is at the top level of this component.
-  // It calls the onUnpinEntity function for this entire group.
-  const longPressEntityProps = useLongPress(() => onUnpinEntity(entityPath));
+  const longPressEntityProps = useLongPress(() => {
+    console.log(`[PinnedEntityGroup] Long-pressed entity header: "${entityPath}". Calling onUnpinEntity.`);
+    onUnpinEntity(entityPath);
+  });
 
   const entityDisplayName = entityPath.includes('.')
     ? entityPath.split('.').pop()?.replace(/^[#@$]/, '')
@@ -42,9 +43,9 @@ export const PinnedEntityGroup: React.FC<PinnedEntityGroupProps> = ({
         backgroundColor: (theme) => theme.palette.primary.light,
         color: (theme) => theme.palette.primary.contrastText,
         flexShrink: 0,
-        cursor: 'pointer', // Add cursor to indicate it's interactive
+        cursor: 'pointer',
       }}
-      {...longPressEntityProps} // Spread the long-press handlers onto the Paper
+      {...longPressEntityProps}
     >
       <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
         {entityDisplayName}
@@ -59,7 +60,7 @@ export const PinnedEntityGroup: React.FC<PinnedEntityGroupProps> = ({
             fullKey={attr.fullKey}
             label={attr.label}
             value={attr.value}
-            onUnpin={onUnpinVariable}
+            onUnpin={onUnpinVariable} // This is correct, passing the specific unpin variable function
           />
         ))}
       </Stack>

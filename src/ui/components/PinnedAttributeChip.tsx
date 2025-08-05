@@ -18,20 +18,21 @@ export const PinnedAttributeChip: React.FC<PinnedAttributeChipProps> = ({
   value,
   onUnpin,
 }) => {
-  // CORRECT: Hook is at the top level of this component.
-  // It calls the onUnpin function for this specific key.
-  const longPressProps = useLongPress(() => onUnpin(fullKey));
+  const longPressProps = useLongPress(() => {
+    console.log(`[PinnedAttributeChip] Long-pressed individual variable: "${fullKey}". Calling onUnpin (unpinIndividualVariable).`);
+    onUnpin(fullKey);
+  });
 
   return (
     <Tooltip title={`Long-press to unpin '${label}'`} key={fullKey}>
       <Chip
         label={`${label}: ${JSON.stringify(value)}`}
         size="small"
-        deleteIcon={<PushPinIcon />} // Using deleteIcon to show the pin visually
+        deleteIcon={<PushPinIcon />}
         sx={{
           backgroundColor: (theme) => theme.palette.background.paper,
           color: (theme) => theme.palette.text.primary,
-          cursor: 'pointer', // Add cursor to indicate it's interactive
+          cursor: 'pointer',
           '& .MuiChip-deleteIcon': {
             opacity: 0.2,
           },
@@ -39,7 +40,7 @@ export const PinnedAttributeChip: React.FC<PinnedAttributeChipProps> = ({
             opacity: 1,
           },
         }}
-        {...longPressProps} // Spread the long-press event handlers onto the Chip
+        {...longPressProps}
       />
     </Tooltip>
   );

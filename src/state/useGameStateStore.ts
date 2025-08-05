@@ -2,7 +2,6 @@
 
 import { create } from 'zustand';
 import { GameSnapshot, GameState, LogEntry, Message } from '../models/index';
-// REMOVED: import { gameSession } from '../logic/gameSession'; // REMOVE this line
 import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
 import { produce } from 'immer'; // For immutable updates of nested objects
 import { useSettingsStore } from './useSettingsStore'; // Import the new settings store
@@ -200,7 +199,6 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
         draft.updatedAt = new Date().toISOString();
       });
 
-      // Use the injected _gameSessionInstance
       await _gameSessionInstance.saveGame(snapshotToSave);
       console.log('useGameStateStore: saveGame() finished.');
     } else {
@@ -240,7 +238,6 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   loadLastActiveGame: async (userId: string): Promise<boolean> => {
     set({ gameLoading: true, gameError: null });
     try {
-        // Ensure gameSession instance has been injected
         if (!_gameSessionInstance) {
             throw new Error("Game session instance not found in store.");
         }
@@ -279,6 +276,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
   
   toggleWorldStatePin: (keyPath: string, type: PinToggleType) => {
+    console.log(`[Store: toggleWorldStatePin] Toggling pin for "${keyPath}" of type "${type}"`);
     set(produce((state: GameStateStore) => { // Use immer's produce for immutable updates
       const currentWorldState = state.currentGameState?.worldState || {};
       const newPinnedKeys = new Set(state.worldStatePinnedKeys);
@@ -292,18 +290,25 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
       } else if (type === 'entity') {
         const flattenedEntity = flattenJsonObject(getNestedValue(currentWorldState, keyPath.split('.')), keyPath);
         relevantKeysToToggle = Object.keys(flattenedEntity).filter(k => {
-          return k.startsWith(keyPath + '.') && k.split('.').length > keyPath.split('.').length;
+          return k.startsWith(keyPath) && k.split('.').length > keyPath.split('.').length;
         });
       } else if (type === 'category') {
         const flattenedCategory = flattenJsonObject(getNestedValue(currentWorldState, keyPath.split('.')), keyPath);
         relevantKeysToToggle = Object.keys(flattenedCategory).filter(k => {
-          return k.startsWith(keyPath + '.') && k.split('.').length > keyPath.split('.').length;
+          return k.startsWith(keyPath) && k.split('.').length > keyPath.split('.').length;
         });
       }
 
+      // Determine if we should pin or unpin. If any of the relevant keys are pinned, we unpin all. Otherwise, we pin.
+      // Fixed logic for shouldPin: if ALL are currently pinned, we should UNPIN. Otherwise, we PIN.
       const shouldPin = relevantKeysToToggle.length > 0
-        ? !isCurrentlyPinned(relevantKeysToToggle[0])
+        ? !relevantKeysToToggle.every(isCurrentlyPinned)
         : true; // If no keys found, default to pinning (e.g., new category/entity)
+
+      console.log(`[Store: toggleWorldStatePin] Relevant keys:`, relevantKeysToToggle);
+      console.log(`[Store: toggleWorldStatePin] Current pinned keys before toggle:`, Array.from(newPinnedKeys));
+      console.log(`[Store: toggleWorldStatePin] Should pin:`, shouldPin);
+
 
       relevantKeysToToggle.forEach(key => {
         if (shouldPin) {
@@ -317,12 +322,16 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
       if (state.currentSnapshot) {
         state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
       }
+      console.log(`[Store: toggleWorldStatePin] Pinned keys after toggle:`, state.worldStatePinnedKeys);
     }));
     get().saveGame(); // Trigger a save after pinning state changes
   },
 
   unpinAllForEntity: (entityPath: string) => {
+    console.log(`%c[Store: unpinAllForEntity] Executing for entity: "${entityPath}"`, 'color: orange;');
     set(produce((state: GameStateStore) => {
+      console.log(`%c[Store: unpinAllForEntity] worldStatePinnedKeys before: %o`, 'color: orange;', state.worldStatePinnedKeys);
+      // Use Set for efficient deletion
       const newPinnedKeys = new Set(state.worldStatePinnedKeys);
       state.worldStatePinnedKeys.forEach(key => {
         if (key.startsWith(entityPath + '.')) {
@@ -333,16 +342,21 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
       if (state.currentSnapshot) {
         state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
       }
+      console.log(`%c[Store: unpinAllForEntity] worldStatePinnedKeys after: %o`, 'color: orange;', state.worldStatePinnedKeys);
     }));
     get().saveGame();
   },
 
   unpinIndividualVariable: (variablePath: string) => {
+    console.log(`%c[Store: unpinIndividualVariable] Executing for variable: "${variablePath}"`, 'color: lightblue;');
     set(produce((state: GameStateStore) => {
+      console.log(`%c[Store: unpinIndividualVariable] worldStatePinnedKeys before: %o`, 'color: lightblue;', state.worldStatePinnedKeys);
+      // This line is the critical one for unpinning a single variable
       state.worldStatePinnedKeys = state.worldStatePinnedKeys.filter(key => key !== variablePath);
       if (state.currentSnapshot) {
         state.currentSnapshot.worldStatePinnedKeys = state.worldStatePinnedKeys;
       }
+      console.log(`%c[Store: unpinIndividualVariable] worldStatePinnedKeys after: %o`, 'color: lightblue;', state.worldStatePinnedKeys);
     }));
     get().saveGame();
   },
