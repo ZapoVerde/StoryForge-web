@@ -2,16 +2,23 @@
 
 import { create } from 'zustand';
 import { GameSnapshot, GameState, LogEntry, Message } from '../models/index';
-import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils'; // Still used for pinning logic
+import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
 import { produce } from 'immer';
 import { useSettingsStore } from './useSettingsStore';
 
-import { IGameSession } from '../logic/gameSession'; // Import the IGameSession interface for type safety
+import { IGameSession } from '../logic/gameSession';
 
-let _gameSessionInstance: IGameSession;
+// Module-level variable to hold the injected GameSession instance
+// Initialized to null, as it will be set later by initializeGameStateStore
+let _gameSessionInstance: IGameSession | null = null;
 
+/**
+ * Initializes the GameStateStore with the GameSession instance.
+ * This function should be called once, typically from a provider component (e.g., GameSessionAndStoreProvider).
+ * It ensures that the Zustand store's actions can access the game session.
+ */
 export const initializeGameStateStore = (gameSession: IGameSession) => {
-  if (!_gameSessionInstance) {
+  if (_gameSessionInstance === null) {
     _gameSessionInstance = gameSession;
     console.log("GameStateStore: GameSession instance injected.");
   } else {
@@ -19,6 +26,7 @@ export const initializeGameStateStore = (gameSession: IGameSession) => {
   }
 };
 
+// Define types for pinning
 type PinToggleType = 'variable' | 'entity' | 'category';
 
 interface GameStateStore {
@@ -67,16 +75,25 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   gameError: null,
   gameLoading: false,
 
+  // Helper function to safely get the gameSession instance
+  // This ensures we always get the *current* value of _gameSessionInstance
+  // and centralizes the error handling for a missing instance.
+  _getGameSession: (): IGameSession => {
+    if (!_gameSessionInstance) {
+      const errorMsg = "Game session instance not initialized. This is a critical error. Ensure GameSessionAndStoreProvider is rendering and initializeGameStateStore has been called.";
+      console.error(errorMsg);
+      // It's crucial to throw here to prevent further execution with a null instance
+      throw new Error(errorMsg);
+    }
+    return _gameSessionInstance;
+  },
+
   initializeGame: async (userId, cardId, existingSnapshotId) => {
     set({ gameLoading: true, gameError: null });
-    if (!_gameSessionInstance) {
-      set({ gameError: "Game session instance not initialized.", gameLoading: false });
-      return;
-    }
     try {
-      await _gameSessionInstance.initializeGame(userId, cardId, existingSnapshotId);
-      // After initialization, fetch the current state from GameSession
-      const snapshot = _gameSessionInstance.getCurrentGameSnapshot();
+      const gameSession = get()._getGameSession(); // Get instance via helper
+      await gameSession.initializeGame(userId, cardId, existingSnapshotId);
+      const snapshot = gameSession.getCurrentGameSnapshot();
       if (snapshot) {
         set({
           currentSnapshot: snapshot,
@@ -97,14 +114,11 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   processFirstNarratorTurn: async () => {
-    if (!_gameSessionInstance) {
-      set({ gameError: "Game session instance not initialized.", gameLoading: false });
-      return;
-    }
     set({ gameLoading: true, gameError: null });
     const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
     try {
-      const updatedSnapshot = await _gameSessionInstance.processFirstNarratorTurn(useDummyNarrator);
+      const gameSession = get()._getGameSession(); // Get instance via helper
+      const updatedSnapshot = await gameSession.processFirstNarratorTurn(useDummyNarrator);
       set({
         currentSnapshot: updatedSnapshot,
         currentGameState: updatedSnapshot.gameState,
@@ -119,14 +133,11 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   processPlayerAction: async (action) => {
-    if (!_gameSessionInstance) {
-      set({ gameError: "Game session instance not initialized.", gameLoading: false });
-      return;
-    }
     set({ gameLoading: true, gameError: null });
     const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
     try {
-      const updatedSnapshot = await _gameSessionInstance.processPlayerAction(action, useDummyNarrator);
+      const gameSession = get()._getGameSession(); // Get instance via helper
+      const updatedSnapshot = await gameSession.processPlayerAction(action, useDummyNarrator);
       set({
         currentSnapshot: updatedSnapshot,
         currentGameState: updatedSnapshot.gameState,
@@ -143,33 +154,31 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   saveGame: async () => {
-    if (!_gameSessionInstance) {
-      console.error("GameSession: Cannot save game because gameSessionInstance is not set in store.");
-      throw new Error("Game session not initialized in store.");
-    }
-    const currentSnapshot = get().currentSnapshot;
-    if (currentSnapshot) {
-      // The store updates pinned keys directly, so ensure snapshot has the latest
-      const snapshotToSave = produce(currentSnapshot, draft => {
-        draft.worldStatePinnedKeys = get().worldStatePinnedKeys;
-        draft.updatedAt = new Date().toISOString();
-      });
-      await _gameSessionInstance.saveGame(snapshotToSave);
-      console.log('useGameStateStore: saveGame() finished.');
-    } else {
-      console.warn("No current snapshot in store to save.");
+    try {
+      const gameSession = get()._getGameSession(); // Get instance via helper
+      const currentSnapshot = get().currentSnapshot;
+      if (currentSnapshot) {
+        const snapshotToSave = produce(currentSnapshot, draft => {
+          draft.worldStatePinnedKeys = get().worldStatePinnedKeys;
+          draft.updatedAt = new Date().toISOString();
+        });
+        await gameSession.saveGame(snapshotToSave);
+        console.log('useGameStateStore: saveGame() finished.');
+      } else {
+        console.warn("No current snapshot in store to save.");
+      }
+    } catch (error: any) {
+        console.error("GameStateStore: Error saving game:", error);
+        set({ gameError: error.message }); // Set error in store if save fails
     }
   },
 
   loadGame: async (userId, snapshotId) => {
-    if (!_gameSessionInstance) {
-      set({ gameError: "Game session instance not initialized.", gameLoading: false });
-      return;
-    }
     set({ gameLoading: true, gameError: null });
     try {
-      await _gameSessionInstance.loadGame(userId, snapshotId);
-      const snapshot = _gameSessionInstance.getCurrentGameSnapshot();
+      const gameSession = get()._getGameSession(); // Get instance via helper
+      await gameSession.loadGame(userId, snapshotId);
+      const snapshot = gameSession.getCurrentGameSnapshot();
       if (snapshot) {
         set({
           currentSnapshot: snapshot,
@@ -190,11 +199,9 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   loadLastActiveGame: async (userId: string): Promise<boolean> => {
     set({ gameLoading: true, gameError: null });
     try {
-      if (!_gameSessionInstance) {
-        throw new Error("Game session instance not found in store.");
-      }
-      const gameLoaded = await _gameSessionInstance.loadLastActiveGame(userId);
-      const loadedSnapshot = _gameSessionInstance.getCurrentGameSnapshot();
+      const gameSession = get()._getGameSession(); // Get instance via helper
+      const gameLoaded = await gameSession.loadLastActiveGame(userId);
+      const loadedSnapshot = gameSession.getCurrentGameSnapshot();
 
       if (gameLoaded && loadedSnapshot) {
         set({
@@ -219,6 +226,9 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   toggleWorldStatePin: (keyPath: string, type: PinToggleType) => {
+    // This action directly manipulates `worldStatePinnedKeys` state,
+    // it doesn't need to call GameSession for core game logic
+    // but then calls saveGame, which uses gameSession.
     set(produce((state: GameStateStore) => {
       const currentWorldState = state.currentGameState?.worldState || {};
       const newPinnedKeys = new Set(state.worldStatePinnedKeys);
@@ -292,39 +302,75 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
 
   // Delegated World State modification actions
   renameWorldCategory: async (oldName, newName) => {
-    const updatedSnapshot = await _gameSessionInstance.renameWorldCategory(oldName, newName);
-    if (updatedSnapshot) {
-      set({ currentSnapshot: updatedSnapshot, currentGameState: updatedSnapshot.gameState, worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys });
+    try {
+      const gameSession = get()._getGameSession(); // Get instance via helper
+      const updatedSnapshot = await gameSession.renameWorldCategory(oldName, newName);
+      if (updatedSnapshot) {
+        set({ currentSnapshot: updatedSnapshot, currentGameState: updatedSnapshot.gameState, worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys });
+      }
+    } catch (error: any) {
+        console.error("GameStateStore: Error renaming category:", error);
+        set({ gameError: error.message });
     }
   },
   renameWorldEntity: async (category, oldName, newName) => {
-    const updatedSnapshot = await _gameSessionInstance.renameWorldEntity(category, oldName, newName);
-    if (updatedSnapshot) {
-      set({ currentSnapshot: updatedSnapshot, currentGameState: updatedSnapshot.gameState, worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys });
+    try {
+        const gameSession = get()._getGameSession();
+        const updatedSnapshot = await gameSession.renameWorldEntity(category, oldName, newName);
+        if (updatedSnapshot) {
+            set({ currentSnapshot: updatedSnapshot, currentGameState: updatedSnapshot.gameState, worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys });
+        }
+    } catch (error: any) {
+        console.error("GameStateStore: Error renaming entity:", error);
+        set({ gameError: error.message });
     }
   },
   deleteWorldCategory: async (category) => {
-    const updatedSnapshot = await _gameSessionInstance.deleteWorldCategory(category);
-    if (updatedSnapshot) {
-      set({ currentSnapshot: updatedSnapshot, currentGameState: updatedSnapshot.gameState, worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys });
+    try {
+        const gameSession = get()._getGameSession();
+        const updatedSnapshot = await gameSession.deleteWorldCategory(category);
+        if (updatedSnapshot) {
+            set({ currentSnapshot: updatedSnapshot, currentGameState: updatedSnapshot.gameState, worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys });
+        }
+    } catch (error: any) {
+        console.error("GameStateStore: Error deleting category:", error);
+        set({ gameError: error.message });
     }
   },
   deleteWorldEntity: async (category, entity) => {
-    const updatedSnapshot = await _gameSessionInstance.deleteWorldEntity(category, entity);
-    if (updatedSnapshot) {
-      set({ currentSnapshot: updatedSnapshot, currentGameState: updatedSnapshot.gameState, worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys });
+    try {
+        const gameSession = get()._getGameSession();
+        const updatedSnapshot = await gameSession.deleteWorldEntity(category, entity);
+        if (updatedSnapshot) {
+            set({ currentSnapshot: updatedSnapshot, currentGameState: updatedSnapshot.gameState, worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys });
+        }
+    } catch (error: any) {
+        console.error("GameStateStore: Error deleting entity:", error);
+        set({ gameError: error.message });
     }
   },
   editWorldKeyValue: async (key, value) => {
-    const updatedSnapshot = await _gameSessionInstance.editWorldKeyValue(key, value);
-    if (updatedSnapshot) {
-      set({ currentSnapshot: updatedSnapshot, currentGameState: updatedSnapshot.gameState, worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys });
+    try {
+        const gameSession = get()._getGameSession();
+        const updatedSnapshot = await gameSession.editWorldKeyValue(key, value);
+        if (updatedSnapshot) {
+            set({ currentSnapshot: updatedSnapshot, currentGameState: updatedSnapshot.gameState, worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys });
+        }
+    } catch (error: any) {
+        console.error("GameStateStore: Error editing key-value:", error);
+        set({ gameError: error.message });
     }
   },
   deleteWorldKey: async (key) => {
-    const updatedSnapshot = await _gameSessionInstance.deleteWorldKey(key);
-    if (updatedSnapshot) {
-      set({ currentSnapshot: updatedSnapshot, currentGameState: updatedSnapshot.gameState, worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys });
+    try {
+        const gameSession = get()._getGameSession();
+        const updatedSnapshot = await gameSession.deleteWorldKey(key);
+        if (updatedSnapshot) {
+            set({ currentSnapshot: updatedSnapshot, currentGameState: updatedSnapshot.gameState, worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys });
+        }
+    } catch (error: any) {
+        console.error("GameStateStore: Error deleting key:", error);
+        set({ gameError: error.message });
     }
   },
 }));
