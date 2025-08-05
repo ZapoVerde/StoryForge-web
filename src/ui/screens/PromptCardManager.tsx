@@ -331,13 +331,30 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert
+          severity="error"
+          sx={{
+            mb: 2,
+            backgroundColor: (theme) => theme.palette.background.paper,
+            color: (theme) => theme.palette.text.primary,
+          }}
+        >
           Error: {error}
         </Alert>
       )}
 
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden', gap: 2 }}>
-        <Paper elevation={1} sx={{ flex: 1, minWidth: 250, maxWidth: 350, overflowY: 'auto' }}>
+        <Paper
+          elevation={1}
+          sx={{
+            flex: 1,
+            minWidth: 250,
+            maxWidth: 350,
+            overflowY: 'auto',
+            backgroundColor: (theme) => theme.palette.background.paper,
+          }}
+        >
+
           <Typography variant="h6" sx={{ p: 2, pb: 1 }}>Your Cards</Typography>
           <Divider />
           <List>
@@ -356,7 +373,7 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
                       pr: 0, 
                       cursor: 'pointer', // Add cursor to show it's clickable
                       '&:hover': {
-                          backgroundColor: 'action.hover'
+                          backgroundColor: (theme) => theme.palette.action.hover,
                       }
                   }}
               >
@@ -370,7 +387,7 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
                     <ContentCopyIcon fontSize="small" />
                   </IconButton>
                   <IconButton edge="end" aria-label="delete" onClick={(e) => { e.stopPropagation(); handleDeleteCard(card.id); }}>
-                    <DeleteIcon fontSize="small" />
+                    <DeleteIcon fontSize="small" sx={{ color: (theme) => theme.palette.error.main }} />
                   </IconButton>
                   <IconButton edge="end" aria-label="export" onClick={(e) => { e.stopPropagation(); handleExport(card.id); }}>
                     <FileDownloadIcon fontSize="small" />
@@ -381,7 +398,16 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
           </List>
         </Paper>
 
-        <Paper elevation={1} sx={{ flex: 2, p: 2, overflowY: 'auto' }}>
+        <Paper
+          elevation={1}
+          sx={{
+            flex: 1,
+            minWidth: 250,
+            maxWidth: 350,
+            overflowY: 'auto',
+            backgroundColor: (theme) => theme.palette.background.paper,
+          }}
+        >
           {!activePromptCard || !localEditedCard ? (
             <Box sx={{ textAlign: 'center', mt: 4 }}>
               <Typography variant="h6" color="text.secondary">
@@ -413,7 +439,7 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
                       variant="contained"
                       color="primary"
                       onClick={handleStartGame}
-                      startIcon={<PlayArrowIcon />}
+                      startIcon={<PlayArrowIcon sx={{ color: (theme) => theme.palette.primary.main }} />}
                     >
                       Start Game
                     </Button>

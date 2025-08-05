@@ -23,10 +23,9 @@ export const PinnedEntityGroup: React.FC<PinnedEntityGroupProps> = ({
   entityPath,
   attributes,
   onUnpinEntity,
-  onUnpinVariable, // This prop is passed down but also available here
+  onUnpinVariable,
 }) => {
   const longPressEntityProps = useLongPress(() => {
-    console.log(`[PinnedEntityGroup] Long-pressed entity header: "${entityPath}". Calling onUnpinEntity.`);
     onUnpinEntity(entityPath);
   });
 
@@ -38,15 +37,27 @@ export const PinnedEntityGroup: React.FC<PinnedEntityGroupProps> = ({
     <Paper
       elevation={3}
       sx={{
-        p: 1.5,
+        p: 1,
         minWidth: 150,
-        backgroundColor: (theme) => theme.palette.primary.light,
-        color: (theme) => theme.palette.primary.contrastText,
+        backgroundColor: (theme) =>
+          theme.palette.mode === 'light'
+            ? theme.palette.pinnedEntity.main // Uses PINNED_ENTITY_LIGHT
+            : theme.palette.pinnedEntity.main, // Uses PINNED_ENTITY_DARK
+        backdropFilter: 'blur(4px)',
+        color: (theme) => theme.palette.text.primary,
         flexShrink: 0,
         cursor: 'pointer',
+        borderRadius: 3,
+        boxShadow: (theme) => theme.shadows[4],
+        transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+        '&:hover': {
+          transform: 'translateY(-2px)',
+          boxShadow: (theme) => theme.shadows[6],
+        },
       }}
       {...longPressEntityProps}
     >
+
       <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
         {entityDisplayName}
         <Tooltip title="Long-press to unpin all for this group">
@@ -54,13 +65,13 @@ export const PinnedEntityGroup: React.FC<PinnedEntityGroupProps> = ({
         </Tooltip>
       </Typography>
       <Stack direction="column" spacing={0.5} sx={{ mt: 1 }}>
-        {attributes.map(attr => (
+        {attributes.map((attr) => (
           <PinnedAttributeChip
             key={attr.fullKey}
             fullKey={attr.fullKey}
             label={attr.label}
             value={attr.value}
-            onUnpin={onUnpinVariable} // This is correct, passing the specific unpin variable function
+            onUnpin={onUnpinVariable}
           />
         ))}
       </Stack>

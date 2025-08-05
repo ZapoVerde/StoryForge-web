@@ -131,7 +131,11 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
-      <AppBar position="static" elevation={1}>
+      <AppBar position="static" color="default" elevation={1}
+        sx={{
+          backgroundColor: (theme) => theme.palette.background.paper,
+          color: (theme) => theme.palette.text.primary,
+        }}>
         <Toolbar>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Game Library (Saved Games)
@@ -143,7 +147,14 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
       </AppBar>
 
       {savedGamesError && (
-        <Alert severity="error" sx={{ m: 2 }}>
+        <Alert
+          severity="error"
+          sx={{
+            m: 2,
+            backgroundColor: (theme) => theme.palette.background.paper,
+            color: (theme) => theme.palette.text.primary,
+          }}
+        >
           Error: {savedGamesError}
         </Alert>
       )}
@@ -151,14 +162,22 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
       <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}>
         <Button
           variant="contained"
-          onClick={() => navigate('/cards')}
+          color="primary"
           sx={{ mt: 2 }}
         >
           Start New Game (Select Prompt Card)
         </Button>
       </Box>
 
-      <Paper elevation={1} sx={{ flexGrow: 1, m: 2, overflowY: 'auto' }}>
+      <Paper
+        elevation={1}
+        sx={{
+          flexGrow: 1,
+          m: 2,
+          overflowY: 'auto',
+          backgroundColor: (theme) => theme.palette.background.paper,
+        }}
+      >
         {savedGames.length === 0 ? (
           <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
             <Typography variant="body1" color="text.secondary">
@@ -177,14 +196,14 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
                         aria-label="load-game"
                         onClick={() => handleLoadGame(game.id)}
                       >
-                        <PlayArrowIcon color="primary" />
+                        <PlayArrowIcon sx={{ color: (theme) => theme.palette.primary.main }} />
                       </IconButton>
                       <IconButton
                         edge="end"
                         aria-label="delete-game"
                         onClick={() => handleDeleteGame(game.id)}
                       >
-                        <DeleteIcon color="error" />
+                        <DeleteIcon sx={{ color: (theme) => theme.palette.error.main }} />
                       </IconButton>
                     </Box>
                   }
