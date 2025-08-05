@@ -23,6 +23,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  ListItemButton, // Import ListItemButton
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import AddIcon from '@mui/icons-material/Add';
@@ -225,25 +226,29 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onNavToggle }) => {
           ) : (
             aiConnections.map((conn) => (
               <React.Fragment key={conn.id}>
+                {/* CORRECTED: Replaced ListItem with button prop with ListItemButton */}
                 <ListItem
-                  button
-                  selected={selectedConnectionId === conn.id}
-                  onClick={() => setSelectedConnectionId(conn.id)}
+                  disablePadding
                   secondaryAction={
                     <Box>
-                      <IconButton edge="end" aria-label="edit" onClick={(e) => { e.stopPropagation(); handleEditConnectionClick(conn); }}>
+                      <IconButton edge="end" aria-label="edit" onClick={() => handleEditConnectionClick(conn)}>
                         <EditIcon fontSize="small" />
                       </IconButton>
-                      <IconButton edge="end" aria-label="delete" onClick={(e) => { e.stopPropagation(); handleDeleteConnectionClick(conn.id); }}>
+                      <IconButton edge="end" aria-label="delete" onClick={() => handleDeleteConnectionClick(conn.id)}>
                         <DeleteIcon fontSize="small" color="error" />
                       </IconButton>
                     </Box>
                   }
                 >
-                  <ListItemText
-                    primary={conn.displayName}
-                    secondary={`${conn.modelName} (${conn.apiUrl.substring(0, 30)}...)`}
-                  />
+                  <ListItemButton
+                    selected={selectedConnectionId === conn.id}
+                    onClick={() => setSelectedConnectionId(conn.id)}
+                  >
+                    <ListItemText
+                      primary={conn.displayName}
+                      secondary={`${conn.modelName} (${conn.apiUrl.substring(0, 30)}...)`}
+                    />
+                  </ListItemButton>
                 </ListItem>
                 <Divider />
               </React.Fragment>

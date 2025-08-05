@@ -2,7 +2,7 @@
 
 import { produce } from 'immer';
 import { IGameRepository } from '../data/repositories/gameRepository';
-import { IPromptCardRepository } from '../data/repositories/promptCardRepository';
+import { IPromportCardRepository } from '../data/repositories/promptCardRepository';
 import { AiConnection, GameSnapshot, GameState, LogEntry, Message, PromptCard } from '../models';
 import { formatIsoDateForDisplay } from '../utils/formatDate';
 import { generateUuid } from '../utils/uuid';
@@ -99,10 +99,14 @@ export class GameSession implements IGameSession {
     const firstTurnProse = card.firstTurnOnlyBlock || "The story begins...";
 
     const initialGameState: GameState = {
-      narration: firstTurnProse,
+      narration: firstTurnProse, // This is the initial narration, reflecting the setup
       worldState: initialWorldState,
       scene: { location: null, present: [] },
     };
+
+    const initialConversationHistory: Message[] = [
+      { role: 'assistant', content: firstTurnProse }
+    ];
 
     const initialSnapshot: GameSnapshot = {
       id: newSnapshotId,
@@ -113,13 +117,12 @@ export class GameSession implements IGameSession {
       updatedAt: now,
       currentTurn: 0,
       gameState: initialGameState,
-      conversationHistory: [], // First turn response will be added
+      conversationHistory: initialConversationHistory,
       logs: [],
       worldStatePinnedKeys: [],
     };
 
     this.currentSnapshot = initialSnapshot;
-    // Don't save yet, let processFirstNarratorTurn handle the initial save.
     console.log(`GameSession: New game initialized with ID ${newSnapshotId}. Awaiting first narrator response.`);
   }
 
@@ -133,7 +136,6 @@ export class GameSession implements IGameSession {
     const card = this.currentPromptCard;
     const userId = this.currentUserId;
 
-    // Fetch AI connections for the turn processor
     const aiConnections = await this.gameRepo.getAiConnections(userId);
 
     const { parsedOutput, logEntry } = await this.turnProcessor.processFirstTurnNarratorResponse(
@@ -144,19 +146,22 @@ export class GameSession implements IGameSession {
       aiConnections,
     );
 
-    // Update Game State using GameStateManager
-    let newGameState = this.gameStateManager.applyDeltasToGameState(snapshot.gameState, parsedOutput.deltas);
-    newGameState = this.gameStateManager.updateSceneState(newGameState, parsedOutput.scene, parsedOutput.deltas);
+    let stateAfterDeltas = this.gameStateManager.applyDeltasToGameState(snapshot.gameState, parsedOutput.deltas);
+    let stateAfterSceneUpdate = this.gameStateManager.updateSceneState(stateAfterDeltas, parsedOutput.scene, parsedOutput.deltas);
 
-    // Update conversation history and add prose
+    // Create a new GameState object immutably instead of direct mutation
+    const newGameState: GameState = {
+      ...stateAfterSceneUpdate,
+      narration: parsedOutput.prose,
+    };
+
     const updatedConversationHistory = [...snapshot.conversationHistory, { role: 'assistant', content: parsedOutput.prose }];
     
-    // Create new snapshot with updated values
     const updatedSnapshot = produce(snapshot, draft => {
       draft.gameState = newGameState;
       draft.conversationHistory = updatedConversationHistory;
       draft.logs.push(logEntry);
-      draft.currentTurn += 1; // Increment turn after processing it
+      draft.currentTurn += 1;
       draft.updatedAt = new Date().toISOString();
     });
 
@@ -178,10 +183,8 @@ export class GameSession implements IGameSession {
     const userId = this.currentUserId;
     const turnNumber = snapshot.currentTurn;
 
-    // Add player action to conversation history
     const conversationHistoryWithPlayerAction = [...snapshot.conversationHistory, { role: 'user', content: action }];
 
-    // Fetch AI connections for the turn processor
     const aiConnections = await this.gameRepo.getAiConnections(userId);
 
     const { parsedOutput, logEntry } = await this.turnProcessor.processPlayerTurn(
@@ -189,26 +192,29 @@ export class GameSession implements IGameSession {
       card,
       snapshot.gameState,
       snapshot.logs,
-      conversationHistoryWithPlayerAction, // Pass updated history
+      conversationHistoryWithPlayerAction,
       action,
       turnNumber,
       useDummyNarrator,
       aiConnections,
     );
 
-    // Update Game State using GameStateManager
-    let newGameState = this.gameStateManager.applyDeltasToGameState(snapshot.gameState, parsedOutput.deltas);
-    newGameState = this.gameStateManager.updateSceneState(newGameState, parsedOutput.scene, parsedOutput.deltas);
+    let stateAfterDeltas = this.gameStateManager.applyDeltasToGameState(snapshot.gameState, parsedOutput.deltas);
+    let stateAfterSceneUpdate = this.gameStateManager.updateSceneState(stateAfterDeltas, parsedOutput.scene, parsedOutput.deltas);
 
-    // Update conversation history with assistant's response
+    // Create a new GameState object immutably instead of direct mutation
+    const newGameState: GameState = {
+      ...stateAfterSceneUpdate,
+      narration: parsedOutput.prose,
+    };
+
     const updatedConversationHistory = [...conversationHistoryWithPlayerAction, { role: 'assistant', content: parsedOutput.prose }];
 
-    // Create new snapshot with updated values
     const updatedSnapshot = produce(snapshot, draft => {
       draft.gameState = newGameState;
       draft.conversationHistory = updatedConversationHistory;
       draft.logs.push(logEntry);
-      draft.currentTurn += 1; // Increment turn after processing it
+      draft.currentTurn += 1;
       draft.updatedAt = new Date().toISOString();
     });
 

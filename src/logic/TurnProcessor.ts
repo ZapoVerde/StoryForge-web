@@ -17,33 +17,41 @@ class DummyAiClient implements IAiClient {
     settings: AiSettings
   ): Promise<string> {
     console.log("Dummy Narrator: Simulating AI response...");
-    const lastUserMessage = messages.find(m => m.role === 'user')?.content || 'No user input.';
+    // Find the LAST message with role 'user'
+    const lastUserMessage = messages.slice().reverse().find(m => m.role === 'user')?.content || 'No user input.';
     const dummyResponse = {
       choices: [{
         message: {
-          content: `The dummy narrator responds to your action: "${lastUserMessage}". A gentle breeze rustles through the imaginary trees.
+          // MODIFIED: Dummy response to test all emits and match the expected structure with fences
+          content: `The dummy narrator observes your action: "${lastUserMessage}". A ripple of arcane energy flows through the air, subtly shifting the very fabric of reality around you. You hear a distant chime, and a curious, ancient tome appears at your feet.
 
 @digest
 \`\`\`json
 [
-  { "text": "A dummy event occurred.", "importance": 3 },
-  { "text": "Your input was: '${lastUserMessage}'.", "importance": 1 }
+  { "text": "The world reacted to your input: '${lastUserMessage}'.", "importance": 2 },
+  { "text": "Something new has manifested nearby: the $enchanted_quill.", "importance": 4, "tags": ["$enchanted_quill"] },
+  { "text": "#Brom's disposition shifted slightly.", "importance": 3, "tags": ["#brom"] },
+  { "text": "A critical system event occurred, requiring your attention!", "importance": 5 }
 ]
 \`\`\`
 
 @delta
 \`\`\`json
 {
-  "=player.hp": 99,
-  "+player.gold": 1
+  "=player.hp": 85,
+  "+player.gold": 5,
+  "!items.$enchanted_quill.description": "A quill that seems to hum with forgotten magic, vibrating faintly.",
+  "-npcs.#old_sage.wisdom" : true,
+  "=player.status": "observant"
 }
 \`\`\`
 
 @scene
 \`\`\`json
 {
-  "location": "dummy_location",
-  "present": ["#you"]
+  "location": "@forest_clearing",
+  "present": ["#you", "#lyrielle", "$enchanted_quill"],
+  "weather": "clear and crisp"
 }
 \`\`\`
 `
@@ -51,8 +59,8 @@ class DummyAiClient implements IAiClient {
       }],
       usage: {
         prompt_tokens: 10,
-        completion_tokens: 50,
-        total_tokens: 60,
+        completion_tokens: 150, // Increased for a longer response
+        total_tokens: 160,
       }
     };
     return Promise.resolve(JSON.stringify(dummyResponse)); // Return as stringified JSON

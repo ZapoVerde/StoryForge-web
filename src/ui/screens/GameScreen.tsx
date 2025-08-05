@@ -95,7 +95,8 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
     if (
       initialTurnTriggeredForSnapshot.current !== currentSnapshot.id &&
       currentSnapshot.currentTurn === 0 &&
-      currentSnapshot.conversationHistory?.length === 1 &&
+      // CHANGED THIS LINE
+      currentSnapshot.conversationHistory?.length === 1 && // Trigger AI when initial narrative is present
       !gameLoading
     ) {
       initialTurnTriggeredForSnapshot.current = currentSnapshot.id;

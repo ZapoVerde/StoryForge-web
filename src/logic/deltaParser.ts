@@ -1,5 +1,4 @@
 // src/logic/deltaParser.ts
-
 import type { DeltaInstruction, DeltaMap } from '../models/DeltaInstruction.ts';
 import type { DigestLine } from '../models/LogEntryElements.ts';
 import type { ParsedNarrationOutput } from '../models/ParsedNarrationOutput.ts';
@@ -10,12 +9,13 @@ export const DIGEST_MARKER = "@digest";
 export const SCENE_MARKER = "@scene";
 
 /**
- * Extracts a JSON object from a list of lines, handling potential parsing errors.
- * @param lines The lines of text containing the JSON.
+ * Extracts a JSON object from a string, handling potential parsing errors.
+ * This function expects the *raw JSON string*, not lines including fences.
+ * @param jsonString The raw JSON string.
  * @returns A JSON object, or an empty object on error.
  */
-function extractJsonObject(lines: string[]): Record<string, unknown> {
-  const text = lines.join('\n').trim();
+function extractJsonObject(jsonString: string): Record<string, unknown> {
+  const text = jsonString.trim();
   if (!text) return {};
   try {
     const parsed = JSON.parse(text);
@@ -27,12 +27,13 @@ function extractJsonObject(lines: string[]): Record<string, unknown> {
 }
 
 /**
- * Extracts a JSON array from a list of lines, handling potential parsing errors.
- * @param lines The lines of text containing the JSON array.
+ * Extracts a JSON array from a string, handling potential parsing errors.
+ * This function expects the *raw JSON string*, not lines including fences.
+ * @param jsonString The raw JSON string.
  * @returns A JSON array, or an empty array on error.
  */
-function extractJsonArray(lines: string[]): unknown[] {
-  const text = lines.join('\n').trim();
+function extractJsonArray(jsonString: string): unknown[] {
+  const text = jsonString.trim();
   if (!text) return [];
   try {
     const parsed = JSON.parse(text);
@@ -41,6 +42,61 @@ function extractJsonArray(lines: string[]): unknown[] {
     console.error("Failed to parse JSON array:", e, "\nText:", text);
     return [];
   }
+}
+
+/**
+ * Extracts content from a markdown-fenced JSON block.
+ * Looks for ```json and ```. Also includes a fallback for unfenced blocks
+ * if a JSON start character is found immediately after the marker.
+ * @param lines The full array of lines from AI output.
+ * @param startIndex The index of the marker line (e.g., @delta).
+ * @returns The raw JSON string content, or an empty string if not found.
+ */
+function extractFencedJsonBlock(lines: string[], startIndex: number): string {
+    if (startIndex < 0 || startIndex >= lines.length) {
+        return "";
+    }
+
+    let jsonLines: string[] = [];
+    let inJsonBlock = false;
+    let fenceFound = false;
+
+    // Start searching from the line *after* the marker
+    for (let i = startIndex + 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        if (line.startsWith("```")) {
+            if (!inJsonBlock) {
+                // Found opening fence
+                inJsonBlock = true;
+                fenceFound = true;
+                // If there's content *after* ```json on the same line
+                const contentAfterFence = line.substring(line.indexOf('{'));
+                if(contentAfterFence.startsWith('{') || contentAfterFence.startsWith('[')) {
+                    jsonLines.push(contentAfterFence);
+                }
+                continue;
+            } else {
+                // Found closing fence
+                break;
+            }
+        }
+
+        if (inJsonBlock) {
+            jsonLines.push(lines[i]);
+        } else if (!fenceFound && (line.startsWith("{") || line.startsWith("["))) {
+            // If no fence was found yet, but we encounter a JSON start,
+            // assume it's an unfenced block and start capturing.
+            // This is a fallback for AIs that don't use fences.
+            inJsonBlock = true;
+            jsonLines.push(lines[i]);
+        } else if (inJsonBlock && !fenceFound && !line.startsWith("{") && !line.startsWith("[")) {
+            // If we're in an unfenced block but encounter a non-JSON line, stop.
+            break;
+        }
+    }
+
+    return jsonLines.join('\n').trim();
 }
 
 /**
@@ -83,19 +139,20 @@ export function parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput 
   const digestIndex = lines.findIndex(line => line.trim() === DIGEST_MARKER);
   const sceneIndex = lines.findIndex(line => line.trim() === SCENE_MARKER);
 
-  const proseEndIndex = [deltaIndex, digestIndex, sceneIndex]
+  const firstMarkerIndex = [deltaIndex, digestIndex, sceneIndex]
     .filter(index => index !== -1)
     .reduce((min, current) => Math.min(min, current), lines.length);
 
-  const prose = lines.slice(0, proseEndIndex).join('\n').trim();
+  const prose = lines.slice(0, firstMarkerIndex).join('\n').trim();
 
-  const deltaLines = deltaIndex !== -1 ? lines.slice(deltaIndex + 1, digestIndex > deltaIndex ? digestIndex : (sceneIndex > deltaIndex ? sceneIndex : lines.length)) : [];
-  const digestLinesRaw = digestIndex !== -1 ? lines.slice(digestIndex + 1, sceneIndex > digestIndex ? sceneIndex : lines.length) : [];
-  const sceneLines = sceneIndex !== -1 ? lines.slice(sceneIndex + 1) : [];
+  // Use the new helper to extract the raw JSON strings
+  const deltaJsonString = extractFencedJsonBlock(lines, deltaIndex);
+  const digestJsonString = extractFencedJsonBlock(lines, digestIndex);
+  const sceneJsonString = extractFencedJsonBlock(lines, sceneIndex);
 
-  const deltaJson = extractJsonObject(deltaLines);
-  const digestJson = extractJsonArray(digestLinesRaw);
-  const sceneJson = extractJsonObject(sceneLines);
+  const deltaJson = extractJsonObject(deltaJsonString);
+  const digestJson = extractJsonArray(digestJsonString);
+  const sceneJson = extractJsonObject(sceneJsonString);
 
   // --- Parse Deltas ---
   const deltas: DeltaMap = {};
