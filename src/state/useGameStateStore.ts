@@ -40,6 +40,7 @@ interface GameStateStore {
   narratorScrollPosition: number;
   gameError: string | null;
   gameLoading: boolean;
+  isProcessingTurn: boolean;
 
   initializeGame: (userId: string, cardId: string, existingSnapshotId?: string) => Promise<void>;
   processPlayerAction: (action: string) => Promise<void>;
@@ -74,6 +75,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   narratorScrollPosition: 0,
   gameError: null,
   gameLoading: false,
+  isProcessingTurn: false,
 
   // Helper function to safely get the gameSession instance
   // This ensures we always get the *current* value of _gameSessionInstance
@@ -114,7 +116,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   processFirstNarratorTurn: async () => {
-    set({ gameLoading: true, gameError: null });
+    set({ isProcessingTurn: true, gameError: null });
     const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
     try {
       const gameSession = get()._getGameSession(); // Get instance via helper
@@ -125,15 +127,15 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
         gameLogs: updatedSnapshot.logs,
         conversationHistory: updatedSnapshot.conversationHistory,
       });
-      set({ gameLoading: false });
+      set({ isProcessingTurn: false });
     } catch (error: any) {
-      set({ gameError: error.message, gameLoading: false });
+      set({ gameError: error.message, isProcessingTurn: false });
       console.error("Error processing first narrator turn:", error);
     }
   },
 
   processPlayerAction: async (action) => {
-    set({ gameLoading: true, gameError: null });
+    set({ isProcessingTurn: true, gameError: null });
     const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
     try {
       const gameSession = get()._getGameSession(); // Get instance via helper
@@ -146,9 +148,9 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
         narratorInputText: '',
         worldStatePinnedKeys: updatedSnapshot.worldStatePinnedKeys || [],
       });
-      set({ gameLoading: false });
+      set({ isProcessingTurn: false });
     } catch (error: any) {
-      set({ gameError: error.message, gameLoading: false });
+      set({ gameError: error.message, isProcessingTurn: false });
       console.error("Error processing player action:", error);
     }
   },
