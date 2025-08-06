@@ -29,6 +29,20 @@ export const initializeGameStateStore = (gameSession: IGameSession) => {
 // Define types for pinning
 type PinToggleType = 'variable' | 'entity' | 'category';
 
+const initialState = {
+  currentSnapshot: null,
+  currentPromptCardId: null,
+  currentGameState: null,
+  gameLogs: [],
+  conversationHistory: [],
+  worldStatePinnedKeys: [],
+  narratorInputText: '',
+  narratorScrollPosition: 0,
+  gameError: null,
+  gameLoading: false,
+  isProcessingTurn: false,
+};
+
 interface GameStateStore {
   currentSnapshot: GameSnapshot | null;
   currentPromptCardId: string | null;
@@ -62,20 +76,11 @@ interface GameStateStore {
   deleteWorldEntity: (category: string, entity: string) => Promise<void>;
   editWorldKeyValue: (key: string, value: any) => Promise<void>;
   deleteWorldKey: (key: string) => Promise<void>;
+  reset: () => void;
 }
 
 export const useGameStateStore = create<GameStateStore>((set, get) => ({
-  currentSnapshot: null,
-  currentPromptCardId: null,
-  currentGameState: null,
-  gameLogs: [],
-  conversationHistory: [],
-  worldStatePinnedKeys: [],
-  narratorInputText: '',
-  narratorScrollPosition: 0,
-  gameError: null,
-  gameLoading: false,
-  isProcessingTurn: false,
+  ...initialState,
 
   // Helper function to safely get the gameSession instance
   // This ensures we always get the *current* value of _gameSessionInstance
@@ -374,5 +379,9 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
         console.error("GameStateStore: Error deleting key:", error);
         set({ gameError: error.message });
     }
+  },
+  reset: () => {
+    console.log("Resetting GameStateStore.");
+    set(initialState);
   },
 }));

@@ -1,48 +1,40 @@
 // src/state/useSettingsStore.ts
 
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware'; // For persisting non-sensitive settings
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { AiConnection } from '../models/AiConnection';
-import { gameRepository } from '../data/repositories/gameRepository'; // For AI connection persistence
-import { generateUuid } from '../utils/uuid'; // For generating new connection IDs
+import { gameRepository } from '../data/repositories/gameRepository';
+import { generateUuid } from '../utils/uuid';
 
 interface SettingsState {
-  // AI Connections
   aiConnections: AiConnection[];
-  selectedConnectionId: string | null; // The currently selected AI connection for gameplay
+  selectedConnectionId: string | null;
   isLoadingConnections: boolean;
   connectionsError: string | null;
-
-  // Global app settings
   useDummyNarrator: boolean;
-  themeMode: 'light' | 'dark'; // Example for future theme setting
-
-  // Actions
+  themeMode: 'light' | 'dark';
   fetchAiConnections: (userId: string) => Promise<void>;
   addAiConnection: (userId: string, connection: Omit<AiConnection, 'id' | 'createdAt' | 'lastUpdated'>) => Promise<AiConnection | null>;
   updateAiConnection: (userId: string, connection: AiConnection) => Promise<AiConnection | null>;
   deleteAiConnection: (userId: string, connectionId: string) => Promise<void>;
   setSelectedConnectionId: (id: string | null) => void;
-
   setUseDummyNarrator: (enabled: boolean) => void;
   setThemeMode: (mode: 'light' | 'dark') => void;
+  reset: () => void;
 }
 
-// Zustand store for application settings
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
-      // Initial state for AI Connections
+      // --- Initial State Values ---
       aiConnections: [],
       selectedConnectionId: null,
       isLoadingConnections: false,
       connectionsError: null,
+      useDummyNarrator: false,
+      themeMode: 'light',
 
-      // Initial state for other settings
-      useDummyNarrator: false, // Default to false
-      themeMode: 'light', // Default theme
-
-      // Actions for AI Connections
+      // --- Actions ---
       fetchAiConnections: async (userId) => {
         set({ isLoadingConnections: true, connectionsError: null });
         try {
@@ -50,18 +42,16 @@ export const useSettingsStore = create<SettingsState>()(
           set({
             aiConnections: connections,
             isLoadingConnections: false,
-            // If no connection is selected or the selected one is gone, pick the first one
             selectedConnectionId: get().selectedConnectionId && connections.some(c => c.id === get().selectedConnectionId)
               ? get().selectedConnectionId
               : (connections.length > 0 ? connections[0].id : null)
           });
         } catch (error: any) {
           set({ connectionsError: error.message, isLoadingConnections: false });
-          console.error("Error fetching AI connections:", error);
         }
       },
-
       addAiConnection: async (userId, newConnectionData) => {
+        // ... (rest of the function is correct)
         set({ isLoadingConnections: true, connectionsError: null });
         try {
           const newId = generateUuid();
@@ -74,22 +64,21 @@ export const useSettingsStore = create<SettingsState>()(
           };
           await gameRepository.saveAiConnection(userId, connection);
           set(state => {
-            const updatedConnections = [...state.aiConnections, connection].sort((a, b) => a.displayName.localeCompare(b.displayName)); // Keep sorted
+            const updatedConnections = [...state.aiConnections, connection].sort((a, b) => a.displayName.localeCompare(b.displayName));
             return {
               aiConnections: updatedConnections,
               isLoadingConnections: false,
-              selectedConnectionId: state.selectedConnectionId || newId // Auto-select if nothing selected
+              selectedConnectionId: state.selectedConnectionId || newId
             };
           });
           return connection;
         } catch (error: any) {
           set({ connectionsError: error.message, isLoadingConnections: false });
-          console.error("Error adding AI connection:", error);
           return null;
         }
       },
-
       updateAiConnection: async (userId, updatedConnection) => {
+        // ... (rest of the function is correct)
         set({ isLoadingConnections: true, connectionsError: null });
         try {
           const now = new Date().toISOString();
@@ -98,7 +87,7 @@ export const useSettingsStore = create<SettingsState>()(
           set(state => {
             const updatedConnections = state.aiConnections.map(conn =>
               conn.id === updatedConnection.id ? connectionToSave : conn
-            ).sort((a, b) => a.displayName.localeCompare(b.displayName)); // Keep sorted
+            ).sort((a, b) => a.displayName.localeCompare(b.displayName));
             return {
               aiConnections: updatedConnections,
               isLoadingConnections: false,
@@ -107,12 +96,11 @@ export const useSettingsStore = create<SettingsState>()(
           return connectionToSave;
         } catch (error: any) {
           set({ connectionsError: error.message, isLoadingConnections: false });
-          console.error("Error updating AI connection:", error);
           return null;
         }
       },
-
       deleteAiConnection: async (userId, connectionId) => {
+        // ... (rest of the function is correct)
         set({ isLoadingConnections: true, connectionsError: null });
         try {
           await gameRepository.deleteAiConnection(userId, connectionId);
@@ -123,35 +111,41 @@ export const useSettingsStore = create<SettingsState>()(
                 newSelectedId = updatedConnections.length > 0 ? updatedConnections[0].id : null;
             }
             return {
-              aiConnections: updatedConnections.sort((a, b) => a.displayName.localeCompare(b.displayName)), // Keep sorted
+              aiConnections: updatedConnections.sort((a, b) => a.displayName.localeCompare(b.displayName)),
               selectedConnectionId: newSelectedId,
               isLoadingConnections: false,
             };
           });
         } catch (error: any) {
           set({ connectionsError: error.message, isLoadingConnections: false });
-          console.error("Error deleting AI connection:", error);
         }
       },
-
       setSelectedConnectionId: (id) => set({ selectedConnectionId: id }),
-
-      // Actions for other settings
       setUseDummyNarrator: (enabled) => set({ useDummyNarrator: enabled }),
       setThemeMode: (mode) => set({ themeMode: mode }),
+      
+      // --- CORRECTED RESET ACTION ---
+      reset: () => {
+        console.log("Resetting SettingsStore.");
+        // Set the non-persisted state back to initial values.
+        // Persisted values will be handled by the middleware on next login/page load.
+        set({
+          aiConnections: [],
+          isLoadingConnections: false,
+          connectionsError: null,
+          // We don't need to reset the persisted parts (selectedConnectionId, themeMode, etc.)
+          // as they will be rehydrated or re-fetched on the next session.
+        });
+      },
     }),
     {
-      name: 'storyforge-app-settings', // Name of the storage item
-      storage: createJSONStorage(() => localStorage), // Use localStorage
-      partialize: (state) => ({ // Only persist non-sensitive or non-dynamic parts
+      name: 'storyforge-app-settings',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
         selectedConnectionId: state.selectedConnectionId,
         useDummyNarrator: state.useDummyNarrator,
         themeMode: state.themeMode,
-        // aiConnections are fetched dynamically, not persisted directly via Zustand middleware
-        // because they come from Firestore and might contain sensitive API keys.
-        // We *do* store them in Firestore, but this `persist` middleware is for local-only settings.
       }),
-      // Rehydration logic for aiConnections will be in fetchAiConnections.
     }
   )
 );

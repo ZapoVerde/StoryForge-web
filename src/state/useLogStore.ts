@@ -4,8 +4,11 @@ import { create } from 'zustand';
 import { LogEntry } from '../models/LogEntry'; // Assuming LogEntry model is available
 import { LogViewMode } from '../utils/types'; // We'll define LogViewMode here
 
-
-
+const initialState = {
+  logEntries: [],
+  isLoading: false,
+  error: null,
+};
 
 interface LogState {
   logEntries: LogEntry[];
@@ -18,6 +21,7 @@ interface LogState {
   setSelectedLogViewModes: (modes: LogViewMode[]) => void;
   // Potentially fetch logs if we implement persistent log storage separate from GameSnapshot
   fetchLogs: (snapshotId: string) => Promise<void>;
+  reset: () => void;
 }
 
 export const useLogStore = create<LogState>((set, get) => ({
@@ -42,5 +46,9 @@ export const useLogStore = create<LogState>((set, get) => ({
       set({ error: error.message, isLoading: false });
       console.error("Error fetching logs:", error);
     }
+  },
+  reset: () => {
+    console.log("Resetting LogStore.");
+    set(initialState);
   },
 }));

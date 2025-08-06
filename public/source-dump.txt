@@ -44,17 +44,39 @@
 
 @@FILE: src/App.tsx
 // src/App.tsx
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { BrowserRouter as Router } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import { useSettingsStore } from './state/useSettingsStore';
 import { getAppTheme } from './theme';
 import MainLayout from './ui/components/MainLayout';
 import { AppRoutes } from './AppRoutes';
+import { useAuthStore } from './state/useAuthStore';
+import { useGameStateStore } from './state/useGameStateStore';
+import { usePromptCardStore } from './state/usePromptCardStore';
+import { useLogStore } from './state/useLogStore';
 
 const App: React.FC = () => {
   const { themeMode } = useSettingsStore();
   const theme = React.useMemo(() => getAppTheme(themeMode), [themeMode]);
+
+  const { user } = useAuthStore();
+  const wasUserLoggedIn = useRef(!!user);
+
+  useEffect(() => {
+    const isLoggingOut = wasUserLoggedIn.current && !user;
+
+    if (isLoggingOut) {
+      console.log("User is logging out. Resetting all data stores.");
+      useGameStateStore.getState().reset();
+      usePromptCardStore.getState().reset();
+      useSettingsStore.getState().reset();
+      useLogStore.getState().reset();
+    }
+    
+    // Update the ref for the next render
+    wasUserLoggedIn.current = !!user;
+  }, [user]);
 
   return (
     <ThemeProvider theme={theme}>
@@ -3414,6 +3436,20 @@ export const initializeGameStateStore = (gameSession: IGameSession) => {
 // Define types for pinning
 type PinToggleType = 'variable' | 'entity' | 'category';
 
+const initialState = {
+  currentSnapshot: null,
+  currentPromptCardId: null,
+  currentGameState: null,
+  gameLogs: [],
+  conversationHistory: [],
+  worldStatePinnedKeys: [],
+  narratorInputText: '',
+  narratorScrollPosition: 0,
+  gameError: null,
+  gameLoading: false,
+  isProcessingTurn: false,
+};
+
 interface GameStateStore {
   currentSnapshot: GameSnapshot | null;
   currentPromptCardId: string | null;
@@ -3447,20 +3483,11 @@ interface GameStateStore {
   deleteWorldEntity: (category: string, entity: string) => Promise<void>;
   editWorldKeyValue: (key: string, value: any) => Promise<void>;
   deleteWorldKey: (key: string) => Promise<void>;
+  reset: () => void;
 }
 
 export const useGameStateStore = create<GameStateStore>((set, get) => ({
-  currentSnapshot: null,
-  currentPromptCardId: null,
-  currentGameState: null,
-  gameLogs: [],
-  conversationHistory: [],
-  worldStatePinnedKeys: [],
-  narratorInputText: '',
-  narratorScrollPosition: 0,
-  gameError: null,
-  gameLoading: false,
-  isProcessingTurn: false,
+  ...initialState,
 
   // Helper function to safely get the gameSession instance
   // This ensures we always get the *current* value of _gameSessionInstance
@@ -3760,6 +3787,10 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
         set({ gameError: error.message });
     }
   },
+  reset: () => {
+    console.log("Resetting GameStateStore.");
+    set(initialState);
+  },
 }));
 @@FILE: src/state/useLogStore.ts
 // src/state/useLogStore.ts
@@ -3768,8 +3799,11 @@ import { create } from 'zustand';
 import { LogEntry } from '../models/LogEntry'; // Assuming LogEntry model is available
 import { LogViewMode } from '../utils/types'; // We'll define LogViewMode here
 
-
-
+const initialState = {
+  logEntries: [],
+  isLoading: false,
+  error: null,
+};
 
 interface LogState {
   logEntries: LogEntry[];
@@ -3782,6 +3816,7 @@ interface LogState {
   setSelectedLogViewModes: (modes: LogViewMode[]) => void;
   // Potentially fetch logs if we implement persistent log storage separate from GameSnapshot
   fetchLogs: (snapshotId: string) => Promise<void>;
+  reset: () => void;
 }
 
 export const useLogStore = create<LogState>((set, get) => ({
@@ -3807,6 +3842,10 @@ export const useLogStore = create<LogState>((set, get) => ({
       console.error("Error fetching logs:", error);
     }
   },
+  reset: () => {
+    console.log("Resetting LogStore.");
+    set(initialState);
+  },
 }));
 @@FILE: src/state/usePromptCardStore.ts
 // src/state/usePromptCardStore.ts
@@ -3815,6 +3854,13 @@ import { create } from 'zustand';
 import { PromptCard, NewPromptCardData, AiConnection } from '../models/index'; // Assuming index.ts exports these
 import { promptCardManager } from '../logic/cardManager';
 import { gameRepository } from '../data/repositories/gameRepository'; // For AI Connections
+
+const initialState = {
+  promptCards: [],
+  activePromptCard: null,
+  isLoading: false,
+  error: null,
+};
 
 interface PromptCardState {
   promptCards: PromptCard[];
@@ -3825,7 +3871,7 @@ interface PromptCardState {
 
   // Actions
   fetchPromptCards: (userId: string) => Promise<void>;
-  setActivePromptCard: (card: PromptCard) => void;
+  setActivePromptCard: (card: PromptCard | null) => void;
   addPromptCard: (userId: string, cardData: NewPromptCardData) => Promise<PromptCard | null>;
   updatePromptCard: (userId: string, cardId: string, updates: Partial<PromptCard>) => Promise<PromptCard | null>;
   duplicatePromptCard: (userId: string, cardId: string) => Promise<PromptCard | null>;
@@ -3834,6 +3880,7 @@ interface PromptCardState {
   // Import/Export functionality will go here eventually
   importPromptCards: (userId: string, cards: NewPromptCardData[]) => Promise<PromptCard[]>;
   exportPromptCard: (userId: string, cardId: string) => Promise<PromptCard | null>;
+  reset: () => void;
 }
 
 export const usePromptCardStore = create<PromptCardState>((set, get) => ({
@@ -3965,53 +4012,50 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       return null;
     }
   },
+
+  reset: () => {
+    console.log("Resetting PromptCardStore.");
+    set(initialState);
+  },
 }));
 @@FILE: src/state/useSettingsStore.ts
 // src/state/useSettingsStore.ts
 
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware'; // For persisting non-sensitive settings
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { AiConnection } from '../models/AiConnection';
-import { gameRepository } from '../data/repositories/gameRepository'; // For AI connection persistence
-import { generateUuid } from '../utils/uuid'; // For generating new connection IDs
+import { gameRepository } from '../data/repositories/gameRepository';
+import { generateUuid } from '../utils/uuid';
 
 interface SettingsState {
-  // AI Connections
   aiConnections: AiConnection[];
-  selectedConnectionId: string | null; // The currently selected AI connection for gameplay
+  selectedConnectionId: string | null;
   isLoadingConnections: boolean;
   connectionsError: string | null;
-
-  // Global app settings
   useDummyNarrator: boolean;
-  themeMode: 'light' | 'dark'; // Example for future theme setting
-
-  // Actions
+  themeMode: 'light' | 'dark';
   fetchAiConnections: (userId: string) => Promise<void>;
   addAiConnection: (userId: string, connection: Omit<AiConnection, 'id' | 'createdAt' | 'lastUpdated'>) => Promise<AiConnection | null>;
   updateAiConnection: (userId: string, connection: AiConnection) => Promise<AiConnection | null>;
   deleteAiConnection: (userId: string, connectionId: string) => Promise<void>;
   setSelectedConnectionId: (id: string | null) => void;
-
   setUseDummyNarrator: (enabled: boolean) => void;
   setThemeMode: (mode: 'light' | 'dark') => void;
+  reset: () => void;
 }
 
-// Zustand store for application settings
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set, get) => ({
-      // Initial state for AI Connections
+      // --- Initial State Values ---
       aiConnections: [],
       selectedConnectionId: null,
       isLoadingConnections: false,
       connectionsError: null,
+      useDummyNarrator: false,
+      themeMode: 'light',
 
-      // Initial state for other settings
-      useDummyNarrator: false, // Default to false
-      themeMode: 'light', // Default theme
-
-      // Actions for AI Connections
+      // --- Actions ---
       fetchAiConnections: async (userId) => {
         set({ isLoadingConnections: true, connectionsError: null });
         try {
@@ -4019,18 +4063,16 @@ export const useSettingsStore = create<SettingsState>()(
           set({
             aiConnections: connections,
             isLoadingConnections: false,
-            // If no connection is selected or the selected one is gone, pick the first one
             selectedConnectionId: get().selectedConnectionId && connections.some(c => c.id === get().selectedConnectionId)
               ? get().selectedConnectionId
               : (connections.length > 0 ? connections[0].id : null)
           });
         } catch (error: any) {
           set({ connectionsError: error.message, isLoadingConnections: false });
-          console.error("Error fetching AI connections:", error);
         }
       },
-
       addAiConnection: async (userId, newConnectionData) => {
+        // ... (rest of the function is correct)
         set({ isLoadingConnections: true, connectionsError: null });
         try {
           const newId = generateUuid();
@@ -4043,22 +4085,21 @@ export const useSettingsStore = create<SettingsState>()(
           };
           await gameRepository.saveAiConnection(userId, connection);
           set(state => {
-            const updatedConnections = [...state.aiConnections, connection].sort((a, b) => a.displayName.localeCompare(b.displayName)); // Keep sorted
+            const updatedConnections = [...state.aiConnections, connection].sort((a, b) => a.displayName.localeCompare(b.displayName));
             return {
               aiConnections: updatedConnections,
               isLoadingConnections: false,
-              selectedConnectionId: state.selectedConnectionId || newId // Auto-select if nothing selected
+              selectedConnectionId: state.selectedConnectionId || newId
             };
           });
           return connection;
         } catch (error: any) {
           set({ connectionsError: error.message, isLoadingConnections: false });
-          console.error("Error adding AI connection:", error);
           return null;
         }
       },
-
       updateAiConnection: async (userId, updatedConnection) => {
+        // ... (rest of the function is correct)
         set({ isLoadingConnections: true, connectionsError: null });
         try {
           const now = new Date().toISOString();
@@ -4067,7 +4108,7 @@ export const useSettingsStore = create<SettingsState>()(
           set(state => {
             const updatedConnections = state.aiConnections.map(conn =>
               conn.id === updatedConnection.id ? connectionToSave : conn
-            ).sort((a, b) => a.displayName.localeCompare(b.displayName)); // Keep sorted
+            ).sort((a, b) => a.displayName.localeCompare(b.displayName));
             return {
               aiConnections: updatedConnections,
               isLoadingConnections: false,
@@ -4076,12 +4117,11 @@ export const useSettingsStore = create<SettingsState>()(
           return connectionToSave;
         } catch (error: any) {
           set({ connectionsError: error.message, isLoadingConnections: false });
-          console.error("Error updating AI connection:", error);
           return null;
         }
       },
-
       deleteAiConnection: async (userId, connectionId) => {
+        // ... (rest of the function is correct)
         set({ isLoadingConnections: true, connectionsError: null });
         try {
           await gameRepository.deleteAiConnection(userId, connectionId);
@@ -4092,35 +4132,41 @@ export const useSettingsStore = create<SettingsState>()(
                 newSelectedId = updatedConnections.length > 0 ? updatedConnections[0].id : null;
             }
             return {
-              aiConnections: updatedConnections.sort((a, b) => a.displayName.localeCompare(b.displayName)), // Keep sorted
+              aiConnections: updatedConnections.sort((a, b) => a.displayName.localeCompare(b.displayName)),
               selectedConnectionId: newSelectedId,
               isLoadingConnections: false,
             };
           });
         } catch (error: any) {
           set({ connectionsError: error.message, isLoadingConnections: false });
-          console.error("Error deleting AI connection:", error);
         }
       },
-
       setSelectedConnectionId: (id) => set({ selectedConnectionId: id }),
-
-      // Actions for other settings
       setUseDummyNarrator: (enabled) => set({ useDummyNarrator: enabled }),
       setThemeMode: (mode) => set({ themeMode: mode }),
+      
+      // --- CORRECTED RESET ACTION ---
+      reset: () => {
+        console.log("Resetting SettingsStore.");
+        // Set the non-persisted state back to initial values.
+        // Persisted values will be handled by the middleware on next login/page load.
+        set({
+          aiConnections: [],
+          isLoadingConnections: false,
+          connectionsError: null,
+          // We don't need to reset the persisted parts (selectedConnectionId, themeMode, etc.)
+          // as they will be rehydrated or re-fetched on the next session.
+        });
+      },
     }),
     {
-      name: 'storyforge-app-settings', // Name of the storage item
-      storage: createJSONStorage(() => localStorage), // Use localStorage
-      partialize: (state) => ({ // Only persist non-sensitive or non-dynamic parts
+      name: 'storyforge-app-settings',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
         selectedConnectionId: state.selectedConnectionId,
         useDummyNarrator: state.useDummyNarrator,
         themeMode: state.themeMode,
-        // aiConnections are fetched dynamically, not persisted directly via Zustand middleware
-        // because they come from Firestore and might contain sensitive API keys.
-        // We *do* store them in Firestore, but this `persist` middleware is for local-only settings.
       }),
-      // Rehydration logic for aiConnections will be in fetchAiConnections.
     }
   )
 );

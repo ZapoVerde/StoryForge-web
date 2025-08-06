@@ -5,6 +5,13 @@ import { PromptCard, NewPromptCardData, AiConnection } from '../models/index'; /
 import { promptCardManager } from '../logic/cardManager';
 import { gameRepository } from '../data/repositories/gameRepository'; // For AI Connections
 
+const initialState = {
+  promptCards: [],
+  activePromptCard: null,
+  isLoading: false,
+  error: null,
+};
+
 interface PromptCardState {
   promptCards: PromptCard[];
   activePromptCard: PromptCard | null;
@@ -14,7 +21,7 @@ interface PromptCardState {
 
   // Actions
   fetchPromptCards: (userId: string) => Promise<void>;
-  setActivePromptCard: (card: PromptCard) => void;
+  setActivePromptCard: (card: PromptCard | null) => void;
   addPromptCard: (userId: string, cardData: NewPromptCardData) => Promise<PromptCard | null>;
   updatePromptCard: (userId: string, cardId: string, updates: Partial<PromptCard>) => Promise<PromptCard | null>;
   duplicatePromptCard: (userId: string, cardId: string) => Promise<PromptCard | null>;
@@ -23,6 +30,7 @@ interface PromptCardState {
   // Import/Export functionality will go here eventually
   importPromptCards: (userId: string, cards: NewPromptCardData[]) => Promise<PromptCard[]>;
   exportPromptCard: (userId: string, cardId: string) => Promise<PromptCard | null>;
+  reset: () => void;
 }
 
 export const usePromptCardStore = create<PromptCardState>((set, get) => ({
@@ -153,5 +161,10 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       console.error("Error exporting prompt card:", error);
       return null;
     }
+  },
+
+  reset: () => {
+    console.log("Resetting PromptCardStore.");
+    set(initialState);
   },
 }));
