@@ -1,122 +1,159 @@
 // src/utils/hooks/useSettingsLogic.ts
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useSettingsStore } from '../../state/useSettingsStore';
 import { AiConnection } from '../../models/AiConnection';
 import { aiClient } from '../../logic/aiClient';
+import { aiConnectionTemplates, ModelInfo } from '../../data/config/aiConnectionTemplates';
 
 export const useSettingsLogic = () => {
   const { user } = useAuthStore();
   const settingsStore = useSettingsStore();
 
-  // 1. Local UI State
+  const [dialogStep, setDialogStep] = useState<'select' | 'details'>('select');
   const [editingConnection, setEditingConnection] = useState<AiConnection | null>(null);
+  const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
+  const [isFetchingModels, setIsFetchingModels] = useState(false);
+  const [modelSearchTerm, setModelSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [testStatus, setTestStatus] = useState<string | null>(null);
+  const [testStatus, setTestStatus] = useState<{ text: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({ open: false, message: '', severity: 'info' });
 
-  // 2. Data Fetching Effect
   useEffect(() => {
     if (user?.uid) {
       settingsStore.fetchAiConnections(user.uid);
     }
   }, [user?.uid, settingsStore.fetchAiConnections]);
 
-  // 3. Handlers and Callbacks
   const showSnackbar = useCallback((message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
     setSnackbar({ open: true, message, severity });
   }, []);
 
-  const handleOpenDialog = useCallback((connection: AiConnection | null) => {
+  const handleOpenDialog = useCallback((connection?: AiConnection) => {
+    setDialogStep(connection ? 'details' : 'select');
+    setEditingConnection(connection ? { ...connection } : null);
+    
+    const templateKey = connection ? Object.keys(aiConnectionTemplates).find(k => aiConnectionTemplates[k].displayName === connection.displayName) : undefined;
+    const initialModels = templateKey ? aiConnectionTemplates[templateKey].commonModels : (connection ? [{ id: connection.modelSlug, name: connection.modelName }] : []);
+    
+    setAvailableModels(initialModels);
+    setModelSearchTerm('');
     setTestStatus(null);
-    if (connection) {
-      // Editing existing connection
-      setEditingConnection({ ...connection });
-    } else {
-      // Adding a new connection
-      setEditingConnection({
-        id: '', // Will be generated in the store action
-        displayName: '',
-        apiUrl: '',
-        apiToken: '',
-        modelName: '',
-        modelSlug: '',
-        functionCallingEnabled: false,
-        userAgent: 'StoryForge/1.0 (Web)',
-        createdAt: '',
-        lastUpdated: '',
-      });
-    }
     setIsDialogOpen(true);
   }, []);
 
+  const handleLoadTemplate = useCallback((templateKey: string) => {
+    const template = aiConnectionTemplates[templateKey] || {
+        displayName: 'Custom', modelName: '', modelSlug: '', apiUrl: '', apiToken: '', functionCallingEnabled: false,
+        userAgent: 'StoryForge/1.0', supportsModelDiscovery: false, commonModels: [],
+    };
+    setEditingConnection({
+      ...(template as AiConnection),
+      id: '', createdAt: '', lastUpdated: '',
+    });
+    setAvailableModels(template.commonModels);
+    setModelSearchTerm('');
+    setDialogStep('details');
+  }, []);
+
+  const handleFetchModels = useCallback(async () => {
+    if (!editingConnection?.apiToken || editingConnection.apiToken.includes('PASTE')) {
+      showSnackbar("Please enter a valid API key first.", "warning");
+      return;
+    }
+    setIsFetchingModels(true);
+    setTestStatus({ text: "Fetching models...", type: "info" });
+    try {
+      const models = await aiClient.listModels(editingConnection);
+      setAvailableModels(models);
+      setTestStatus({ text: `Success! Found ${models.length} models.`, type: "success" });
+    } catch (error) {
+      setTestStatus({ text: "Failed to fetch models. Check API Key and URL.", type: "error" });
+    } finally {
+      setIsFetchingModels(false);
+    }
+  }, [editingConnection, showSnackbar]);
+
+  const filteredModels = useMemo(() => {
+    if (!modelSearchTerm) {
+      return availableModels;
+    }
+    const lowercasedFilter = modelSearchTerm.toLowerCase();
+    return availableModels.filter(model =>
+      model.name.toLowerCase().includes(lowercasedFilter) ||
+      model.id.toLowerCase().includes(lowercasedFilter)
+    );
+  }, [availableModels, modelSearchTerm]);
+
   const handleCloseDialog = useCallback(() => {
     setIsDialogOpen(false);
-    setEditingConnection(null);
   }, []);
 
   const handleUpdateEditingConnection = useCallback((updates: Partial<AiConnection>) => {
-    if (editingConnection) {
-      setEditingConnection(prev => ({ ...prev!, ...updates }));
-    }
-  }, [editingConnection]);
-
-  const handleSave = useCallback(async () => {
-    if (!user?.uid || !editingConnection) return;
-    try {
-      if (editingConnection.id) {
-        await settingsStore.updateAiConnection(user.uid, editingConnection);
-        showSnackbar('Connection updated successfully!', 'success');
-      } else {
-        await settingsStore.addAiConnection(user.uid, editingConnection);
-        showSnackbar('Connection added successfully!', 'success');
-      }
-      handleCloseDialog();
-    } catch (e) {
-      showSnackbar(`Failed to save connection: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
-    }
-  }, [user, editingConnection, settingsStore, showSnackbar, handleCloseDialog]);
-
-  const handleDelete = useCallback(async (connectionId: string) => {
-    if (!user?.uid) return;
-    await settingsStore.deleteAiConnection(user.uid, connectionId);
-    showSnackbar('Connection deleted successfully!', 'success');
-  }, [user, settingsStore, showSnackbar]);
+    setEditingConnection(prev => prev ? ({ ...prev, ...updates }) : null);
+  }, []);
 
   const handleTest = useCallback(async () => {
     if (!editingConnection) return;
-    setTestStatus('Testing...');
-    const success = await aiClient.testConnection(editingConnection);
-    if (success) {
-      setTestStatus('✅ Success!');
+    setTestStatus({ text: 'Testing...', type: 'info' });
+    const result = await aiClient.testConnection(editingConnection);
+    if (result.success) {
+      setTestStatus({ text: `✅ ${result.message}`, type: 'success' });
     } else {
-      setTestStatus('❌ Failed. Check URL, Token, and Model Slug.');
+      setTestStatus({ text: result.message, type: 'error' });
     }
   }, [editingConnection]);
 
-  const closeSnackbar = useCallback(() => {
-    setSnackbar(prev => ({ ...prev, open: false }));
-  }, []);
+  const handleSaveAndTest = useCallback(async () => {
+    if (!user?.uid || !editingConnection) return;
+    try {
+      let savedConn: AiConnection | null;
+      if (editingConnection.id) {
+        savedConn = await settingsStore.updateAiConnection(user.uid, editingConnection);
+        showSnackbar('Connection updated.', 'success');
+      } else {
+        savedConn = await settingsStore.addAiConnection(user.uid, editingConnection);
+        showSnackbar('Connection added.', 'success');
+      }
+      
+      if (savedConn) {
+        setEditingConnection(savedConn);
+        await handleTest();
+      }
+    } catch (e) {
+      showSnackbar(`Failed to save: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
+    }
+  }, [user, editingConnection, settingsStore, showSnackbar, handleTest]);
 
+  const handleDelete = useCallback(async (connectionId: string) => {
+    if (!user?.uid || !window.confirm("Are you sure you want to delete this connection?")) return;
+    await settingsStore.deleteAiConnection(user.uid, connectionId);
+    showSnackbar('Connection deleted.', 'success');
+  }, [user, settingsStore, showSnackbar]);
 
-  // 4. Return Clean API
+  const closeSnackbar = useCallback(() => setSnackbar(prev => ({ ...prev, open: false })), []);
+
   return {
-    // Global State from Store
     ...settingsStore,
-
-    // Local UI State
     isDialogOpen,
+    dialogStep,
     editingConnection,
+    availableModels,
+    isFetchingModels,
     testStatus,
     snackbar,
-
-    // Handlers
+    templates: aiConnectionTemplates,
+    modelSearchTerm,
+    setModelSearchTerm,
+    filteredModels,
     handleOpenDialog,
     handleCloseDialog,
+    handleLoadTemplate,
     handleUpdateEditingConnection,
-    handleSave,
+    handleFetchModels,
+    handleSaveAndTest,
     handleDelete,
-    handleTest,
     closeSnackbar,
+    handleTest,
   };
 };

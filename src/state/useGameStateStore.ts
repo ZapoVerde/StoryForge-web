@@ -96,6 +96,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   initializeGame: async (userId, cardId, existingSnapshotId) => {
+   
     set({ gameLoading: true, gameError: null });
     try {
       const gameSession = get()._getGameSession(); // Get instance via helper

@@ -242,6 +242,95 @@ export const LayoutProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 };
 @@FOLDER: src/data
 @@FOLDER: src/data/config
+@@FILE: src/data/config/aiConnectionTemplates.ts
+// src/data/config/aiConnectionTemplates.ts
+import { AiConnection } from '../../models/AiConnection';
+
+export interface ModelInfo {
+  id: string; // The API identifier, e.g., "gpt-4-turbo"
+  name: string; // The human-readable name, e.g., "GPT-4 Turbo"
+  description?: string; // NEW: A description for the tooltip/dialog
+}
+
+export interface AiConnectionTemplate extends Omit<AiConnection, 'id' | 'createdAt' | 'lastUpdated'> {
+  supportsModelDiscovery: boolean;
+  commonModels: ModelInfo[];
+}
+
+// Using a Record for easier lookup by key
+export const aiConnectionTemplates: Record<string, AiConnectionTemplate> = {
+  openai: {
+    displayName: 'OpenAI',
+    modelName: 'GPT-4o',
+    modelSlug: 'gpt-4o',
+    apiUrl: 'https://api.openai.com/v1/',
+    apiToken: 'PASTE_YOUR_OPENAI_KEY_HERE',
+    functionCallingEnabled: true,
+    userAgent: 'StoryForge/1.0',
+    supportsModelDiscovery: true,
+    commonModels: [
+      { id: 'gpt-4o', name: 'GPT-4o', description: 'The latest and most advanced model from OpenAI. Excellent reasoning, multimodal capabilities.' },
+      { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'A powerful and fast version of GPT-4, optimized for performance.' },
+      { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'A highly capable and cost-effective model, great for general purpose tasks.' },
+    ],
+  },
+  google: {
+    displayName: 'Google',
+    modelName: 'Gemini 1.5 Flash',
+    modelSlug: 'gemini-1.5-flash-latest',
+    apiUrl: 'https://generativelanguage.googleapis.com/v1beta/',
+    apiToken: 'PASTE_YOUR_GOOGLE_AI_STUDIO_KEY_HERE',
+    functionCallingEnabled: true,
+    userAgent: 'StoryForge/1.0',
+    supportsModelDiscovery: false, // Google's API needs a different endpoint for model listing
+    commonModels: [
+      { id: 'gemini-1.5-pro-latest', name: 'Gemini 1.5 Pro', description: 'Google\'s top-tier multimodal model with a massive context window.' },
+      { id: 'gemini-1.5-flash-latest', name: 'Gemini 1.5 Flash', description: 'A lightweight, fast, and cost-efficient version of Gemini 1.5.' },
+      { id: 'gemini-1.0-pro', name: 'Gemini 1.0 Pro', description: 'The original balanced model for scaled tasks.' },
+    ],
+  },
+  deepseek: {
+    displayName: 'DeepSeek',
+    modelName: 'DeepSeek Coder V2',
+    modelSlug: 'deepseek-coder-v2',
+    apiUrl: 'https://api.deepseek.com/v1/',
+    apiToken: 'PASTE_YOUR_DEEPSEEK_KEY_HERE',
+    functionCallingEnabled: true,
+    userAgent: 'StoryForge/1.0',
+    supportsModelDiscovery: true,
+    commonModels: [
+        { id: 'deepseek-chat', name: 'DeepSeek Chat', description: 'Specialized in general conversation and creative text generation.' },
+        { id: 'deepseek-coder', name: 'DeepSeek Coder', description: 'Specialized in code generation and explanation. A very capable model.' },
+    ],
+  },
+  openrouter: {
+    displayName: 'OpenRouter',
+    modelName: 'OpenRouter (Auto)',
+    modelSlug: 'openrouter/auto',
+    apiUrl: 'https://openrouter.ai/api/v1/',
+    apiToken: 'PASTE_YOUR_OPENROUTER_KEY_HERE',
+    functionCallingEnabled: true,
+    userAgent: 'StoryForge/1.0',
+    supportsModelDiscovery: true,
+    commonModels: [
+        { id: 'openrouter/auto', name: 'Auto (Best)', description: 'OpenRouter automatically selects the best model for your prompt based on price and performance.' },
+        { id: 'google/gemini-flash-1.5', name: 'Google: Gemini Flash 1.5', description: 'Fast and affordable model, good for quick tasks.' },
+        { id: 'openai/gpt-4o', name: 'OpenAI: GPT-4o', description: 'Access GPT-4o through OpenRouter\'s API.' },
+        { id: 'mistralai/mistral-large', name: 'Mistral Large', description: 'High-quality model from Mistral AI, strong reasoning.' },
+    ],
+  },
+  custom: {
+    displayName: 'Custom',
+    modelName: 'Custom Model',
+    modelSlug: '',
+    apiUrl: '',
+    apiToken: '',
+    functionCallingEnabled: false,
+    userAgent: 'StoryForge/1.0',
+    supportsModelDiscovery: false,
+    commonModels: [],
+  },
+};
 @@FILE: src/data/config/promptCardDefaults.ts
 // src/data/config/promptCardDefaults.ts
 
@@ -1809,6 +1898,7 @@ export class TurnProcessor implements ITurnProcessor {
 import type { Message } from '../models/Message';
 import type { AiSettings } from '../models/PromptCard';
 import type { AiConnection } from '../models/AiConnection';
+import { ModelInfo } from '../data/config/aiConnectionTemplates';
 
 /**
  * Interface defining the contract for an AI client.
@@ -1819,38 +1909,43 @@ export interface IAiClient {
    * @param connection The AiConnection details (URL, API key).
    * @param messages The array of messages forming the conversation context.
    * @param settings The AI settings for this specific call (temperature, etc.).
-   * @returns A Promise that resolves with the raw text content of the AI's response (or stringified JSON if full response).
+   * @returns A Promise that resolves with the raw stringified JSON of the AI's response.
    */
   generateCompletion(
     connection: AiConnection,
     messages: Message[],
     settings: AiSettings
-  ): Promise<string>; // Changed return type to string to hold raw JSON or content
+  ): Promise<string>;
 
   /**
    * Tests an AI connection by making a minimal API call.
    * @param connection The AiConnection details to test.
-   * @returns A Promise that resolves to true if the connection is successful, false otherwise.
+   * @returns A Promise that resolves to an object with success status and a descriptive message.
    */
-  testConnection(connection: AiConnection): Promise<boolean>;
+  testConnection(connection: AiConnection): Promise<{ success: boolean, message: string }>;
+
+  /**
+   * Fetches a list of available models from the provider.
+   * @param connection A partial connection object with apiUrl and apiToken.
+   * @returns A Promise resolving with an array of ModelInfo objects.
+   */
+  listModels(connection: Pick<AiConnection, 'apiUrl' | 'apiToken'>): Promise<ModelInfo[]>;
 }
 
 /**
  * Concrete implementation of IAiClient using the browser's fetch API.
- * This directly replaces the Retrofit/OkHttp logic from AINarrator.kt.
  */
 class AiClient implements IAiClient {
   async generateCompletion(
     connection: AiConnection,
     messages: Message[],
     settings: AiSettings
-  ): Promise<string> { // Now returns raw string, expecting JSON from most APIs
-    if (!connection.apiToken || connection.apiToken === "YOUR_DEEPSEEK_API_KEY_HERE" || connection.apiToken === "MISSING_API_KEY") {
-      throw new Error("AI API key is missing or not configured. Please set it in Settings.");
+  ): Promise<string> {
+    if (!connection.apiToken || connection.apiToken.includes('PASTE') || connection.apiToken === "MISSING_API_KEY") {
+      throw new Error("API key is missing or is a placeholder. Please set it in Settings.");
     }
 
     const apiUrl = new URL("chat/completions", connection.apiUrl).href;
-
     const requestBody = {
       model: connection.modelSlug,
       messages: messages,
@@ -1859,81 +1954,103 @@ class AiClient implements IAiClient {
       max_tokens: settings.maxTokens,
       presence_penalty: settings.presencePenalty,
       frequency_penalty: settings.frequencyPenalty,
-      stream: false, // For now, we're not streaming
+      stream: false,
     };
 
     try {
       const response = await fetch(apiUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${connection.apiToken}`,
-          // User-Agent if provided
-          ...(connection.userAgent && { 'User-Agent': connection.userAgent }),
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${connection.apiToken}` },
         body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
         const errorBody = await response.text();
-        console.error("AI API Error Response:", errorBody);
-        throw new Error(`AI API request failed with status ${response.status}: ${response.statusText}. Details: ${errorBody.substring(0, 200)}...`);
+        let specificError = `Request failed with status ${response.status}.`;
+        switch (response.status) {
+          case 401: specificError = "Authentication error (401). Your API Key is likely invalid or expired."; break;
+          case 403: specificError = "Permission denied (403). Your API key may not have access to this model."; break;
+          case 404: specificError = `Model not found (404). Check if the API URL is correct and the model slug '${connection.modelSlug}' is valid.`; break;
+          case 429: specificError = "Rate limit exceeded (429). You are sending requests too quickly. Please wait and try again."; break;
+          case 500: specificError = "AI Server Error (500). The provider is having issues. Please try again later."; break;
+        }
+        throw new Error(`${specificError} Details: ${errorBody.substring(0, 200)}...`);
       }
 
       const responseJson = await response.json();
-      // Return the full stringified JSON response for gameSession to parse token usage etc.
       return JSON.stringify(responseJson);
     } catch (error: unknown) {
-        let errorMessage = "An unknown error occurred";
         if (error instanceof Error) {
-            errorMessage = error.message;
+            throw new Error(`AI API call failed: ${error.message}`);
         }
-        console.error("Failed to make AI API call:", error);
-        throw new Error(`Network error or AI API failure: ${errorMessage}`);
+        throw new Error(`An unknown error occurred during the AI API call.`);
     }
   }
 
-  async testConnection(connection: AiConnection): Promise<boolean> {
-    if (!connection.apiToken || connection.apiToken === "YOUR_DEEPSEEK_API_KEY_HERE" || connection.apiToken === "MISSING_API_KEY") {
-      return false; // Cannot test without a valid key
+  async testConnection(connection: AiConnection): Promise<{ success: boolean, message: string }> {
+    if (!connection.apiToken || connection.apiToken.includes('PASTE') || connection.apiToken === "MISSING_API_KEY") {
+      return { success: false, message: "API Key is missing or is a placeholder." };
     }
 
     const apiUrl = new URL("chat/completions", connection.apiUrl).href;
     const testMessage: Message[] = [{ role: 'user', content: 'hello' }];
-
-    const requestBody = {
-      model: connection.modelSlug,
-      messages: testMessage,
-      max_tokens: 10, // Smallest possible request
-      temperature: 0.1,
-    };
+    const requestBody = { model: connection.modelSlug, messages: testMessage, max_tokens: 10 };
 
     try {
       const response = await fetch(apiUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${connection.apiToken}`,
-          ...(connection.userAgent && { 'User-Agent': connection.userAgent }),
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${connection.apiToken}` },
         body: JSON.stringify(requestBody),
       });
 
-      // A 2xx status code indicates success, even if the response content is minimal
       if (response.ok) {
-        const responseJson = await response.json();
-        // Optionally, check for expected content in the response.
-        // For a basic test, just success status is enough.
-        console.log("AI Connection Test Success:", responseJson);
-        return true;
+        return { success: true, message: `Success! Received response from model.` };
       } else {
         const errorBody = await response.text();
-        console.warn(`AI Connection Test Failed (Status: ${response.status}):`, errorBody);
-        return false;
+        let specificError = `Request failed with status ${response.status}.`;
+        switch (response.status) {
+          case 401: specificError = "Authentication error (401). Your API Key is invalid."; break;
+          case 404: specificError = `Model not found (404). Check API URL and Model Slug.`; break;
+          case 403: specificError = "Permission denied (403). Key may not have access to this model."; break;
+          default: specificError = `Error ${response.status}: ${errorBody.substring(0, 100)}`;
+        }
+        return { success: false, message: `❌ ${specificError}` };
       }
     } catch (error) {
-      console.error("AI Connection Test Network Error:", error);
-      return false;
+      return { success: false, message: `❌ Network Error: Could not reach the API endpoint. Check the URL and your connection.` };
+    }
+  }
+
+  async listModels(connection: Pick<AiConnection, 'apiUrl' | 'apiToken'>): Promise<ModelInfo[]> {
+    if (!connection.apiToken || connection.apiToken.includes('PASTE')) {
+      throw new Error("An API key is required to fetch models.");
+    }
+    
+    const modelsUrl = new URL("models", connection.apiUrl).href;
+
+    try {
+      const response = await fetch(modelsUrl, { 
+        method: 'GET', 
+        headers: { 'Authorization': `Bearer ${connection.apiToken}` }
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch models with status ${response.status}`);
+      }
+      const json = await response.json();
+      
+      // The data structure varies between APIs (e.g., json.data for OpenAI)
+      const modelList = json.data || json.models || [];
+
+      return modelList
+        .map((model: any) => ({ 
+          id: model.id, 
+          name: model.name || model.id // Use 'name' if available (like OpenRouter), otherwise fall back to 'id'
+        }))
+        .sort((a: ModelInfo, b: ModelInfo) => a.name.localeCompare(b.name));
+
+    } catch (error) {
+      console.error("Failed to list models:", error);
+      throw error;
     }
   }
 }
@@ -3503,6 +3620,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => ({
   },
 
   initializeGame: async (userId, cardId, existingSnapshotId) => {
+   
     set({ gameLoading: true, gameError: null });
     try {
       const gameSession = get()._getGameSession(); // Get instance via helper
@@ -7137,37 +7255,35 @@ export default PromptCardManager;
 // src/ui/screens/SettingsScreen.tsx
 import React from 'react';
 import {
-  Box, Typography, Button, AppBar, Toolbar, IconButton, List, ListItem, ListItemText,
+  Box, Typography, Button, AppBar, Toolbar, IconButton, List, ListItem,
   Paper, Divider, CircularProgress, Alert, TextField, Switch, FormControlLabel,
   Snackbar, Dialog, DialogTitle, DialogContent, DialogActions, ListItemButton,
+  Stack, Select, MenuItem, InputLabel, FormControl, Card, CardActionArea, Grid,
+  ListSubheader, InputAdornment, ListItemText, Tooltip,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import WifiIcon from '@mui/icons-material/Wifi';
+import SearchIcon from '@mui/icons-material/Search';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import WifiTetheringIcon from '@mui/icons-material/WifiTethering';
 import { useSettingsLogic } from '../../utils/hooks/useSettingsLogic';
+import { InfoDialog } from '../components/InfoDialog';
+import { CollapsibleSection } from '../components/CollapsibleSection';
 
-interface SettingsScreenProps {
-  onNavToggle: () => void;
-}
-
-const SettingsScreen: React.FC<SettingsScreenProps> = ({ onNavToggle }) => {
+const SettingsScreen: React.FC<{ onNavToggle: () => void }> = ({ onNavToggle }) => {
   const {
     aiConnections, selectedConnectionId, isLoadingConnections, connectionsError,
     useDummyNarrator, themeMode, setUseDummyNarrator, setThemeMode,
-    isDialogOpen, editingConnection, testStatus, snackbar,
-    handleOpenDialog, handleCloseDialog, handleUpdateEditingConnection,
-    handleSave, handleDelete, handleTest, closeSnackbar, setSelectedConnectionId,
+    isDialogOpen, dialogStep, editingConnection, isFetchingModels, testStatus, snackbar, templates,
+    modelSearchTerm, setModelSearchTerm, filteredModels,
+    handleOpenDialog, handleCloseDialog, handleLoadTemplate, handleUpdateEditingConnection, 
+    handleFetchModels, handleSaveAndTest, handleDelete, closeSnackbar, setSelectedConnectionId, handleTest,
+    
+    // NEW state and handlers for the info dialog
+    modelInfo, openModelInfo, handleOpenModelInfo, handleCloseModelInfo,
   } = useSettingsLogic();
-
-  if (isLoadingConnections && aiConnections.length === 0) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress /> <Typography variant="h6" ml={2}>Loading Settings...</Typography>
-      </Box>
-    );
-  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
@@ -7179,64 +7295,147 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onNavToggle }) => {
       </AppBar>
 
       {connectionsError && <Alert severity="error" sx={{ m: 2 }}>Error: {connectionsError}</Alert>}
+      
+      {isLoadingConnections && aiConnections.length === 0 && <CircularProgress sx={{ m: 2 }} />}
 
-      <Paper sx={{ mt: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-        <Typography variant="h6" gutterBottom>Application Settings</Typography>
-        <FormControlLabel control={<Switch checked={useDummyNarrator} onChange={(e) => setUseDummyNarrator(e.target.checked)} />} label="Use Dummy Narrator (for testing)" />
-        <Divider sx={{ my: 2 }} />
+      <Paper sx={{ mt: 2, p: 2 }}>
+        <Typography variant="h6" gutterBottom>Global Settings</Typography>
+        <FormControlLabel control={<Switch checked={useDummyNarrator} onChange={(e) => setUseDummyNarrator(e.target.checked)} />} label="Use Dummy Narrator (for offline testing)" />
+        <Divider sx={{ my: 1 }} />
         <FormControlLabel control={<Switch checked={themeMode === 'dark'} onChange={(e) => setThemeMode(e.target.checked ? 'dark' : 'light')} />} label="Dark Mode" />
       </Paper>
-
+      
       <Typography variant="h6" sx={{ mt: 3, mb: 1 }}>AI Connections</Typography>
-      <Paper elevation={1} sx={{ flexGrow: 1, overflowY: 'auto', mb: 2 }}>
+      <Paper elevation={1} sx={{ flexGrow: 1, overflowY: 'auto' }}>
         <List>
-          {aiConnections.map((conn) => (
-            <React.Fragment key={conn.id}>
-              <ListItem
-                disablePadding
-                secondaryAction={
-                  <Box>
-                    <IconButton edge="end" aria-label="edit" onClick={() => handleOpenDialog(conn)}><EditIcon fontSize="small" /></IconButton>
-                    <IconButton edge="end" aria-label="delete" onClick={() => handleDelete(conn.id)}><DeleteIcon fontSize="small" color="error" /></IconButton>
-                  </Box>
-                }
-              >
-                <ListItemButton selected={selectedConnectionId === conn.id} onClick={() => setSelectedConnectionId(conn.id)}>
-                  <ListItemText primary={conn.displayName} secondary={`${conn.modelName} (${conn.apiUrl.substring(0, 30)}...)`} />
-                </ListItemButton>
-              </ListItem>
-              <Divider />
-            </React.Fragment>
-          ))}
-        </List>
+            {aiConnections.map((conn) => (
+              <React.Fragment key={conn.id}>
+                <ListItem
+                  disablePadding
+                  secondaryAction={
+                    <Box>
+                      <IconButton edge="end" aria-label="edit" onClick={() => handleOpenDialog(conn)}><EditIcon fontSize="small" /></IconButton>
+                      <IconButton edge="end" aria-label="delete" onClick={() => handleDelete(conn.id)}><DeleteIcon fontSize="small" color="error" /></IconButton>
+                    </Box>
+                  }
+                >
+                  <ListItemButton selected={selectedConnectionId === conn.id} onClick={() => setSelectedConnectionId(conn.id)}>
+                    <ListItemText primary={conn.displayName} secondary={`${conn.modelName} (${conn.apiUrl.substring(0, 30)}...)`} />
+                  </ListItemButton>
+                </ListItem>
+                <Divider />
+              </React.Fragment>
+            ))}
+          </List>
       </Paper>
+      <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()} sx={{ mt: 2 }}>
+        Add New Connection
+      </Button>
 
-      <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog(null)} sx={{ mb: 2 }}>Add New Connection</Button>
+      <Dialog open={isDialogOpen} onClose={handleCloseDialog} fullWidth maxWidth="md" transitionDuration={{ enter: 200, exit: 0 }}>
+        <DialogTitle>
+          {dialogStep === 'select' ? 'Add a New Connection' : (editingConnection?.displayName || 'Connection Details')}
+        </DialogTitle>
+        <DialogContent>
+          {dialogStep === 'select' && (
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <Typography>Start with a template for a popular provider.</Typography>
+              <Grid container spacing={2}>
+                {Object.entries(templates).filter(([key]) => key !== 'custom').map(([key, template]) => (
+                  <Grid item xs={12} sm={6} key={key}>
+                    <Card variant="outlined">
+                      <CardActionArea onClick={() => handleLoadTemplate(key)} sx={{ p: 2, textAlign: 'center' }}>
+                        <Typography variant="h6">{template.displayName}</Typography>
+                      </CardActionArea>
+                    </Card>
+                  </Grid>
+                ))}
+              </Grid>
+              <Divider>OR</Divider>
+              <Button variant="outlined" onClick={() => handleLoadTemplate('custom')}>Start with a Blank Custom Connection</Button>
+            </Stack>
+          )}
 
-      {editingConnection && (
-        <Dialog open={isDialogOpen} onClose={handleCloseDialog} fullWidth maxWidth="sm">
-          <DialogTitle>{editingConnection.id ? 'Edit AI Connection' : 'Add New AI Connection'}</DialogTitle>
-          <DialogContent>
-            <TextField autoFocus margin="dense" label="Connection Name" type="text" fullWidth value={editingConnection.displayName} onChange={(e) => handleUpdateEditingConnection({ displayName: e.target.value })} sx={{ mb: 2 }} />
-            <TextField margin="dense" label="API URL" type="url" fullWidth value={editingConnection.apiUrl} onChange={(e) => handleUpdateEditingConnection({ apiUrl: e.target.value })} sx={{ mb: 2 }} />
-            <TextField margin="dense" label="API Token" type="password" fullWidth value={editingConnection.apiToken} onChange={(e) => handleUpdateEditingConnection({ apiToken: e.target.value })} sx={{ mb: 2 }} />
-            <TextField margin="dense" label="Model Name (Display)" type="text" fullWidth value={editingConnection.modelName} onChange={(e) => handleUpdateEditingConnection({ modelName: e.target.value })} sx={{ mb: 2 }} />
-            <TextField margin="dense" label="Model Slug (API ID)" type="text" fullWidth value={editingConnection.modelSlug} onChange={(e) => handleUpdateEditingConnection({ modelSlug: e.target.value })} sx={{ mb: 2 }} />
-            <TextField margin="dense" label="User Agent (Optional)" type="text" fullWidth value={editingConnection.userAgent || ''} onChange={(e) => handleUpdateEditingConnection({ userAgent: e.target.value })} sx={{ mb: 2 }} />
-            <FormControlLabel control={<Switch checked={editingConnection.functionCallingEnabled} onChange={(e) => handleUpdateEditingConnection({ functionCallingEnabled: e.target.checked })} />} label="Enable Function Calling" />
-            <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Button variant="outlined" startIcon={<WifiIcon />} onClick={handleTest}>Test</Button>
-              {testStatus && <Typography variant="body2">{testStatus}</Typography>}
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseDialog}>Cancel</Button>
-            <Button onClick={handleSave} variant="contained">Save</Button>
-          </DialogActions>
-        </Dialog>
-      )}
+          {dialogStep === 'details' && editingConnection && (
+            <Stack spacing={2.5} sx={{ mt: 1 }}>
+              <TextField label="Connection Name" value={editingConnection.displayName} onChange={(e) => handleUpdateEditingConnection({ displayName: e.target.value })} autoFocus fullWidth />
+              <TextField label="API Token (Key)" value={editingConnection.apiToken} onChange={(e) => handleUpdateEditingConnection({ apiToken: e.target.value })} fullWidth type="password" />
 
-      <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={closeSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+              <FormControl fullWidth>
+                <InputLabel id="model-select-label">Model</InputLabel>
+                <Select
+                  labelId="model-select-label"
+                  value={editingConnection.modelSlug}
+                  label="Model"
+                  onChange={(e) => {
+                    const selectedModel = filteredModels.find(m => m.id === e.target.value);
+                    handleUpdateEditingConnection({ modelSlug: e.target.value, modelName: selectedModel?.name || e.target.value });
+                  }}
+                  MenuProps={{ autoFocus: false }}
+                >
+                  <ListSubheader>
+                    <TextField size="small" autoFocus placeholder="Type to filter models..." fullWidth
+                      InputProps={{startAdornment: (<InputAdornment position="start"><SearchIcon /></InputAdornment>)}}
+                      onChange={(e) => setModelSearchTerm(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
+                  </ListSubheader>
+                  {filteredModels.map(model => (
+                    <MenuItem key={model.id} value={model.id}>
+                      <Tooltip title={model.description || 'No description available.'} placement="right" enterDelay={500}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                          <ListItemText primary={model.name} secondary={model.id} />
+                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleOpenModelInfo(model); }} sx={{ display: { xs: 'flex', md: 'none' } }}>
+                            <InfoOutlinedIcon fontSize="small" />
+                          </IconButton>
+                        </Box>
+                      </Tooltip>
+                    </MenuItem>
+                  ))}
+                  {filteredModels.length === 0 && <MenuItem disabled>No models match your search.</MenuItem>}
+                </Select>
+              </FormControl>
+              
+              {templates[editingConnection.displayName.toLowerCase()]?.supportsModelDiscovery && (
+                <Button onClick={handleFetchModels} disabled={isFetchingModels} variant="outlined">
+                  {isFetchingModels ? <CircularProgress size={24} /> : `Fetch All ${editingConnection.displayName} Models`}
+                </Button>
+              )}
+              
+              <CollapsibleSection title="Advanced Options" initiallyExpanded={false}>
+                 <Stack spacing={2.5} sx={{mt: 2}}>
+                    <TextField label="API URL" value={editingConnection.apiUrl} onChange={(e) => handleUpdateEditingConnection({ apiUrl: e.target.value })} fullWidth />
+                    <TextField label="User Agent" value={editingConnection.userAgent || ''} onChange={(e) => handleUpdateEditingConnection({ userAgent: e.target.value })} fullWidth />
+                    <FormControlLabel control={<Switch checked={editingConnection.functionCallingEnabled} onChange={(e) => handleUpdateEditingConnection({ functionCallingEnabled: e.target.checked })} />}
+                        label="Function Calling Enabled" />
+                 </Stack>
+              </CollapsibleSection>
+              
+              {testStatus && <Alert severity={testStatus.type} sx={{ mt: 1 }}>{testStatus.text}</Alert>}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: '16px 24px' }}>
+          <Button onClick={handleCloseDialog}>Cancel</Button>
+          {dialogStep === 'details' && (
+            <Stack direction="row" spacing={1}>
+              <Button onClick={handleTest} startIcon={<WifiTetheringIcon />}>Test</Button>
+              <Button onClick={handleSaveAndTest} variant="contained">Save Connection</Button>
+            </Stack>
+          )}
+        </DialogActions>
+      </Dialog>
+      
+      <Dialog open={openModelInfo} onClose={handleCloseModelInfo}>
+        <DialogTitle>{modelInfo?.name}</DialogTitle>
+        <DialogContent>
+            <Typography variant="body1">{modelInfo?.description || "No description available."}</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{mt: 2, display: 'block'}}>ID: {modelInfo?.id}</Typography>
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={handleCloseModelInfo}>Close</Button>
+        </DialogActions>
+      </Dialog>
+      
+      <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={closeSnackbar}>
         <Alert onClose={closeSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}</Alert>
       </Snackbar>
     </Box>
@@ -8346,125 +8545,162 @@ export const usePromptCardManagerLogic = (user: User | null) => {
 };
 @@FILE: src/utils/hooks/useSettingsLogic.ts
 // src/utils/hooks/useSettingsLogic.ts
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useSettingsStore } from '../../state/useSettingsStore';
 import { AiConnection } from '../../models/AiConnection';
 import { aiClient } from '../../logic/aiClient';
+import { aiConnectionTemplates, ModelInfo } from '../../data/config/aiConnectionTemplates';
 
 export const useSettingsLogic = () => {
   const { user } = useAuthStore();
   const settingsStore = useSettingsStore();
 
-  // 1. Local UI State
+  const [dialogStep, setDialogStep] = useState<'select' | 'details'>('select');
   const [editingConnection, setEditingConnection] = useState<AiConnection | null>(null);
+  const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
+  const [isFetchingModels, setIsFetchingModels] = useState(false);
+  const [modelSearchTerm, setModelSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [testStatus, setTestStatus] = useState<string | null>(null);
+  const [testStatus, setTestStatus] = useState<{ text: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({ open: false, message: '', severity: 'info' });
 
-  // 2. Data Fetching Effect
   useEffect(() => {
     if (user?.uid) {
       settingsStore.fetchAiConnections(user.uid);
     }
   }, [user?.uid, settingsStore.fetchAiConnections]);
 
-  // 3. Handlers and Callbacks
   const showSnackbar = useCallback((message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
     setSnackbar({ open: true, message, severity });
   }, []);
 
-  const handleOpenDialog = useCallback((connection: AiConnection | null) => {
+  const handleOpenDialog = useCallback((connection?: AiConnection) => {
+    setDialogStep(connection ? 'details' : 'select');
+    setEditingConnection(connection ? { ...connection } : null);
+    
+    const templateKey = connection ? Object.keys(aiConnectionTemplates).find(k => aiConnectionTemplates[k].displayName === connection.displayName) : undefined;
+    const initialModels = templateKey ? aiConnectionTemplates[templateKey].commonModels : (connection ? [{ id: connection.modelSlug, name: connection.modelName }] : []);
+    
+    setAvailableModels(initialModels);
+    setModelSearchTerm('');
     setTestStatus(null);
-    if (connection) {
-      // Editing existing connection
-      setEditingConnection({ ...connection });
-    } else {
-      // Adding a new connection
-      setEditingConnection({
-        id: '', // Will be generated in the store action
-        displayName: '',
-        apiUrl: '',
-        apiToken: '',
-        modelName: '',
-        modelSlug: '',
-        functionCallingEnabled: false,
-        userAgent: 'StoryForge/1.0 (Web)',
-        createdAt: '',
-        lastUpdated: '',
-      });
-    }
     setIsDialogOpen(true);
   }, []);
 
+  const handleLoadTemplate = useCallback((templateKey: string) => {
+    const template = aiConnectionTemplates[templateKey] || {
+        displayName: 'Custom', modelName: '', modelSlug: '', apiUrl: '', apiToken: '', functionCallingEnabled: false,
+        userAgent: 'StoryForge/1.0', supportsModelDiscovery: false, commonModels: [],
+    };
+    setEditingConnection({
+      ...(template as AiConnection),
+      id: '', createdAt: '', lastUpdated: '',
+    });
+    setAvailableModels(template.commonModels);
+    setModelSearchTerm('');
+    setDialogStep('details');
+  }, []);
+
+  const handleFetchModels = useCallback(async () => {
+    if (!editingConnection?.apiToken || editingConnection.apiToken.includes('PASTE')) {
+      showSnackbar("Please enter a valid API key first.", "warning");
+      return;
+    }
+    setIsFetchingModels(true);
+    setTestStatus({ text: "Fetching models...", type: "info" });
+    try {
+      const models = await aiClient.listModels(editingConnection);
+      setAvailableModels(models);
+      setTestStatus({ text: `Success! Found ${models.length} models.`, type: "success" });
+    } catch (error) {
+      setTestStatus({ text: "Failed to fetch models. Check API Key and URL.", type: "error" });
+    } finally {
+      setIsFetchingModels(false);
+    }
+  }, [editingConnection, showSnackbar]);
+
+  const filteredModels = useMemo(() => {
+    if (!modelSearchTerm) {
+      return availableModels;
+    }
+    const lowercasedFilter = modelSearchTerm.toLowerCase();
+    return availableModels.filter(model =>
+      model.name.toLowerCase().includes(lowercasedFilter) ||
+      model.id.toLowerCase().includes(lowercasedFilter)
+    );
+  }, [availableModels, modelSearchTerm]);
+
   const handleCloseDialog = useCallback(() => {
     setIsDialogOpen(false);
-    setEditingConnection(null);
   }, []);
 
   const handleUpdateEditingConnection = useCallback((updates: Partial<AiConnection>) => {
-    if (editingConnection) {
-      setEditingConnection(prev => ({ ...prev!, ...updates }));
-    }
-  }, [editingConnection]);
-
-  const handleSave = useCallback(async () => {
-    if (!user?.uid || !editingConnection) return;
-    try {
-      if (editingConnection.id) {
-        await settingsStore.updateAiConnection(user.uid, editingConnection);
-        showSnackbar('Connection updated successfully!', 'success');
-      } else {
-        await settingsStore.addAiConnection(user.uid, editingConnection);
-        showSnackbar('Connection added successfully!', 'success');
-      }
-      handleCloseDialog();
-    } catch (e) {
-      showSnackbar(`Failed to save connection: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
-    }
-  }, [user, editingConnection, settingsStore, showSnackbar, handleCloseDialog]);
-
-  const handleDelete = useCallback(async (connectionId: string) => {
-    if (!user?.uid) return;
-    await settingsStore.deleteAiConnection(user.uid, connectionId);
-    showSnackbar('Connection deleted successfully!', 'success');
-  }, [user, settingsStore, showSnackbar]);
+    setEditingConnection(prev => prev ? ({ ...prev, ...updates }) : null);
+  }, []);
 
   const handleTest = useCallback(async () => {
     if (!editingConnection) return;
-    setTestStatus('Testing...');
-    const success = await aiClient.testConnection(editingConnection);
-    if (success) {
-      setTestStatus('✅ Success!');
+    setTestStatus({ text: 'Testing...', type: 'info' });
+    const result = await aiClient.testConnection(editingConnection);
+    if (result.success) {
+      setTestStatus({ text: `✅ ${result.message}`, type: 'success' });
     } else {
-      setTestStatus('❌ Failed. Check URL, Token, and Model Slug.');
+      setTestStatus({ text: result.message, type: 'error' });
     }
   }, [editingConnection]);
 
-  const closeSnackbar = useCallback(() => {
-    setSnackbar(prev => ({ ...prev, open: false }));
-  }, []);
+  const handleSaveAndTest = useCallback(async () => {
+    if (!user?.uid || !editingConnection) return;
+    try {
+      let savedConn: AiConnection | null;
+      if (editingConnection.id) {
+        savedConn = await settingsStore.updateAiConnection(user.uid, editingConnection);
+        showSnackbar('Connection updated.', 'success');
+      } else {
+        savedConn = await settingsStore.addAiConnection(user.uid, editingConnection);
+        showSnackbar('Connection added.', 'success');
+      }
+      
+      if (savedConn) {
+        setEditingConnection(savedConn);
+        await handleTest();
+      }
+    } catch (e) {
+      showSnackbar(`Failed to save: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
+    }
+  }, [user, editingConnection, settingsStore, showSnackbar, handleTest]);
 
+  const handleDelete = useCallback(async (connectionId: string) => {
+    if (!user?.uid || !window.confirm("Are you sure you want to delete this connection?")) return;
+    await settingsStore.deleteAiConnection(user.uid, connectionId);
+    showSnackbar('Connection deleted.', 'success');
+  }, [user, settingsStore, showSnackbar]);
 
-  // 4. Return Clean API
+  const closeSnackbar = useCallback(() => setSnackbar(prev => ({ ...prev, open: false })), []);
+
   return {
-    // Global State from Store
     ...settingsStore,
-
-    // Local UI State
     isDialogOpen,
+    dialogStep,
     editingConnection,
+    availableModels,
+    isFetchingModels,
     testStatus,
     snackbar,
-
-    // Handlers
+    templates: aiConnectionTemplates,
+    modelSearchTerm,
+    setModelSearchTerm,
+    filteredModels,
     handleOpenDialog,
     handleCloseDialog,
+    handleLoadTemplate,
     handleUpdateEditingConnection,
-    handleSave,
+    handleFetchModels,
+    handleSaveAndTest,
     handleDelete,
-    handleTest,
     closeSnackbar,
+    handleTest,
   };
 };
 @@FILE: src/utils/hooks/useWorldStateViewLogic.ts
