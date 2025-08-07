@@ -1,8 +1,8 @@
 // src/logic/SnapshotUpdater.ts
 import { produce } from 'immer';
 import type { GameSnapshot, GameState } from '../models';
-import { IGameStateManager } from './IGameStateManager';
-import { ISnapshotUpdater, ITurnResult } from './ISnapshotUpdater';
+import type { IGameStateManager } from './IGameStateManager';
+import type { ISnapshotUpdater, ITurnResult } from './ISnapshotUpdater';
 
 export class SnapshotUpdater implements ISnapshotUpdater {
   constructor(private gameStateManager: IGameStateManager) {}

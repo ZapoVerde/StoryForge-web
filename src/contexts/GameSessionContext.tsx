@@ -1,7 +1,7 @@
 // src/contexts/GameSessionContext.tsx
 
 import React, { createContext, useContext } from 'react';
-import { IGameSession } from '../logic/gameSession';
+import type { IGameSession } from '../logic/gameSession';
 
 // Define the context to hold the IGameSession instance
 const GameSessionContext = createContext<IGameSession | undefined>(undefined);

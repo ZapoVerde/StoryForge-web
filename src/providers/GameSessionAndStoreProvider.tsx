@@ -1,6 +1,7 @@
 // src/providers/GameSessionAndStoreProvider.tsx
 import React, { useRef } from 'react';
-import { GameSession, IGameSession } from '../logic/gameSession';
+import { GameSession } from '../logic/gameSession';
+import type { IGameSession } from '../logic/gameSession';
 import { gameRepository } from '../data/repositories/gameRepository';
 import { promptCardRepository } from '../data/repositories/promptCardRepository';
 import { initializeGameStateStore } from '../state/useGameStateStore';

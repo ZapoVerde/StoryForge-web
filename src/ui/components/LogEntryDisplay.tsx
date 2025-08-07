@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Box, Typography, Paper } from '@mui/material';
-import { LogEntry } from '../../models/LogEntry';
+import type { LogEntry } from '../../models';
 import { LogViewMode } from '../../utils/types';
 
 interface LogEntryDisplayProps {

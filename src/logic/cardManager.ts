@@ -3,7 +3,8 @@
 import type { PromptCard, NewPromptCardData} from '../models';
 import { generateUuid } from '../utils/uuid';
 import { generateContentHash, getPromptCardContentForHash } from '../utils/hash';
-import { promptCardRepository, IPromptCardRepository } from '../data/repositories/promptCardRepository';
+import { promptCardRepository } from '../data/repositories/promptCardRepository';
+import type { IPromptCardRepository } from '../data/repositories/promptCardRepository';
 import {
   defaultAiSettingsInCard,
   defaultStackInstructions,

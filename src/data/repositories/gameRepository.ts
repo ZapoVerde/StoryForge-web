@@ -211,3 +211,4 @@ class FirestoreGameRepository implements IGameRepository {
 
 // Export a singleton instance of the repository.
 export const gameRepository = new FirestoreGameRepository();
+

@@ -4,7 +4,8 @@ import { useAuthStore } from '../../state/useAuthStore';
 import { useSettingsStore } from '../../state/useSettingsStore';
 import type { AiConnection } from '../../models';
 import { aiClient } from '../../logic/aiClient';
-import { aiConnectionTemplates, ModelInfo } from '../../data/config/aiConnectionTemplates';
+import { aiConnectionTemplates } from '../../data/config/aiConnectionTemplates'; // runtime
+import type { ModelInfo } from '../../data/config/aiConnectionTemplates'; // type-only
 
 export const useSettingsLogic = () => {
   const { user } = useAuthStore();

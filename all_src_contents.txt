@@ -315,7 +315,7 @@ export const LogEntryDisplay: React.FC<LogEntryDisplayProps> = ({ mode, entry, h
 import React from 'react';
 import { Box, Typography, Paper } from '@mui/material';
 // MODIFIED: Import Message model instead of LogEntry
-import { Message } from '../../models/Message';
+import type { Message } from '../../models';
 
 interface LogViewProps {
  // MODIFIED: Expect conversationHistory of type Message[]
@@ -374,7 +374,7 @@ import {
   TextField,
   MenuItem,
 } from '@mui/material';
-import { AiSettings, AiConnection } from '../../models/index';
+import type { AiSettings, AiConnection } from '../../models/index';
 import { CollapsibleSection } from './CollapsibleSection';
 
 interface AiSettingsEditorProps {
@@ -757,7 +757,7 @@ export const WorldStateItemRow: React.FC<WorldStateItemRowProps> = ({
 
 import React, { useEffect } from 'react';
 import { Box, Typography, Paper, Stack } from '@mui/material';
-import { GameState } from '../../models/GameState';
+import type { GameState } from '../../models';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { flattenJsonObject, getNestedValue } from '../../utils/jsonUtils'; // Ensure getNestedValue is imported
 import { PinnedEntityGroup } from './PinnedEntityGroup';
@@ -1285,7 +1285,7 @@ export const PinnedAttributeChip: React.FC<PinnedAttributeChipProps> = React.mem
 
 import React from 'react';
 import { Box, Typography, Divider } from '@mui/material';
-import { LogEntry } from '../../models/LogEntry';
+import type { LogEntry } from '../../models/LogEntry';
 import { LogViewMode } from '../../utils/types';
 import { CollapsibleSection } from './CollapsibleSection';
 import { LogEntryDisplay } from './LogEntryDisplay';
@@ -1532,7 +1532,7 @@ import {
   MenuItem,
   Switch,
 } from '@mui/material';
-import { ProsePolicy, StackMode, FilterMode } from '../../../models';
+import type { ProsePolicy, StackMode, FilterMode } from '../../../models';
 import { InfoDialog } from '../InfoDialog';
 
 interface PolicyEditorProps {
@@ -1638,7 +1638,7 @@ import {
   Grid,
   Switch,
 } from '@mui/material';
-import {
+import type {
   DigestFilterPolicy,
   EmissionRule,
   StackMode,
@@ -1752,7 +1752,7 @@ export const DigestPolicyEditor: React.FC<DigestPolicyEditorProps> = ({
 // src/ui/components/stackInstructions/TokenPolicyEditor.tsx
 import React from 'react';
 import { Box, Typography, TextField } from '@mui/material';
-import { TokenPolicy } from '../../../models';
+import type { TokenPolicy } from '../../../models';
 import { InfoDialog } from '../InfoDialog';
 
 interface TokenPolicyEditorProps {
@@ -1902,7 +1902,7 @@ import React from 'react';
 import { Box, Typography, Divider, Checkbox, FormControlLabel, TextField } from '@mui/material';
 import { CollapsibleSection } from './CollapsibleSection';
 import { InfoDialog } from './InfoDialog';
-import { StackInstructions, ProsePolicy, DigestFilterPolicy, TokenPolicy, EmissionRule } from '../../models';
+import type { StackInstructions, ProsePolicy, DigestFilterPolicy, TokenPolicy, EmissionRule } from '../../models';
 
 // Import the new, smaller components
 import { PolicyEditor } from './stackInstructions/PolicyEditor';
@@ -2193,7 +2193,7 @@ export default LoginScreen;
 // src/ui/screens/PromptCardEditor.tsx
 import React from 'react';
 import { Box, Divider, FormControlLabel, Switch } from '@mui/material';
-import { PromptCard, AiConnection, StackInstructions, AiSettings } from '../../models/index';
+import type{ PromptCard, AiConnection, StackInstructions, AiSettings } from '../../models';
 
 // Import the existing modular editors
 import { AiSettingsEditor } from '../components/AiSettingsEditor';
@@ -2344,7 +2344,7 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import { useAuthStore } from '../../state/useAuthStore';
 import { usePromptCardManagerLogic } from '../../utils/hooks/usePromptCardManagerLogic';
 import PromptCardEditor from './PromptCardEditor';
-import { PromptCard } from '../../models';
+import type { PromptCard } from '../../models';
 
 interface PromptCardManagerProps {
   onNavToggle: () => void;
@@ -3666,10 +3666,7 @@ export * from './StackInstructions';
 ===== src/models/GameSnapshot.ts =====
 // src/models/GameSnapshot.ts
 
-import { GameState } from './GameState';
-import { LogEntry } from './LogEntry';
-import { PromptCard } from './PromptCard';
-import { Message } from './Message'; // For conversation history
+import type { GameState, LogEntry, PromptCard, Message } from './index';
 
 /**
  * Represents a full, self-contained snapshot of a game session.
@@ -3849,8 +3846,7 @@ export interface StackInstructions {
 ===== src/models/ParsedNarrationOutput.ts =====
 // src/models/ParsedNarrationOutput.ts
 
-import { DeltaMap } from './DeltaInstruction';
-import { DigestLine } from './LogEntryElements';
+import type { DeltaMap, DigestLine} from './index';
 
 /**
  * Represents the structured data extracted from a raw AI narrator response.
@@ -3893,9 +3889,7 @@ export type DeltaMap = { [fullKey: string]: DeltaInstruction };
 ===== src/models/LogEntry.ts =====
 // src/models/LogEntry.ts
 
-import { DeltaMap } from './DeltaInstruction';
-import { DigestLine, TokenSummary, LogErrorFlag } from './LogEntryElements';
-import { AiSettings } from './PromptCard';
+import type { DeltaMap, DigestLine, TokenSummary, LogErrorFlag, AiSettings } from './index';
 
 /**
  * Canonical structured log for a single turn or significant event in the game.
@@ -3928,8 +3922,7 @@ export interface LogEntry {
 ===== src/models/PromptCard.ts =====
 // src/models/PromptCard.ts
 
-import { StackInstructions } from './StackInstructions'; // Import the new StackInstructions
-
+import type { StackInstructions} from './index';
 /**
  * Defines the configuration settings for an AI connection.
  * These fields are embedded directly within PromptCard.
@@ -4009,11 +4002,8 @@ export interface NewPromptCardData {
 ===== src/logic/aiClient.ts =====
 // src/logic/aiClient.ts
 
-import type { Message } from '../models/Message';
-import type { AiSettings } from '../models/PromptCard';
-import type { AiConnection } from '../models/AiConnection';
 import { ModelInfo } from '../data/config/aiConnectionTemplates';
-
+import type { Message, AiSettings, AiConnection } from '../models';
 /**
  * Interface defining the contract for an AI client.
  */
@@ -4176,7 +4166,7 @@ export const aiClient = new AiClient();
 ===== src/logic/cardManager.ts =====
 // src/logic/cardManager.ts
 
-import { PromptCard, NewPromptCardData } from '../models/PromptCard';
+import type { PromptCard, NewPromptCardData} from '../models';
 import { generateUuid } from '../utils/uuid';
 import { generateContentHash, getPromptCardContentForHash } from '../utils/hash';
 import { promptCardRepository, IPromptCardRepository } from '../data/repositories/promptCardRepository';
@@ -4442,7 +4432,7 @@ export const promptCardManager = new PromptCardManager(promptCardRepository);
 
 ===== src/logic/ISnapshotUpdater.ts =====
 // src/logic/ISnapshotUpdater.ts
-import { GameSnapshot, ParsedNarrationOutput, LogEntry } from '../models';
+import type { GameSnapshot, ParsedNarrationOutput, LogEntry } from '../models';
 
 export interface ITurnResult {
   parsedOutput: ParsedNarrationOutput;
@@ -4484,12 +4474,10 @@ export interface ISnapshotUpdater {
 ===== src/logic/GameStateManager.ts =====
 // src/logic/GameStateManager.ts
 
-import { GameState, SceneState } from '../models/GameState';
-import { DeltaMap } from '../models/DeltaInstruction';
 import { IGameStateManager } from './IGameStateManager';
 import { produce } from 'immer'; // For immutable updates
 import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
-
+import type { GameState, SceneState, DeltaMap } from '../models';
 /**
  * Manages the mutable aspects of the game state (world state and scene).
  * All mutations here are designed to be immutable, returning new state objects.
@@ -4684,7 +4672,7 @@ export class GameStateManager implements IGameStateManager {
 
 ===== src/logic/promptBuilder.ts =====
 // src/logic/promptBuilder.ts
-import { PromptCard, GameState, LogEntry, Message } from '../models';
+import type { PromptCard, GameState, LogEntry, Message } from '../models';
 
 import { IContextStackAssembler } from './IContextStackAssembler'; // <-- ADD THIS LINE
 import { ContextStackAssembler } from './ContextStackAssembler';   // <-- AND THIS LINE
@@ -4771,9 +4759,7 @@ export const promptBuilder = new PromptBuilder();
 
 ===== src/logic/deltaParser.ts =====
 // src/logic/deltaParser.ts
-import type { DeltaInstruction, DeltaMap } from '../models/DeltaInstruction.ts';
-import type { DigestLine } from '../models/LogEntryElements.ts';
-import type { ParsedNarrationOutput } from '../models/ParsedNarrationOutput.ts';
+import type { DeltaInstruction, DeltaMap,DigestLine, ParsedNarrationOutput} from '../models';
 
 // Exported Marker constants
 export const DELTA_MARKER = "@delta";
@@ -4957,8 +4943,7 @@ export function parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput 
 ===== src/logic/TurnProcessor.ts =====
 // src/logic/TurnProcessor.ts
 
-import { AiConnection, GameState, LogEntry, Message, ParsedNarrationOutput, PromptCard, TokenSummary } from '../models';
-import { AiSettings } from '../models/PromptCard';
+import type { AiSettings, AiConnection, GameState, LogEntry, Message, ParsedNarrationOutput, PromptCard, TokenSummary } from '../models';
 import { IAiClient } from './aiClient';
 import { parseNarratorOutput } from './deltaParser';
 import { ILogManager } from './logManager';
@@ -5181,9 +5166,7 @@ export const turnProcessor = new TurnProcessor(aiClient, promptBuilder, logManag
 ===== src/logic/IGameStateManager.ts =====
 // src/logic/IGameStateManager.ts
 
-import { GameState, SceneState } from '../models/GameState';
-import { DeltaMap } from '../models/DeltaInstruction';
-import { GameSnapshot } from '../models/GameSnapshot'; // To pass for worldStatePinnedKeys
+import type { GameState, SceneState, GameSnapshot, DeltaMap } from '../models';
 
 /**
  * Defines the contract for managing the mutable state of the game (worldState and scene).
@@ -5219,7 +5202,7 @@ export interface IGameStateManager {
 
 ===== src/logic/ContextStackAssembler.ts =====
 // src/logic/ContextStackAssembler.ts
-import {
+import type {
   PromptCard,
   GameState,
   LogEntry,
@@ -5305,12 +5288,18 @@ export class ContextStackAssembler implements IContextStackAssembler {
 ===== src/logic/logManager.ts =====
 // src/logic/logManager.ts
 
-import type{ LogEntry } from '../models/LogEntry';
-import type{ ParsedNarrationOutput } from '../models/ParsedNarrationOutput';
-import type{ AiSettings, PromptCard } from '../models/PromptCard'; // For AI settings from the card
-import type{ DeltaInstruction, DeltaMap } from '../models/DeltaInstruction'; // For the DeltaMap type
-import type{ DigestLine, TokenSummary, LogErrorFlag } from '../models/LogEntryElements'; // For related types
 import { DELTA_MARKER } from './deltaParser'; // Import DELTA_MARKER
+import type { 
+  AiSettings, 
+  PromptCard, 
+  ParsedNarrationOutput, 
+  LogEntry,
+  DeltaInstruction, 
+  DeltaMap,
+  DigestLine, 
+  TokenSummary, 
+  LogErrorFlag 
+} from '../models';
 
 /**
  * Interface defining the contract for the Log Manager.
@@ -5500,7 +5489,7 @@ export const logManager = new LogManager();
 ===== src/logic/SnapshotUpdater.ts =====
 // src/logic/SnapshotUpdater.ts
 import { produce } from 'immer';
-import { GameSnapshot, GameState } from '../models';
+import type { GameSnapshot, GameState } from '../models';
 import { IGameStateManager } from './IGameStateManager';
 import { ISnapshotUpdater, ITurnResult } from './ISnapshotUpdater';
 
@@ -5620,7 +5609,7 @@ export class SnapshotUpdater implements ISnapshotUpdater {
 // src/logic/gameSession.ts
 import { IGameRepository } from '../data/repositories/gameRepository';
 import { IPromptCardRepository } from '../data/repositories/promptCardRepository';
-import { GameSnapshot, GameState, LogEntry, Message, PromptCard } from '../models';
+import type { GameSnapshot, GameState, LogEntry, Message, PromptCard } from '../models';
 import { formatIsoDateForDisplay } from '../utils/formatDate';
 import { generateUuid } from '../utils/uuid';
 import { ITurnProcessor } from './ITurnProcessor';
@@ -5818,7 +5807,7 @@ export class GameSession implements IGameSession {
 
 ===== src/logic/IContextStackAssembler.ts =====
 // src/logic/IContextStackAssembler.ts
-import { PromptCard, GameState, LogEntry, Message } from '../models';
+import type { PromptCard, GameState, LogEntry, Message } from '../models';
 
 /**
  * Defines the contract for a service that assembles the dynamic parts
@@ -5845,13 +5834,7 @@ export interface IContextStackAssembler {
 ===== src/logic/ITurnProcessor.ts =====
 // src/logic/ITurnProcessor.ts
 
-import { PromptCard } from '../models/PromptCard';
-import { GameState } from '../models/GameState';
-import { LogEntry } from '../models/LogEntry';
-import { Message } from '../models/Message';
-import { AiConnection } from '../models/AiConnection';
-import { ParsedNarrationOutput } from '../models/ParsedNarrationOutput';
-import { TokenSummary } from '../models/LogEntryElements';
+import type { PromptCard, GameState, LogEntry, Message, AiConnection, ParsedNarrationOutput, TokenSummary} from '../models';
 
 /**
  * Defines the contract for processing individual game turns, including AI interaction.
@@ -5978,7 +5961,7 @@ export const AppRoutes = () => {
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { AiConnection } from '../models/AiConnection';
+import type { AiConnection } from '../models';
 import { gameRepository } from '../data/repositories/gameRepository';
 import { generateUuid } from '../utils/uuid';
 
@@ -6131,11 +6114,10 @@ export const useSettingsStore = create<SettingsState>()(
 // src/state/useGameStateStore.ts
 
 import { create } from 'zustand';
-import { GameSnapshot, GameState, LogEntry, Message } from '../models/index';
 import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
 import { produce } from 'immer';
 import { useSettingsStore } from './useSettingsStore';
-
+import type { GameSnapshot, GameState, LogEntry, Message } from '../models';
 import { IGameSession } from '../logic/gameSession';
 
 // Module-level variable to hold the injected GameSession instance
@@ -6586,7 +6568,7 @@ const unsubscribe = subscribeToAuthChanges((user) => {
 // src/state/usePromptCardStore.ts
 
 import { create } from 'zustand';
-import { PromptCard, NewPromptCardData, AiConnection } from '../models/index'; // Assuming index.ts exports these
+import type { PromptCard, NewPromptCardData, AiConnection } from '../models'; // Assuming index.ts exports these
 import { promptCardManager } from '../logic/cardManager';
 import { gameRepository } from '../data/repositories/gameRepository'; // For AI Connections
 
@@ -6759,8 +6741,8 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
 // src/state/useLogStore.ts
 
 import { create } from 'zustand';
-import { LogEntry } from '../models/LogEntry'; // Assuming LogEntry model is available
 import { LogViewMode } from '../utils/types'; // We'll define LogViewMode here
+import type { LogEntry } from '../models';
 
 const initialState = {
   logEntries: [],
@@ -6935,10 +6917,8 @@ import {
   Timestamp, // Import Timestamp type
 } from 'firebase/firestore';
 import { db } from '../infrastructure/firebaseClient';
-import { GameSnapshot } from '../../models/GameSnapshot';
-import { AiConnection } from '../../models/AiConnection';
 import { generateUuid } from '../../utils/uuid'; // Import generateUuid
-
+import type { AiConnection, GameSnapshot } from '../../models';
 /**
  * Defines the contract for GameSnapshot and AiConnection data persistence operations.
  */
@@ -7226,8 +7206,7 @@ import {
   orderBy
 } from 'firebase/firestore';
 import { db } from '../infrastructure/firebaseClient'; // Import our Firestore instance
-import { PromptCard } from '../../models/PromptCard';
-
+import type { PromptCard } from '../../models';
 /**
  * Defines the contract for PromptCard data persistence operations.
  * This interface can be implemented by different concrete repositories
@@ -7395,9 +7374,7 @@ export const promptCardRepository = new FirestorePromptCardRepository();
 // src/data/config/promptCardDefaults.ts
 
 // In src/data/config/promptCardDefaults.ts
-import { AiSettings } from '../../models/PromptCard'; // Corrected path
-import { StackInstructions, StackMode, FilterMode } from '../../models/StackInstructions'; // Corrected path
-
+import type { AiSettings, StackInstructions, StackMode, FilterMode} from '../../models';
 /**
  * Default AI settings to be used for PromptCards if not specified.
  * Corresponds to AiSettings.kt's default values, now embedded in PromptCard.
@@ -7520,8 +7497,7 @@ The mist curls like spectral fingers around the ancient oaks. #Lyrielle stands r
 
 ===== src/data/config/aiConnectionTemplates.ts =====
 // src/data/config/aiConnectionTemplates.ts
-import { AiConnection } from '../../models/AiConnection';
-
+import type { AiConnection } from '../../models';
 export interface ModelInfo {
   id: string; // The API identifier, e.g., "gpt-4-turbo"
   name: string; // The human-readable name, e.g., "GPT-4 Turbo"
@@ -7748,8 +7724,7 @@ import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import HistoryIcon from '@mui/icons-material/History';
 import DataObjectIcon from '@mui/icons-material/DataObject';
 import CodeIcon from '@mui/icons-material/Code';
-import { GameSnapshot } from '../models';
-
+import type {  GameSnapshot } from '../models';
 /**
  * Generates the navigation items array.
  * @param currentSnapshot - The current game snapshot, used to determine if game-specific links should be enabled.
@@ -7843,7 +7818,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { DiceRoller } from '../../utils/diceRoller';
-import { GameState } from '../../models';
+import type { GameState } from '../../models';
 
 export const useGameScreenLogic = () => {
   const navigate = useNavigate();
@@ -7979,7 +7954,7 @@ import { User } from 'firebase/auth';
 import { usePromptCardStore } from '../../state/usePromptCardStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { useSettingsStore } from '../../state/useSettingsStore';
-import { PromptCard, NewPromptCardData } from '../../models';
+import type { PromptCard, NewPromptCardData } from '../../models';
 import {
   defaultStackInstructions,
   defaultAiSettingsInCard,
@@ -8324,7 +8299,7 @@ export const useLogViewerLogic = () => {
 import { useState, useMemo, useCallback } from 'react';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { flattenJsonObject, getNestedValue } from '../../utils/jsonUtils';
-import { GameState } from '../../models';
+import type { GameState } from '../../models';
 
 interface GroupedWorldState {
     [category: string]: {
@@ -8487,7 +8462,7 @@ export const useWorldStateViewLogic = (gameState: GameState | null) => {
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useSettingsStore } from '../../state/useSettingsStore';
-import { AiConnection } from '../../models/AiConnection';
+import type { AiConnection } from '../../models';
 import { aiClient } from '../../logic/aiClient';
 import { aiConnectionTemplates, ModelInfo } from '../../data/config/aiConnectionTemplates';
 
@@ -8647,8 +8622,7 @@ export const useSettingsLogic = () => {
 ===== src/utils/hash.ts =====
 // src/utils/hash.ts
 
-import { PromptCard, AiSettings, StackInstructions } from '../models/PromptCard';
-import { StackInstructions as StackInstructionsModel } from '../models/StackInstructions';
+import type { PromptCard, AiSettings, StackInstructions } from '../models';
 
 
 /**
@@ -8802,7 +8776,7 @@ export function getNestedValue(obj: Record<string, any>, pathParts: string[]): a
 // src/utils/hash.test.ts
 
 import { generateContentHash, getPromptCardContentForHash } from './hash';
-import { PromptCard, AiSettings, StackInstructions } from '../models/PromptCard';
+import type { PromptCard, AiSettings, StackInstructions } from '../models';
 import { defaultAiSettingsInCard, defaultStackInstructions, DEFAULT_FIRST_TURN_PROMPT_BLOCK, DEFAULT_EMIT_SKELETON_STRING } from '../data/config/promptCardDefaults';
 
 describe('hash utilities', () => {

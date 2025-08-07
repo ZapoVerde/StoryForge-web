@@ -1,6 +1,6 @@
 // src/logic/GameStateManager.ts
 
-import { IGameStateManager } from './IGameStateManager';
+import type { IGameStateManager } from './IGameStateManager';
 import { produce } from 'immer'; // For immutable updates
 import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
 import type { GameState, SceneState, DeltaMap } from '../models';

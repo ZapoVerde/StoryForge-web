@@ -1,6 +1,6 @@
 // src/utils/hooks/usePromptCardManagerLogic.ts
 import { useState, useEffect, useCallback } from 'react';
-import { User } from 'firebase/auth';
+import type { User } from 'firebase/auth';
 import { usePromptCardStore } from '../../state/usePromptCardStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { useSettingsStore } from '../../state/useSettingsStore';

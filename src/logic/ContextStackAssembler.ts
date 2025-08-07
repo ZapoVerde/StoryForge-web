@@ -9,7 +9,7 @@ import type {
   FilterMode,
   DigestLine,
 } from '../models';
-import { IContextStackAssembler } from './IContextStackAssembler';
+import type { IContextStackAssembler } from './IContextStackAssembler';
 import { getNestedValue } from '../utils/jsonUtils'; // Assuming you have this utility function
 
 export class ContextStackAssembler implements IContextStackAssembler {

@@ -1,11 +1,11 @@
 // src/logic/TurnProcessor.ts
 
 import type { AiSettings, AiConnection, GameState, LogEntry, Message, ParsedNarrationOutput, PromptCard, TokenSummary } from '../models';
-import { IAiClient } from './aiClient';
+import type { IAiClient } from './aiClient';
 import { parseNarratorOutput } from './deltaParser';
-import { ILogManager } from './logManager';
-import { IPromptBuilder } from './promptBuilder';
-import { ITurnProcessor } from './ITurnProcessor';
+import type { ILogManager } from './logManager';
+import type { IPromptBuilder } from './promptBuilder';
+import type { ITurnProcessor } from './ITurnProcessor';
 
 
 // Define a simple DummyAiClient for testing and dev

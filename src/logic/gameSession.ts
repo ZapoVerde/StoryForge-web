@@ -1,11 +1,11 @@
 // src/logic/gameSession.ts
-import { IGameRepository } from '../data/repositories/gameRepository';
-import { IPromptCardRepository } from '../data/repositories/promptCardRepository';
+import type { IGameRepository } from '../data/repositories/gameRepository';
+import type { IPromptCardRepository } from '../data/repositories/promptCardRepository';
 import type { GameSnapshot, GameState, LogEntry, Message, PromptCard } from '../models';
 import { formatIsoDateForDisplay } from '../utils/formatDate';
 import { generateUuid } from '../utils/uuid';
-import { ITurnProcessor } from './ITurnProcessor';
-import { ISnapshotUpdater } from './ISnapshotUpdater';
+import type { ITurnProcessor } from './ITurnProcessor';
+import type { ISnapshotUpdater } from './ISnapshotUpdater';
 
 // NOTE: The IGameSession interface remains UNCHANGED, so it won't break the store.
 export interface IGameSession {

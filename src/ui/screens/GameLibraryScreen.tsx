@@ -23,7 +23,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { gameRepository } from '../../data/repositories/gameRepository';
-import { GameSnapshot } from '../../models/GameSnapshot';
+import type { GameSnapshot } from '../../models';
 import { useNavigate } from 'react-router-dom';
 import Snackbar from '@mui/material/Snackbar';
 import { formatIsoDateForDisplay } from '../../utils/formatDate';
