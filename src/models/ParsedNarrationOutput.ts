@@ -1,7 +1,6 @@
 // src/models/ParsedNarrationOutput.ts
 
-import { DeltaMap } from './DeltaInstruction';
-import { DigestLine } from './LogEntryElements';
+import type { DeltaMap, DigestLine} from './index';
 
 /**
  * Represents the structured data extracted from a raw AI narrator response.

@@ -1,5 +1,5 @@
 // src/logic/ISnapshotUpdater.ts
-import { GameSnapshot, ParsedNarrationOutput, LogEntry } from '../models';
+import type { GameSnapshot, ParsedNarrationOutput, LogEntry } from '../models';
 
 export interface ITurnResult {
   parsedOutput: ParsedNarrationOutput;

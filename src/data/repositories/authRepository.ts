@@ -5,7 +5,7 @@ import {
   signInWithPopup,
   signOut,
   onAuthStateChanged,
-  User,
+  type User,
 } from 'firebase/auth';
 import { auth } from '../infrastructure/firebaseClient'; // Import the auth instance from our firebaseClient
 

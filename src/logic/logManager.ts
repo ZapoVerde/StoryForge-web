@@ -1,11 +1,17 @@
 // src/logic/logManager.ts
 
-import type{ LogEntry } from '../models/LogEntry';
-import type{ ParsedNarrationOutput } from '../models/ParsedNarrationOutput';
-import type{ AiSettings, PromptCard } from '../models/PromptCard'; // For AI settings from the card
-import type{ DeltaInstruction, DeltaMap } from '../models/DeltaInstruction'; // For the DeltaMap type
-import type{ DigestLine, TokenSummary, LogErrorFlag } from '../models/LogEntryElements'; // For related types
 import { DELTA_MARKER } from './deltaParser'; // Import DELTA_MARKER
+import type { 
+  AiSettings, 
+  PromptCard, 
+  ParsedNarrationOutput, 
+  LogEntry,
+  DeltaInstruction, 
+  DeltaMap,
+  DigestLine, 
+  TokenSummary, 
+  LogErrorFlag 
+} from '../models';
 
 /**
  * Interface defining the contract for the Log Manager.
@@ -148,7 +154,7 @@ class LogManager implements ILogManager {
    digestLines = this.inferDigestLinesFromDeltas(parsedOutput.deltas, parsedOutput.prose);
   }
   // Ensure correct turn number for inferred digests
-  digestLines = digestLines.map(d => ({ ...d, turn: turnNumber }));
+  //digestLines = digestLines.map(d => ({ ...d, turn: turnNumber }));
 
 
   const errorFlags: LogErrorFlag[] = [];

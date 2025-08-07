@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { DiceRoller } from '../../utils/diceRoller';
-import { GameState } from '../../models';
+import type { GameState } from '../../models';
 
 export const useGameScreenLogic = () => {
   const navigate = useNavigate();

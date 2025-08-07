@@ -335,14 +335,14 @@ export const aiConnectionTemplates: Record<string, AiConnectionTemplate> = {
 // src/data/config/promptCardDefaults.ts
 
 // In src/data/config/promptCardDefaults.ts
-import { AiSettingsInCard } from '../../models/PromptCard'; // Corrected path
+import { AiSettings } from '../../models/PromptCard'; // Corrected path
 import { StackInstructions, StackMode, FilterMode } from '../../models/StackInstructions'; // Corrected path
 
 /**
  * Default AI settings to be used for PromptCards if not specified.
  * Corresponds to AiSettings.kt's default values, now embedded in PromptCard.
  */
-export const defaultAiSettingsInCard: AiSettingsInCard = {
+export const defaultAiSettingsInCard: AiSettings = {
   selectedConnectionId: "",
   temperature: 0.7,
   topP: 1.0,
@@ -497,7 +497,7 @@ import {
   signInWithPopup,
   signOut,
   onAuthStateChanged,
-  User,
+  type User,
 } from 'firebase/auth';
 import { auth } from '../infrastructure/firebaseClient'; // Import the auth instance from our firebaseClient
 
@@ -1286,145 +1286,9 @@ export interface IContextStackAssembler {
     gameState: GameState,
     logEntries: LogEntry[]
   ): Message[];
-}```
-
-#### **New File: `src/logic/ContextStackAssembler.ts`**
-```typescript
-// src/logic/ContextStackAssembler.ts
-import {
-  PromptCard,
-  GameState,
-  LogEntry,
-  Message,
-  SceneState,
-  StackMode,
-  FilterMode,
-  DigestLine,
-} from '../models';
-import { IContextStackAssembler } from './IContextStackAssembler';
-
-export class ContextStackAssembler implements IContextStackAssembler {
-  public assembleContext(
-    card: PromptCard,
-    gameState: GameState,
-    logEntries: LogEntry[]
-  ): Message[] {
-    const messages: Message[] = [];
-    const { stackInstructions } = card;
-
-    // 1. World State Context
-    if (stackInstructions.worldStatePolicy.enabled) {
-      const worldStateJson = JSON.stringify(gameState.worldState, null, 2);
-      messages.push({ role: "system", content: `## Current World State\n\`\`\`json\n${worldStateJson}\n\`\`\`` });
-    }
-
-    // 2. Known Entities
-    if (stackInstructions.knownEntitiesPolicy.enabled) {
-      const knownEntities = this.extractKnownEntities(gameState, stackInstructions.knownEntitiesPolicy.n);
-      if (knownEntities.length > 0) {
-        messages.push({ role: "system", content: `## Known Entities\n${knownEntities.join('\n')}` });
-      }
-    }
-
-    // 3. Digest Context
-    if (stackInstructions.digestPolicy.enabled) {
-      const relevantDigests = this.getRelevantDigests(logEntries, gameState, stackInstructions);
-      if (relevantDigests.length > 0) {
-        messages.push({ role: "system", content: `## Game Summary Digest\n${relevantDigests.map(d => d.text).join('\n')}` });
-      }
-    }
-
-    // 4. Expression Log
-    if (stackInstructions.expressionLogPolicy.enabled) {
-      const expressionContent = this.getExpressionLogContent(logEntries, gameState, stackInstructions);
-      if (expressionContent.length > 0) {
-        messages.push({ role: "system", content: `## Character Expressions Log\n${expressionContent.join('\n')}` });
-      }
-    }
-
-    return messages;
-  }
-  
-  private getSceneTags(scene: SceneState, worldState: Record<string, any>): string[] {
-    const tags = new Set<string>();
-    if (scene.location && scene.location.startsWith('@')) {
-      tags.add(scene.location);
-    }
-    scene.present.forEach(path => {
-      const entity = this.getNestedValue(worldState, path.split('.'));
-      if (entity?.tag) {
-        tags.add(entity.tag);
-      }
-    });
-    return Array.from(tags);
-  }
-
-  private getNestedValue(obj: Record<string, any>, pathParts: string[]): any {
-    return pathParts.reduce((acc, part) => acc && acc[part], obj);
-  }
-  
-  private extractTags(text: string): string[] {
-    return text.match(/[#@$][a-zA-Z0-9_]+/g) || [];
-  }
-
-  private extractKnownEntities(gameState: GameState, limit: number): string[] {
-    // A simplified entity extraction logic. Can be enhanced.
-    const entities = new Set<string>();
-    const sceneTags = this.getSceneTags(gameState.scene, gameState.worldState);
-    sceneTags.forEach(tag => entities.add(tag));
-    
-    // Fallback: get some from world state if scene is empty
-    if (entities.size === 0) {
-        for (const category in gameState.worldState) {
-            for (const entityKey in gameState.worldState[category]) {
-                if (entityKey.startsWith('#') || entityKey.startsWith('@') || entityKey.startsWith('$')) {
-                    entities.add(entityKey);
-                    if (entities.size >= limit) break;
-                }
-            }
-            if (entities.size >= limit) break;
-        }
-    }
-    
-    return Array.from(entities);
-  }
-
-  private getRelevantDigests(logs: LogEntry[], gameState: GameState, instructions: PromptCard['stackInstructions']): DigestLine[] {
-    const relevantDigests: DigestLine[] = [];
-    const sceneTags = this.getSceneTags(gameState.scene, gameState.worldState);
-
-    for (const log of logs) {
-      for (const digest of log.digestLines) {
-        const rule = instructions.digestEmission[digest.importance];
-        if (!rule || rule.mode === StackMode.NEVER) continue;
-
-        const meetsCondition =
-          (rule.mode === StackMode.ALWAYS) ||
-          (rule.mode === StackMode.FIRST_N && log.turnNumber <= rule.n) ||
-          (rule.mode === StackMode.AFTER_N && log.turnNumber >= rule.n);
-
-        if (meetsCondition) {
-          let include = true;
-          if (instructions.digestPolicy.filtering === FilterMode.SCENE_ONLY) {
-            include = digest.tags?.some(tag => sceneTags.includes(tag)) ?? false;
-          } else if (instructions.digestPolicy.filtering === FilterMode.TAGGED) {
-            include = (digest.tags?.length ?? 0) > 0;
-          }
-          if (include) {
-            relevantDigests.push(digest);
-          }
-        }
-      }
-    }
-    return relevantDigests.sort((a, b) => (a as any).turn - (b as any).turn); // `turn` might not be on DigestLine model
-  }
-  
-  private getExpressionLogContent(logs: LogEntry[], gameState: GameState, instructions: PromptCard['stackInstructions']): string[] {
-      // This is a placeholder for the complex expression log logic.
-      // A full implementation would filter logs based on policy and extract relevant lines.
-      return [];
-  }
 }
+
+
 @@FILE: src/logic/IGameStateManager.ts
 // src/logic/IGameStateManager.ts
 
@@ -2867,7 +2731,7 @@ class LogManager implements ILogManager {
    digestLines = this.inferDigestLinesFromDeltas(parsedOutput.deltas, parsedOutput.prose);
   }
   // Ensure correct turn number for inferred digests
-  digestLines = digestLines.map(d => ({ ...d, turn: turnNumber }));
+  //digestLines = digestLines.map(d => ({ ...d, turn: turnNumber }));
 
 
   const errorFlags: LogErrorFlag[] = [];
@@ -3116,7 +2980,7 @@ export interface GameState {
 
 import { DeltaMap } from './DeltaInstruction';
 import { DigestLine, TokenSummary, LogErrorFlag } from './LogEntryElements';
-import { AiSettingsInCard } from './PromptCard';
+import { AiSettings } from './PromptCard';
 
 /**
  * Canonical structured log for a single turn or significant event in the game.
@@ -3140,7 +3004,7 @@ export interface LogEntry {
  apiUrl?: string | null;
  latencyMs?: number | null;
 
- aiSettings?: AiSettingsInCard | null;
+ aiSettings?: AiSettings | null;
  errorFlags: LogErrorFlag[];
  modelSlugUsed: string;
 }
@@ -3463,7 +3327,7 @@ export const GameSessionAndStoreProvider: React.FC<GameSessionAndStoreProviderPr
 // src/state/useAuthStore.ts
 
 import { create } from 'zustand';
-import { User } from 'firebase/auth'; // Import Firebase User type
+import { type User } from 'firebase/auth'; // Import Firebase User type
 import { subscribeToAuthChanges, signInWithGoogle, signOutUser } from '../data/repositories/authRepository'; // Import auth functions
 
 // Define the shape of our authentication state
@@ -7850,7 +7714,7 @@ export function formatIsoDateForDisplay(isoString: string): string {
 // src/utils/hash.test.ts
 
 import { generateContentHash, getPromptCardContentForHash } from './hash';
-import { PromptCard, AiSettingsInCard, StackInstructions } from '../models/PromptCard';
+import { PromptCard, AiSettings, StackInstructions } from '../models/PromptCard';
 import { defaultAiSettingsInCard, defaultStackInstructions, DEFAULT_FIRST_TURN_PROMPT_BLOCK, DEFAULT_EMIT_SKELETON_STRING } from '../data/config/promptCardDefaults';
 
 describe('hash utilities', () => {
@@ -7992,7 +7856,7 @@ describe('hash utilities', () => {
 @@FILE: src/utils/hash.ts
 // src/utils/hash.ts
 
-import { PromptCard, AiSettingsInCard, StackInstructions } from '../models/PromptCard';
+import { PromptCard, AiSettings, StackInstructions } from '../models/PromptCard';
 import { StackInstructions as StackInstructionsModel } from '../models/StackInstructions';
 
 
@@ -8033,8 +7897,8 @@ export function getPromptCardContentForHash(card: {
   gameRules: string;
   tags: string[];
   functionDefs: string;
-  aiSettings: AiSettingsInCard; // Include AI settings in hash as they affect "content"
-  helperAiSettings: AiSettingsInCard; // Include helper AI settings
+  aiSettings: AiSettings; // Include AI settings in hash as they affect "content"
+  helperAiSettings: AiSettings; // Include helper AI settings
 }): string {
   // Use a consistent order and join method to ensure same content yields same hash
   // Sort tags for consistent hashing regardless of input order
@@ -8867,8 +8731,8 @@ export const useWorldStateViewLogic = (gameState: GameState | null) => {
 @@FILE: src/utils/jsonUtils.ts
 // src/utils/jsonUtils.ts
 
-import { JsonPrimitive } from '@mui/material'; // Assuming this is for example, JsonPrimitive isn't from MUI
 
+type JsonPrimitive = string | number | boolean | null;
 /**
  * Flattens a nested JSON object into a single-level map with dot-separated keys.
  * @param obj The JSON object to flatten.

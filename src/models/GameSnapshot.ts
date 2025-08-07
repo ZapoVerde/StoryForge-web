@@ -1,9 +1,6 @@
 // src/models/GameSnapshot.ts
 
-import { GameState } from './GameState';
-import { LogEntry } from './LogEntry';
-import { PromptCard } from './PromptCard';
-import { Message } from './Message'; // For conversation history
+import type { GameState, LogEntry, PromptCard, Message } from './index';
 
 /**
  * Represents a full, self-contained snapshot of a game session.

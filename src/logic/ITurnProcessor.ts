@@ -1,12 +1,6 @@
 // src/logic/ITurnProcessor.ts
 
-import { PromptCard } from '../models/PromptCard';
-import { GameState } from '../models/GameState';
-import { LogEntry } from '../models/LogEntry';
-import { Message } from '../models/Message';
-import { AiConnection } from '../models/AiConnection';
-import { ParsedNarrationOutput } from '../models/ParsedNarrationOutput';
-import { TokenSummary } from '../models/LogEntryElements';
+import type { PromptCard, GameState, LogEntry, Message, AiConnection, ParsedNarrationOutput, TokenSummary} from '../models';
 
 /**
  * Defines the contract for processing individual game turns, including AI interaction.

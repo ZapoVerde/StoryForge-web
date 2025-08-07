@@ -1,7 +1,7 @@
 // src/ui/screens/PromptCardEditor.tsx
 import React from 'react';
 import { Box, Divider, FormControlLabel, Switch } from '@mui/material';
-import { PromptCard, AiConnection, StackInstructions, AiSettings } from '../../models/index';
+import type{ PromptCard, AiConnection, StackInstructions, AiSettings } from '../../models';
 
 // Import the existing modular editors
 import { AiSettingsEditor } from '../components/AiSettingsEditor';

@@ -29,7 +29,7 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import { useAuthStore } from '../../state/useAuthStore';
 import { usePromptCardManagerLogic } from '../../utils/hooks/usePromptCardManagerLogic';
 import PromptCardEditor from './PromptCardEditor';
-import { PromptCard } from '../../models';
+import type { PromptCard } from '../../models';
 
 interface PromptCardManagerProps {
   onNavToggle: () => void;

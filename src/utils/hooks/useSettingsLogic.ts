@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useSettingsStore } from '../../state/useSettingsStore';
-import { AiConnection } from '../../models/AiConnection';
+import type { AiConnection } from '../../models';
 import { aiClient } from '../../logic/aiClient';
 import { aiConnectionTemplates, ModelInfo } from '../../data/config/aiConnectionTemplates';
 

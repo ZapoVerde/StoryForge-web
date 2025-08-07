@@ -13,8 +13,7 @@ import {
   orderBy
 } from 'firebase/firestore';
 import { db } from '../infrastructure/firebaseClient'; // Import our Firestore instance
-import { PromptCard } from '../../models/PromptCard';
-
+import type { PromptCard } from '../../models';
 /**
  * Defines the contract for PromptCard data persistence operations.
  * This interface can be implemented by different concrete repositories

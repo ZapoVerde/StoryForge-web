@@ -1,8 +1,6 @@
 // src/logic/IGameStateManager.ts
 
-import { GameState, SceneState } from '../models/GameState';
-import { DeltaMap } from '../models/DeltaInstruction';
-import { GameSnapshot } from '../models/GameSnapshot'; // To pass for worldStatePinnedKeys
+import type { GameState, SceneState, GameSnapshot, DeltaMap } from '../models';
 
 /**
  * Defines the contract for managing the mutable state of the game (worldState and scene).

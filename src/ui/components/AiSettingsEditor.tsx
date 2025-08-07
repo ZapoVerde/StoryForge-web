@@ -11,7 +11,7 @@ import {
   TextField,
   MenuItem,
 } from '@mui/material';
-import { AiSettings, AiConnection } from '../../models/index';
+import type { AiSettings, AiConnection } from '../../models/index';
 import { CollapsibleSection } from './CollapsibleSection';
 
 interface AiSettingsEditorProps {

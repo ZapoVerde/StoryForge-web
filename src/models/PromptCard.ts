@@ -1,7 +1,6 @@
 // src/models/PromptCard.ts
 
-import { StackInstructions } from './StackInstructions'; // Import the new StackInstructions
-
+import type { StackInstructions} from './index';
 /**
  * Defines the configuration settings for an AI connection.
  * These fields are embedded directly within PromptCard.

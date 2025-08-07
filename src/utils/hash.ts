@@ -1,7 +1,6 @@
 // src/utils/hash.ts
 
-import { PromptCard, AiSettingsInCard, StackInstructions } from '../models/PromptCard';
-import { StackInstructions as StackInstructionsModel } from '../models/StackInstructions';
+import type { PromptCard, AiSettings, StackInstructions } from '../models';
 
 
 /**
@@ -41,8 +40,8 @@ export function getPromptCardContentForHash(card: {
   gameRules: string;
   tags: string[];
   functionDefs: string;
-  aiSettings: AiSettingsInCard; // Include AI settings in hash as they affect "content"
-  helperAiSettings: AiSettingsInCard; // Include helper AI settings
+  aiSettings: AiSettings; // Include AI settings in hash as they affect "content"
+  helperAiSettings: AiSettings; // Include helper AI settings
 }): string {
   // Use a consistent order and join method to ensure same content yields same hash
   // Sort tags for consistent hashing regardless of input order

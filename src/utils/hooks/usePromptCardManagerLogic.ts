@@ -4,7 +4,7 @@ import { User } from 'firebase/auth';
 import { usePromptCardStore } from '../../state/usePromptCardStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { useSettingsStore } from '../../state/useSettingsStore';
-import { PromptCard, NewPromptCardData } from '../../models';
+import type { PromptCard, NewPromptCardData } from '../../models';
 import {
   defaultStackInstructions,
   defaultAiSettingsInCard,

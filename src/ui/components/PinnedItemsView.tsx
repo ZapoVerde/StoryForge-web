@@ -2,7 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { Box, Typography, Paper, Stack } from '@mui/material';
-import { GameState } from '../../models/GameState';
+import type { GameState } from '../../models';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { flattenJsonObject, getNestedValue } from '../../utils/jsonUtils'; // Ensure getNestedValue is imported
 import { PinnedEntityGroup } from './PinnedEntityGroup';

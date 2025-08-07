@@ -1,7 +1,7 @@
 // src/ui/components/stackInstructions/TokenPolicyEditor.tsx
 import React from 'react';
 import { Box, Typography, TextField } from '@mui/material';
-import { TokenPolicy } from '../../../models';
+import type { TokenPolicy } from '../../../models';
 import { InfoDialog } from '../InfoDialog';
 
 interface TokenPolicyEditorProps {

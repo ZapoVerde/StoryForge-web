@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Box, Typography, Divider } from '@mui/material';
-import { LogEntry } from '../../models/LogEntry';
+import type { LogEntry } from '../../models/LogEntry';
 import { LogViewMode } from '../../utils/types';
 import { CollapsibleSection } from './CollapsibleSection';
 import { LogEntryDisplay } from './LogEntryDisplay';

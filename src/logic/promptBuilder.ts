@@ -1,5 +1,5 @@
 // src/logic/promptBuilder.ts
-import { PromptCard, GameState, LogEntry, Message } from '../models';
+import type { PromptCard, GameState, LogEntry, Message } from '../models';
 
 import { IContextStackAssembler } from './IContextStackAssembler'; // <-- ADD THIS LINE
 import { ContextStackAssembler } from './ContextStackAssembler';   // <-- AND THIS LINE

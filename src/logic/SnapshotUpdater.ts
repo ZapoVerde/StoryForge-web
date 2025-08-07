@@ -1,6 +1,6 @@
 // src/logic/SnapshotUpdater.ts
 import { produce } from 'immer';
-import { GameSnapshot, GameState } from '../models';
+import type { GameSnapshot, GameState } from '../models';
 import { IGameStateManager } from './IGameStateManager';
 import { ISnapshotUpdater, ITurnResult } from './ISnapshotUpdater';
 

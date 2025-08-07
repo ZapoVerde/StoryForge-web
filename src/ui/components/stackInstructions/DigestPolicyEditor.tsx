@@ -11,7 +11,7 @@ import {
   Grid,
   Switch,
 } from '@mui/material';
-import {
+import type {
   DigestFilterPolicy,
   EmissionRule,
   StackMode,

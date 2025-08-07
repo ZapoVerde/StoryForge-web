@@ -1,6 +1,5 @@
 // src/data/config/aiConnectionTemplates.ts
-import { AiConnection } from '../../models/AiConnection';
-
+import type { AiConnection } from '../../models';
 export interface ModelInfo {
   id: string; // The API identifier, e.g., "gpt-4-turbo"
   name: string; // The human-readable name, e.g., "GPT-4 Turbo"

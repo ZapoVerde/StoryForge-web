@@ -1,7 +1,6 @@
 // src/logic/TurnProcessor.ts
 
-import { AiConnection, GameState, LogEntry, Message, ParsedNarrationOutput, PromptCard, TokenSummary } from '../models';
-import { AiSettings } from '../models/PromptCard';
+import type { AiSettings, AiConnection, GameState, LogEntry, Message, ParsedNarrationOutput, PromptCard, TokenSummary } from '../models';
 import { IAiClient } from './aiClient';
 import { parseNarratorOutput } from './deltaParser';
 import { ILogManager } from './logManager';

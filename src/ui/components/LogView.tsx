@@ -3,7 +3,7 @@
 import React from 'react';
 import { Box, Typography, Paper } from '@mui/material';
 // MODIFIED: Import Message model instead of LogEntry
-import { Message } from '../../models/Message';
+import type { Message } from '../../models';
 
 interface LogViewProps {
  // MODIFIED: Expect conversationHistory of type Message[]

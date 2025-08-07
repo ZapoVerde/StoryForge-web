@@ -2,7 +2,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { flattenJsonObject, getNestedValue } from '../../utils/jsonUtils';
-import { GameState } from '../../models';
+import type { GameState } from '../../models';
 
 interface GroupedWorldState {
     [category: string]: {

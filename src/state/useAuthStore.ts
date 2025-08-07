@@ -1,7 +1,7 @@
 // src/state/useAuthStore.ts
 
 import { create } from 'zustand';
-import { User } from 'firebase/auth'; // Import Firebase User type
+import { type User } from 'firebase/auth'; // Import Firebase User type
 import { subscribeToAuthChanges, signInWithGoogle, signOutUser } from '../data/repositories/authRepository'; // Import auth functions
 
 // Define the shape of our authentication state

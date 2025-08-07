@@ -1,8 +1,8 @@
 // src/state/useLogStore.ts
 
 import { create } from 'zustand';
-import { LogEntry } from '../models/LogEntry'; // Assuming LogEntry model is available
 import { LogViewMode } from '../utils/types'; // We'll define LogViewMode here
+import type { LogEntry } from '../models';
 
 const initialState = {
   logEntries: [],

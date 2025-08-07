@@ -3,7 +3,7 @@ import React from 'react';
 import { Box, Typography, Divider, Checkbox, FormControlLabel, TextField } from '@mui/material';
 import { CollapsibleSection } from './CollapsibleSection';
 import { InfoDialog } from './InfoDialog';
-import { StackInstructions, ProsePolicy, DigestFilterPolicy, TokenPolicy, EmissionRule } from '../../models';
+import type { StackInstructions, ProsePolicy, DigestFilterPolicy, TokenPolicy, EmissionRule } from '../../models';
 
 // Import the new, smaller components
 import { PolicyEditor } from './stackInstructions/PolicyEditor';

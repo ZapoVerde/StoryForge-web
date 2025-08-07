@@ -13,10 +13,8 @@ import {
   Timestamp, // Import Timestamp type
 } from 'firebase/firestore';
 import { db } from '../infrastructure/firebaseClient';
-import { GameSnapshot } from '../../models/GameSnapshot';
-import { AiConnection } from '../../models/AiConnection';
 import { generateUuid } from '../../utils/uuid'; // Import generateUuid
-
+import type { AiConnection, GameSnapshot } from '../../models';
 /**
  * Defines the contract for GameSnapshot and AiConnection data persistence operations.
  */

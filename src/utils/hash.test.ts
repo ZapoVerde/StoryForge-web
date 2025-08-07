@@ -1,7 +1,7 @@
 // src/utils/hash.test.ts
 
 import { generateContentHash, getPromptCardContentForHash } from './hash';
-import { PromptCard, AiSettingsInCard, StackInstructions } from '../models/PromptCard';
+import type { PromptCard, AiSettings, StackInstructions } from '../models';
 import { defaultAiSettingsInCard, defaultStackInstructions, DEFAULT_FIRST_TURN_PROMPT_BLOCK, DEFAULT_EMIT_SKELETON_STRING } from '../data/config/promptCardDefaults';
 
 describe('hash utilities', () => {

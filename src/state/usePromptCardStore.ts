@@ -1,7 +1,7 @@
 // src/state/usePromptCardStore.ts
 
 import { create } from 'zustand';
-import { PromptCard, NewPromptCardData, AiConnection } from '../models/index'; // Assuming index.ts exports these
+import type { PromptCard, NewPromptCardData, AiConnection } from '../models'; // Assuming index.ts exports these
 import { promptCardManager } from '../logic/cardManager';
 import { gameRepository } from '../data/repositories/gameRepository'; // For AI Connections
 

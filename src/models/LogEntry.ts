@@ -1,8 +1,6 @@
 // src/models/LogEntry.ts
 
-import { DeltaMap } from './DeltaInstruction';
-import { DigestLine, TokenSummary, LogErrorFlag } from './LogEntryElements';
-import { AiSettingsInCard } from './PromptCard';
+import type { DeltaMap, DigestLine, TokenSummary, LogErrorFlag, AiSettings } from './index';
 
 /**
  * Canonical structured log for a single turn or significant event in the game.
@@ -26,7 +24,7 @@ export interface LogEntry {
  apiUrl?: string | null;
  latencyMs?: number | null;
 
- aiSettings?: AiSettingsInCard | null;
+ aiSettings?: AiSettings | null;
  errorFlags: LogErrorFlag[];
  modelSlugUsed: string;
 }

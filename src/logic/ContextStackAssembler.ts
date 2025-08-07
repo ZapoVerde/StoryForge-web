@@ -1,5 +1,5 @@
 // src/logic/ContextStackAssembler.ts
-import {
+import type {
   PromptCard,
   GameState,
   LogEntry,

@@ -1,14 +1,12 @@
 // src/data/config/promptCardDefaults.ts
 
 // In src/data/config/promptCardDefaults.ts
-import { AiSettingsInCard } from '../../models/PromptCard'; // Corrected path
-import { StackInstructions, StackMode, FilterMode } from '../../models/StackInstructions'; // Corrected path
-
+import type { AiSettings, StackInstructions, StackMode, FilterMode} from '../../models';
 /**
  * Default AI settings to be used for PromptCards if not specified.
  * Corresponds to AiSettings.kt's default values, now embedded in PromptCard.
  */
-export const defaultAiSettingsInCard: AiSettingsInCard = {
+export const defaultAiSettingsInCard: AiSettings = {
   selectedConnectionId: "",
   temperature: 0.7,
   topP: 1.0,

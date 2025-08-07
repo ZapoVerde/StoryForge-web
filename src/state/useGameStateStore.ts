@@ -1,11 +1,10 @@
 // src/state/useGameStateStore.ts
 
 import { create } from 'zustand';
-import { GameSnapshot, GameState, LogEntry, Message } from '../models/index';
 import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
 import { produce } from 'immer';
 import { useSettingsStore } from './useSettingsStore';
-
+import type { GameSnapshot, GameState, LogEntry, Message } from '../models';
 import { IGameSession } from '../logic/gameSession';
 
 // Module-level variable to hold the injected GameSession instance

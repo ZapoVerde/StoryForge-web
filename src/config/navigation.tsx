@@ -6,8 +6,7 @@ import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import HistoryIcon from '@mui/icons-material/History';
 import DataObjectIcon from '@mui/icons-material/DataObject';
 import CodeIcon from '@mui/icons-material/Code';
-import { GameSnapshot } from '../models';
-
+import type {  GameSnapshot } from '../models';
 /**
  * Generates the navigation items array.
  * @param currentSnapshot - The current game snapshot, used to determine if game-specific links should be enabled.

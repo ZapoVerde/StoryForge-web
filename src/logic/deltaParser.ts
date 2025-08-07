@@ -1,7 +1,5 @@
 // src/logic/deltaParser.ts
-import type { DeltaInstruction, DeltaMap } from '../models/DeltaInstruction.ts';
-import type { DigestLine } from '../models/LogEntryElements.ts';
-import type { ParsedNarrationOutput } from '../models/ParsedNarrationOutput.ts';
+import type { DeltaInstruction, DeltaMap,DigestLine, ParsedNarrationOutput} from '../models';
 
 // Exported Marker constants
 export const DELTA_MARKER = "@delta";

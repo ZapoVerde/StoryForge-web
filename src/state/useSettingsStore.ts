@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { AiConnection } from '../models/AiConnection';
+import type { AiConnection } from '../models';
 import { gameRepository } from '../data/repositories/gameRepository';
 import { generateUuid } from '../utils/uuid';
 
