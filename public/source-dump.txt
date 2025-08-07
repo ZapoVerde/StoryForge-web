@@ -183,7 +183,7 @@ export const getNavItems = (currentSnapshot: GameSnapshot | null) => [
 // src/contexts/GameSessionContext.tsx
 
 import React, { createContext, useContext } from 'react';
-import { IGameSession } from '../logic/gameSession';
+import type { IGameSession } from '../logic/gameSession';
 
 // Define the context to hold the IGameSession instance
 const GameSessionContext = createContext<IGameSession | undefined>(undefined);
@@ -333,7 +333,9 @@ export const aiConnectionTemplates: Record<string, AiConnectionTemplate> = {
 // src/data/config/promptCardDefaults.ts
 
 // In src/data/config/promptCardDefaults.ts
-import type { AiSettings, StackInstructions, StackMode, FilterMode} from '../../models';
+import type { AiSettings, StackInstructions} from '../../models';
+import  { StackMode, FilterMode} from '../../models';
+
 /**
  * Default AI settings to be used for PromptCards if not specified.
  * Corresponds to AiSettings.kt's default values, now embedded in PromptCard.
@@ -353,8 +355,8 @@ export const defaultAiSettingsInCard: AiSettings = {
  * This is the parsed object version of the default JSON string from PromptCardDefaults.kt.
  */
 export const defaultStackInstructions: StackInstructions = {
-  narratorProseEmission: { mode: StackMode.FIRST_N, n: 3, filtering: FilterMode.SCENE_ONLY, enabled: true }, // NEW: enabled: true
-  digestPolicy: { filtering: FilterMode.TAGGED, enabled: true }, // NEW: enabled: true
+  narratorProseEmission: { mode: StackMode.FIRST_N, n: 3, filtering: FilterMode.SCENE_ONLY, enabled: true },
+  digestPolicy: { filtering: FilterMode.TAGGED, enabled: true },
   digestEmission: {
     "5": { mode: StackMode.ALWAYS },
     "4": { mode: StackMode.AFTER_N, n: 1 },
@@ -362,11 +364,11 @@ export const defaultStackInstructions: StackInstructions = {
     "2": { mode: StackMode.FIRST_N, n: 3 },
     "1": { mode: StackMode.NEVER },
   },
-  expressionLogPolicy: { mode: StackMode.ALWAYS, filtering: FilterMode.SCENE_ONLY, enabled: true }, // NEW: enabled: true
+  expressionLogPolicy: { mode: StackMode.ALWAYS, n: 0, filtering: FilterMode.SCENE_ONLY, enabled: true }, // ADDED n: 0
   expressionLinesPerCharacter: 3,
   emotionWeighting: true,
-  worldStatePolicy: { mode: StackMode.FILTERED, filtering: FilterMode.SCENE_ONLY, enabled: true }, // NEW: enabled: true
-  knownEntitiesPolicy: { mode: StackMode.FIRST_N, n: 2, filtering: FilterMode.TAGGED, enabled: true }, // NEW: enabled: true
+  worldStatePolicy: { mode: StackMode.FILTERED, n: 0, filtering: FilterMode.SCENE_ONLY, enabled: true }, // ADDED n: 0
+  knownEntitiesPolicy: { mode: StackMode.FIRST_N, n: 2, filtering: FilterMode.TAGGED, enabled: true },
   // REMOVED: "outputFormat": "prose_digest_emit",
   tokenPolicy: {
     minTokens: 1000,
@@ -770,6 +772,8 @@ class FirestoreGameRepository implements IGameRepository {
 
 // Export a singleton instance of the repository.
 export const gameRepository = new FirestoreGameRepository();
+
+
 @@FILE: src/data/repositories/promptCardRepository.ts
 // src/data/repositories/promptCardRepository.ts
 
@@ -988,7 +992,7 @@ import type {
   FilterMode,
   DigestLine,
 } from '../models';
-import { IContextStackAssembler } from './IContextStackAssembler';
+import type { IContextStackAssembler } from './IContextStackAssembler';
 import { getNestedValue } from '../utils/jsonUtils'; // Assuming you have this utility function
 
 export class ContextStackAssembler implements IContextStackAssembler {
@@ -1062,7 +1066,7 @@ export class ContextStackAssembler implements IContextStackAssembler {
 @@FILE: src/logic/GameStateManager.ts
 // src/logic/GameStateManager.ts
 
-import { IGameStateManager } from './IGameStateManager';
+import type { IGameStateManager } from './IGameStateManager';
 import { produce } from 'immer'; // For immutable updates
 import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
 import type { GameState, SceneState, DeltaMap } from '../models';
@@ -1419,8 +1423,8 @@ export interface ITurnProcessor {
 // src/logic/SnapshotUpdater.ts
 import { produce } from 'immer';
 import type { GameSnapshot, GameState } from '../models';
-import { IGameStateManager } from './IGameStateManager';
-import { ISnapshotUpdater, ITurnResult } from './ISnapshotUpdater';
+import type { IGameStateManager } from './IGameStateManager';
+import type { ISnapshotUpdater, ITurnResult } from './ISnapshotUpdater';
 
 export class SnapshotUpdater implements ISnapshotUpdater {
   constructor(private gameStateManager: IGameStateManager) {}
@@ -1536,11 +1540,11 @@ export class SnapshotUpdater implements ISnapshotUpdater {
 // src/logic/TurnProcessor.ts
 
 import type { AiSettings, AiConnection, GameState, LogEntry, Message, ParsedNarrationOutput, PromptCard, TokenSummary } from '../models';
-import { IAiClient } from './aiClient';
+import type { IAiClient } from './aiClient';
 import { parseNarratorOutput } from './deltaParser';
-import { ILogManager } from './logManager';
-import { IPromptBuilder } from './promptBuilder';
-import { ITurnProcessor } from './ITurnProcessor';
+import type { ILogManager } from './logManager';
+import type { IPromptBuilder } from './promptBuilder';
+import type { ITurnProcessor } from './ITurnProcessor';
 
 
 // Define a simple DummyAiClient for testing and dev
@@ -1741,7 +1745,7 @@ export class TurnProcessor implements ITurnProcessor {
 @@FILE: src/logic/aiClient.ts
 // src/logic/aiClient.ts
 
-import { ModelInfo } from '../data/config/aiConnectionTemplates';
+import type { ModelInfo } from '../data/config/aiConnectionTemplates';
 import type { Message, AiSettings, AiConnection } from '../models';
 /**
  * Interface defining the contract for an AI client.
@@ -1906,7 +1910,8 @@ export const aiClient = new AiClient();
 import type { PromptCard, NewPromptCardData} from '../models';
 import { generateUuid } from '../utils/uuid';
 import { generateContentHash, getPromptCardContentForHash } from '../utils/hash';
-import { promptCardRepository, IPromptCardRepository } from '../data/repositories/promptCardRepository';
+import { promptCardRepository } from '../data/repositories/promptCardRepository';
+import type { IPromptCardRepository } from '../data/repositories/promptCardRepository';
 import {
   defaultAiSettingsInCard,
   defaultStackInstructions,
@@ -2348,13 +2353,13 @@ export function parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput 
 }
 @@FILE: src/logic/gameSession.ts
 // src/logic/gameSession.ts
-import { IGameRepository } from '../data/repositories/gameRepository';
-import { IPromptCardRepository } from '../data/repositories/promptCardRepository';
+import type { IGameRepository } from '../data/repositories/gameRepository';
+import type { IPromptCardRepository } from '../data/repositories/promptCardRepository';
 import type { GameSnapshot, GameState, LogEntry, Message, PromptCard } from '../models';
 import { formatIsoDateForDisplay } from '../utils/formatDate';
 import { generateUuid } from '../utils/uuid';
-import { ITurnProcessor } from './ITurnProcessor';
-import { ISnapshotUpdater } from './ISnapshotUpdater';
+import type { ITurnProcessor } from './ITurnProcessor';
+import type { ISnapshotUpdater } from './ISnapshotUpdater';
 
 // NOTE: The IGameSession interface remains UNCHANGED, so it won't break the store.
 export interface IGameSession {
@@ -2760,7 +2765,7 @@ export const logManager = new LogManager();
 // src/logic/promptBuilder.ts
 import type { PromptCard, GameState, LogEntry, Message } from '../models';
 
-import { IContextStackAssembler } from './IContextStackAssembler'; // <-- ADD THIS LINE
+import type { IContextStackAssembler } from './IContextStackAssembler'; // <-- ADD THIS LINE
 import { ContextStackAssembler } from './ContextStackAssembler';   // <-- AND THIS LINE
 
 
@@ -3262,7 +3267,8 @@ export default SourceDump;
 @@FILE: src/providers/GameSessionAndStoreProvider.tsx
 // src/providers/GameSessionAndStoreProvider.tsx
 import React, { useRef } from 'react';
-import { GameSession, IGameSession } from '../logic/gameSession';
+import { GameSession } from '../logic/gameSession';
+import type { IGameSession } from '../logic/gameSession';
 import { gameRepository } from '../data/repositories/gameRepository';
 import { promptCardRepository } from '../data/repositories/promptCardRepository';
 import { initializeGameStateStore } from '../state/useGameStateStore';
@@ -3369,7 +3375,7 @@ import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
 import { produce } from 'immer';
 import { useSettingsStore } from './useSettingsStore';
 import type { GameSnapshot, GameState, LogEntry, Message } from '../models';
-import { IGameSession } from '../logic/gameSession';
+import type { IGameSession } from '../logic/gameSession';
 
 // Module-level variable to hold the injected GameSession instance
 // Initialized to null, as it will be set later by initializeGameStateStore
@@ -4677,7 +4683,7 @@ export const InfoDialog: React.FC<InfoDialogProps> = ({ title, content, iconSize
 
 import React from 'react';
 import { Box, Typography, Paper } from '@mui/material';
-import { LogEntry } from '../../models/LogEntry';
+import type { LogEntry } from '../../models';
 import { LogViewMode } from '../../utils/types';
 
 interface LogEntryDisplayProps {
@@ -6285,7 +6291,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { gameRepository } from '../../data/repositories/gameRepository';
-import { GameSnapshot } from '../../models/GameSnapshot';
+import type { GameSnapshot } from '../../models';
 import { useNavigate } from 'react-router-dom';
 import Snackbar from '@mui/material/Snackbar';
 import { formatIsoDateForDisplay } from '../../utils/formatDate';
@@ -6725,14 +6731,49 @@ const LogViewerScreen: React.FC<LogViewerScreenProps> = ({ onNavToggle }) => {
 
 export default LogViewerScreen;
 @@FILE: src/ui/screens/LoginScreen.tsx
-// src/ui/screens/LoginScreen.tsx
+import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom'; // Add this
+import { useAuthStore } from '../../state/useAuthStore';
 
-import React from 'react';
-import { useAuthStore } from '../../state/useAuthStore'; // Import our Zustand auth store
+const styles: { [key: string]: React.CSSProperties } = {
+  container: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '100vh',
+    backgroundColor: '#f0f2f5',
+    fontFamily: 'Arial, sans-serif',
+    padding: '20px',
+  },
+  button: {
+    padding: '10px 20px',
+    fontSize: '16px',
+    backgroundColor: '#4285F4',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    marginTop: '20px',
+    transition: 'background-color 0.3s ease',
+  },
+  errorText: {
+    color: 'red',
+    marginTop: '10px',
+  },
+};
+
 
 const LoginScreen: React.FC = () => {
-  // Destructure state and actions from the auth store
   const { user, isLoading, error, signIn, signOut } = useAuthStore();
+  const navigate = useNavigate(); // Add this
+
+  // ✅ Redirect out of login screen if user is authenticated
+  useEffect(() => {
+    if (user) {
+      navigate('/library', { replace: true });
+    }
+  }, [user, navigate]);
 
   if (isLoading) {
     return (
@@ -6743,7 +6784,6 @@ const LoginScreen: React.FC = () => {
   }
 
   if (user) {
-    // User is logged in
     return (
       <div style={styles.container}>
         <h2>Welcome, {user.displayName || user.email}!</h2>
@@ -6754,7 +6794,6 @@ const LoginScreen: React.FC = () => {
       </div>
     );
   } else {
-    // No user logged in
     return (
       <div style={styles.container}>
         <h2>Please Log In to StoryForge</h2>
@@ -6766,35 +6805,6 @@ const LoginScreen: React.FC = () => {
     );
   }
 };
-
-const styles: { [key: string]: React.CSSProperties } = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '100vh', // Take full viewport height
-    backgroundColor: '#f0f2f5',
-    fontFamily: 'Arial, sans-serif',
-    padding: '20px',
-  },
-  button: {
-    padding: '10px 20px',
-    fontSize: '16px',
-    backgroundColor: '#4285F4', // Google blue
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    marginTop: '20px',
-    transition: 'background-color 0.3s ease',
-  },
-  errorText: {
-    color: 'red',
-    marginTop: '10px',
-  }
-};
-
 export default LoginScreen;
 @@FILE: src/ui/screens/PromptCardEditor.tsx
 // src/ui/screens/PromptCardEditor.tsx
@@ -8152,7 +8162,7 @@ export function useLongPress<T extends HTMLElement>(
 @@FILE: src/utils/hooks/usePromptCardManagerLogic.ts
 // src/utils/hooks/usePromptCardManagerLogic.ts
 import { useState, useEffect, useCallback } from 'react';
-import { User } from 'firebase/auth';
+import type { User } from 'firebase/auth';
 import { usePromptCardStore } from '../../state/usePromptCardStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { useSettingsStore } from '../../state/useSettingsStore';
@@ -8388,7 +8398,8 @@ import { useAuthStore } from '../../state/useAuthStore';
 import { useSettingsStore } from '../../state/useSettingsStore';
 import type { AiConnection } from '../../models';
 import { aiClient } from '../../logic/aiClient';
-import { aiConnectionTemplates, ModelInfo } from '../../data/config/aiConnectionTemplates';
+import { aiConnectionTemplates } from '../../data/config/aiConnectionTemplates'; // runtime
+import type { ModelInfo } from '../../data/config/aiConnectionTemplates'; // type-only
 
 export const useSettingsLogic = () => {
   const { user } = useAuthStore();

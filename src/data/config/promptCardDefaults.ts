@@ -1,7 +1,9 @@
 // src/data/config/promptCardDefaults.ts
 
 // In src/data/config/promptCardDefaults.ts
-import type { AiSettings, StackInstructions, StackMode, FilterMode} from '../../models';
+import type { AiSettings, StackInstructions} from '../../models';
+import  { StackMode, FilterMode} from '../../models';
+
 /**
  * Default AI settings to be used for PromptCards if not specified.
  * Corresponds to AiSettings.kt's default values, now embedded in PromptCard.
@@ -21,8 +23,8 @@ export const defaultAiSettingsInCard: AiSettings = {
  * This is the parsed object version of the default JSON string from PromptCardDefaults.kt.
  */
 export const defaultStackInstructions: StackInstructions = {
-  narratorProseEmission: { mode: StackMode.FIRST_N, n: 3, filtering: FilterMode.SCENE_ONLY, enabled: true }, // NEW: enabled: true
-  digestPolicy: { filtering: FilterMode.TAGGED, enabled: true }, // NEW: enabled: true
+  narratorProseEmission: { mode: StackMode.FIRST_N, n: 3, filtering: FilterMode.SCENE_ONLY, enabled: true },
+  digestPolicy: { filtering: FilterMode.TAGGED, enabled: true },
   digestEmission: {
     "5": { mode: StackMode.ALWAYS },
     "4": { mode: StackMode.AFTER_N, n: 1 },
@@ -30,11 +32,11 @@ export const defaultStackInstructions: StackInstructions = {
     "2": { mode: StackMode.FIRST_N, n: 3 },
     "1": { mode: StackMode.NEVER },
   },
-  expressionLogPolicy: { mode: StackMode.ALWAYS, filtering: FilterMode.SCENE_ONLY, enabled: true }, // NEW: enabled: true
+  expressionLogPolicy: { mode: StackMode.ALWAYS, n: 0, filtering: FilterMode.SCENE_ONLY, enabled: true }, // ADDED n: 0
   expressionLinesPerCharacter: 3,
   emotionWeighting: true,
-  worldStatePolicy: { mode: StackMode.FILTERED, filtering: FilterMode.SCENE_ONLY, enabled: true }, // NEW: enabled: true
-  knownEntitiesPolicy: { mode: StackMode.FIRST_N, n: 2, filtering: FilterMode.TAGGED, enabled: true }, // NEW: enabled: true
+  worldStatePolicy: { mode: StackMode.FILTERED, n: 0, filtering: FilterMode.SCENE_ONLY, enabled: true }, // ADDED n: 0
+  knownEntitiesPolicy: { mode: StackMode.FIRST_N, n: 2, filtering: FilterMode.TAGGED, enabled: true },
   // REMOVED: "outputFormat": "prose_digest_emit",
   tokenPolicy: {
     minTokens: 1000,

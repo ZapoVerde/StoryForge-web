@@ -1,6 +1,6 @@
 // src/logic/aiClient.ts
 
-import { ModelInfo } from '../data/config/aiConnectionTemplates';
+import type { ModelInfo } from '../data/config/aiConnectionTemplates';
 import type { Message, AiSettings, AiConnection } from '../models';
 /**
  * Interface defining the contract for an AI client.
