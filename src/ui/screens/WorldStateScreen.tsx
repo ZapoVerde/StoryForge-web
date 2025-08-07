@@ -1,7 +1,7 @@
 // src/ui/screens/WorldStateScreen.tsx
 import React from 'react';
 import {
-  Box, Typography, Button, AppBar, Toolbar, IconButton, Paper, CircularProgress,
+  Box, Typography, Button, AppBar, Toolbar, IconButton, Paper, 
   Alert, List, Collapse, Checkbox, TextField, Dialog, DialogTitle, DialogContent,
   DialogActions, Divider,
 } from '@mui/material';
@@ -10,7 +10,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
-import { useGameStateStore, selectCurrentGameState, selectWorldStatePinnedKeys } from '../../state/useGameStateStore'; // Selectors imported
+import { useGameStateStore, selectWorldStatePinnedKeys } from '../../state/useGameStateStore'; // Selectors imported
 import { useWorldStateViewLogic } from '../../utils/hooks/useWorldStateViewLogic';
 import { WorldStateItemRow } from '../components/WorldStateItemRow';
 
@@ -19,15 +19,11 @@ interface WorldStateScreenProps {
 }
 
 const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
-  const currentGameState = useGameStateStore(selectCurrentGameState);
   const worldStatePinnedKeys = useGameStateStore(selectWorldStatePinnedKeys); // Use selector
-  const { gameLoading, gameError } = useGameStateStore(); // Top-level state is fine
+  const { gameError } = useGameStateStore(); // Top-level state is fine
 
   // --- Keep your existing DEBUG LINES here for verification ---
   console.log('%c[WorldStateScreen.tsx] Component re-rendered.', 'color: #008080; font-weight: bold;');
-  console.log('[WorldStateScreen.tsx] Current Game State (from store selector):', currentGameState);
-  console.log('[WorldStateScreen.tsx] World State (extracted from store selector):', JSON.stringify(currentGameState?.worldState, null, 2));
-  console.log('[WorldStateScreen.tsx] World State keys length (extracted from store selector):', Object.keys(currentGameState?.worldState || {}).length);
   console.log('[WorldStateScreen.tsx] Pinned Keys (from store selector):', worldStatePinnedKeys);
   // --- END DEBUG LINES ---
 
@@ -59,7 +55,7 @@ const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
     editWorldKeyValue,
     deleteWorldKey,
     toggleWorldStatePin, // Ensure actions from store are correctly accessible
-  } = useWorldStateViewLogic(currentGameState);
+  } = useWorldStateViewLogic(); 
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>

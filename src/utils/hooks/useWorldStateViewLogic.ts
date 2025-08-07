@@ -1,9 +1,12 @@
 // src/utils/hooks/useWorldStateViewLogic.ts
 import { useState, useMemo, useCallback } from 'react';
 // IMPORT THE SELECTOR FOR PINNED KEYS
-import { useGameStateStore, selectWorldStatePinnedKeys } from '../../state/useGameStateStore';
+import {
+    useGameStateStore,
+    selectWorldStatePinnedKeys,
+    selectCurrentGameState,
+  } from '../../state/useGameStateStore';
 import { flattenJsonObject, getNestedValue } from '../../utils/jsonUtils';
-import type { GameState } from '../../models';
 
 interface GroupedWorldState {
     [category: string]: {
@@ -13,7 +16,8 @@ interface GroupedWorldState {
     };
 }
 
-export const useWorldStateViewLogic = (gameState: GameState | null) => {
+export const useWorldStateViewLogic = () => {
+    const gameState = useGameStateStore(selectCurrentGameState);
     // 1. Get necessary state and actions from the store
     const worldStatePinnedKeys = useGameStateStore(selectWorldStatePinnedKeys);
     const {

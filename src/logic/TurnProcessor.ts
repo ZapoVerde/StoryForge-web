@@ -6,7 +6,7 @@ import { parseNarratorOutput } from './deltaParser';
 import type { ILogManager } from './logManager';
 import type { IPromptBuilder } from './promptBuilder';
 import type { ITurnProcessor } from './ITurnProcessor';
-
+import type { ModelInfo } from '../data/config/aiConnectionTemplates';
 
 // Define a simple DummyAiClient for testing and dev
 class DummyAiClient implements IAiClient {
@@ -179,7 +179,7 @@ export class TurnProcessor implements ITurnProcessor {
       currentGameState,
       logs,
       conversationHistory,
-      action
+      action,
     );
     const contextSnapshotForLog = JSON.stringify(messagesToSend, null, 2);
 
