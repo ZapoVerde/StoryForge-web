@@ -79,11 +79,12 @@ export const DigestPolicyEditor: React.FC<DigestPolicyEditorProps> = ({
             ))}
           </RadioGroup>
         </FormControl>
-
         <Grid container spacing={2} sx={{ mt: 2 }}>
           {[5, 4, 3, 2, 1].map((score) => (
+            // 1. Grid item is now ONLY responsible for layout.
             <Grid item xs={12} sm={6} md={4} key={score}>
-              <Box sx={{ border: '1px solid #ccc', p: 1.5, borderRadius: 1, height: '100%' }}>
+              {/* 2. A nested Box handles ALL styling (border, padding). This resolves the error. */}
+              <Box sx={{ border: '1px solid', borderColor: 'divider', p: 1.5, borderRadius: 1 }}>
                 <Typography variant="subtitle2">
                   Importance {score} Digests
                   <InfoDialog
@@ -117,7 +118,7 @@ export const DigestPolicyEditor: React.FC<DigestPolicyEditorProps> = ({
               </Box>
             </Grid>
           ))}
-        </Grid>
+        </Grid>        
       </Box>
     </Box>
   );

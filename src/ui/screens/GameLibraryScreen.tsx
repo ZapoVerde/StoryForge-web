@@ -1,6 +1,3 @@
-// src/ui/screens/GameLibraryScreen.tsx
-// NEW: This screen lists saved games (snapshots)
-
 import React, { useEffect, useState } from 'react';
 import {
   Box,
@@ -8,7 +5,6 @@ import {
   Button,
   AppBar,
   Toolbar,
-  IconButton,
   List,
   ListItem,
   ListItemText,
@@ -16,24 +12,20 @@ import {
   Divider,
   CircularProgress,
   Alert,
+  IconButton,
+  Snackbar,
 } from '@mui/material';
-import MenuIcon from '@mui/icons-material/Menu';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { gameRepository } from '../../data/repositories/gameRepository';
-import type { GameSnapshot } from '../../models';
 import { useNavigate } from 'react-router-dom';
-import Snackbar from '@mui/material/Snackbar';
+import type { GameSnapshot } from '../../models';
 import { formatIsoDateForDisplay } from '../../utils/formatDate';
 
-interface GameLibraryScreenProps {
-  onNavToggle: () => void;
-}
-
-const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) => {
-  const { user } = useAuthStore(); // Ensure user is available here
+const GameLibraryScreen: React.FC = () => {
+  const { user } = useAuthStore();
   const navigate = useNavigate();
   const { loadGame, gameLoading } = useGameStateStore();
 
@@ -73,9 +65,7 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
   };
 
   const handleSnackbarClose = (event?: React.SyntheticEvent | Event, reason?: string) => {
-    if (reason === 'clickaway') {
-      return;
-    }
+    if (reason === 'clickaway') return;
     setSnackbarOpen(false);
   };
 
@@ -85,8 +75,7 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
       return;
     }
     try {
-      // MODIFIED: Pass user.uid as the first argument
-      await loadGame(user.uid, snapshotId); 
+      await loadGame(user.uid, snapshotId);
       showSnackbar('Game loaded successfully! Navigating to game...', 'success');
       navigate('/game');
     } catch (e) {
@@ -113,14 +102,7 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
 
   if (loadingSavedGames || gameLoading) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '100vh',
-        }}
-      >
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
         <Typography variant="h6" ml={2}>
           Loading Games...
@@ -140,9 +122,6 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Game Library (Saved Games)
           </Typography>
-          <IconButton edge="end" color="inherit" aria-label="menu" onClick={onNavToggle}>
-            <MenuIcon />
-          </IconButton>
         </Toolbar>
       </AppBar>
 
@@ -164,6 +143,7 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
           variant="contained"
           color="primary"
           sx={{ mt: 2 }}
+          onClick={() => navigate('/cards')}
         >
           Start New Game (Select Prompt Card)
         </Button>
@@ -191,18 +171,10 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
                 <ListItem
                   secondaryAction={
                     <Box>
-                      <IconButton
-                        edge="end"
-                        aria-label="load-game"
-                        onClick={() => handleLoadGame(game.id)}
-                      >
+                      <IconButton edge="end" aria-label="load-game" onClick={() => handleLoadGame(game.id)}>
                         <PlayArrowIcon sx={{ color: (theme) => theme.palette.primary.main }} />
                       </IconButton>
-                      <IconButton
-                        edge="end"
-                        aria-label="delete-game"
-                        onClick={() => handleDeleteGame(game.id)}
-                      >
+                      <IconButton edge="end" aria-label="delete-game" onClick={() => handleDeleteGame(game.id)}>
                         <DeleteIcon sx={{ color: (theme) => theme.palette.error.main }} />
                       </IconButton>
                     </Box>
@@ -210,9 +182,7 @@ const GameLibraryScreen: React.FC<GameLibraryScreenProps> = ({ onNavToggle }) =>
                 >
                   <ListItemText
                     primary={game.title}
-                    secondary={`Turn: ${game.currentTurn} | Last Saved: ${formatIsoDateForDisplay(
-                      game.updatedAt
-                    )}`}
+                    secondary={`Turn: ${game.currentTurn} | Last Saved: ${formatIsoDateForDisplay(game.updatedAt)}`}
                     primaryTypographyProps={{ fontWeight: 'medium' }}
                   />
                 </ListItem>

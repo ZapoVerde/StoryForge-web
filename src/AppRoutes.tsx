@@ -40,14 +40,12 @@ export const AppRoutes = () => {
         }
       >
         {/* These routes render inside AuthOrchestrator's <Outlet /> */}
-        <Route path="/library" element={<GameLibraryScreen onNavToggle={() => {}} />} />
-        <Route path="/cards" element={<PromptCardManager onNavToggle={() => {}} />} />
-        <Route path="/settings" element={<SettingsScreen onNavToggle={() => {}} />} />
-
-        {/* Routes that also require an active game */}
-        <Route path="/game" element={<GameActiveRoute><GameScreen onNavToggle={() => {}} /></GameActiveRoute>} />
-        <Route path="/world-state" element={<GameActiveRoute><WorldStateScreen onNavToggle={() => {}} /></GameActiveRoute>} />
-        <Route path="/logs" element={<GameActiveRoute><LogViewerScreen onNavToggle={() => {}} /></GameActiveRoute>} />
+        <Route path="/library" element={<GameLibraryScreen />} />
+        <Route path="/cards" element={<PromptCardManager />} />
+        <Route path="/settings" element={<SettingsScreen />} />
+        <Route path="/game" element={<GameActiveRoute><GameScreen /></GameActiveRoute>} />
+        <Route path="/world-state" element={<GameActiveRoute><WorldStateScreen /></GameActiveRoute>} />
+        <Route path="/logs" element={<GameActiveRoute><LogViewerScreen /></GameActiveRoute>} />
 
         {/* Default authenticated route */}
         <Route path="/" element={<Navigate to="/library" replace />} />
