@@ -1,21 +1,18 @@
-// src/utils/hooks/useGameScreenLogic.ts
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore, selectCurrentGameState, selectConversationHistory } from '../../state/useGameStateStore';
 import { DiceRoller } from '../../utils/diceRoller';
-import type { GameState } from '../../models';
 import { usePromptCardStore } from '../../state/usePromptCardStore';
-import { useSettingsStore } from '../../state/useSettingsStore'; // <-- NEW
-import { debugLog, errorLog } from '../../utils/debug'; // <-- NEW
+import { useSettingsStore } from '../../state/useSettingsStore';
+import { debugLog, errorLog } from '../../utils/debug';
 
 export const useGameScreenLogic = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
 
-  const enableDebugLogging = useSettingsStore(state => state.enableDebugLogging); // <-- NEW
-  const typingSpeedMs = useSettingsStore(state => state.textGenerationSpeedMs);   // <-- NEW
+  const enableDebugLogging = useSettingsStore(state => state.enableDebugLogging);
+  const typingSpeedMs = useSettingsStore(state => state.textGenerationSpeedMs);
 
   const currentSnapshot = useGameStateStore(state => state.currentSnapshot);
   const currentGameState = useGameStateStore(selectCurrentGameState);
@@ -27,26 +24,22 @@ export const useGameScreenLogic = () => {
   const activePromptCard = usePromptCardStore(state => state.activePromptCard);
 
   const processPlayerAction = useGameStateStore(state => state.processPlayerAction);
-  const updateNarratorInputText = useGameStateStore(state => state.updateNarratorInputText);
-  const processFirstNarratorTurn = useGameStateStore(state => state.processFirstNarratorTurn);
+  const updateNarratorInputText = useGameStateStore(state => state.updateNarratorInputText); // Keep this one for the input text field
 
   const [showRollDialog, setShowRollDialog] = useState(false);
   const [rollFormula, setRollFormula] = useState("2d6");
-  const [snackbar, setSnackbar] = useState<{
-    open: boolean;
-    message: string;
-    severity: 'success' | 'error' | 'info' | 'warning';
-  }>({
+  const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
-    severity: 'info',
+    severity: 'info', // Initial value (no change needed here)
   });
-  
+
   const [displayedCurrentNarration, setDisplayedCurrentNarration] = useState('');
 
   const logContainerRef = useRef<HTMLDivElement>(null);
-  const initialTurnTriggeredForSnapshot = useRef<string | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const isFirstPlayerAction = currentSnapshot?.conversationHistory?.length === 1;
 
   useEffect(() => {
     if (enableDebugLogging) {
@@ -55,31 +48,7 @@ export const useGameScreenLogic = () => {
     if (logContainerRef.current) {
       logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
     }
-  }, [conversationHistory, enableDebugLogging]);
-
-  useEffect(() => {
-    if (enableDebugLogging) {
-      debugLog(`[useGameScreenLogic.ts] useEffect (first turn check). Snapshot ID: ${currentSnapshot?.id}, gameLoading: ${gameLoading}, currentTurn: ${currentSnapshot?.currentTurn}`);
-    }
-
-    if (!currentSnapshot || gameLoading) {
-      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Skipping first turn (no snapshot or loading).');
-      return;
-    }
-
-    const needsFirstTurn =
-      currentSnapshot.currentTurn === 0 &&
-      currentSnapshot.conversationHistory?.length === 1 &&
-      initialTurnTriggeredForSnapshot.current !== currentSnapshot.id;
-
-    if (needsFirstTurn) {
-      initialTurnTriggeredForSnapshot.current = currentSnapshot.id;
-      if (enableDebugLogging) debugLog(`[useGameScreenLogic.ts] Triggering first narrator turn for snapshot ${currentSnapshot.id}`);
-      processFirstNarratorTurn();
-    } else {
-      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] First turn not needed or already triggered.');
-    }
-  }, [currentSnapshot, gameLoading, processFirstNarratorTurn, enableDebugLogging]);
+  }, [conversationHistory, enableDebugLogging, displayedCurrentNarration]);
 
   useEffect(() => {
     if (typingTimeoutRef.current) {
@@ -89,7 +58,10 @@ export const useGameScreenLogic = () => {
     const fullNarration = currentGameState?.narration || '';
     const enableStreaming = activePromptCard?.aiSettings?.streaming ?? true;
 
-    if (enableStreaming && fullNarration.length > 0 && !isProcessingTurn) {
+    const shouldTypeOut = enableStreaming && fullNarration.length > 0 && !isProcessingTurn;
+    const shouldAnimateFirstTurn = isFirstPlayerAction && shouldTypeOut;
+
+    if (shouldAnimateFirstTurn) {
       setDisplayedCurrentNarration('');
       let i = 0;
       const typeCharacter = () => {
@@ -102,7 +74,7 @@ export const useGameScreenLogic = () => {
         }
       };
       typingTimeoutRef.current = setTimeout(typeCharacter, typingSpeedMs);
-    } else if (!enableStreaming) {
+    } else {
       setDisplayedCurrentNarration(fullNarration);
     }
 
@@ -111,16 +83,17 @@ export const useGameScreenLogic = () => {
         clearTimeout(typingTimeoutRef.current);
       }
     };
-  }, [currentGameState?.narration, activePromptCard?.aiSettings?.streaming, isProcessingTurn, typingSpeedMs]);
+  }, [
+    currentGameState?.narration,
+    activePromptCard?.aiSettings?.streaming,
+    isProcessingTurn,
+    typingSpeedMs,
+    isFirstPlayerAction,
+  ]);
 
   const showSnackbar = useCallback((message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
     if (enableDebugLogging) debugLog(`[useGameScreenLogic.ts] Snackbar: "${message}" (${severity})`);
-    setSnackbar({
-      open: true,
-      message,
-      severity: severity as 'success' | 'error' | 'info' | 'warning',
-    });
-    
+    setSnackbar({ open: true, message, severity });
   }, [enableDebugLogging]);
 
   const handleSendAction = useCallback(async () => {

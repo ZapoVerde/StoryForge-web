@@ -1,35 +1,23 @@
 // src/logic/ITurnProcessor.ts
 
-import type { PromptCard, GameState, LogEntry, Message, AiConnection, ParsedNarrationOutput, TokenSummary} from '../models';
+import type {
+  PromptCard,
+  GameState,
+  LogEntry,
+  Message,
+  AiConnection,
+  ParsedNarrationOutput,
+  TokenSummary
+} from '../models';
 
 /**
  * Defines the contract for processing individual game turns, including AI interaction.
  */
 export interface ITurnProcessor {
   /**
-   * Processes the first turn of a new game, generating the initial AI response and log.
-   * @param userId The ID of the current user.
-   * @param card The PromptCard used for the game.
-   * @param initialGameState The initial game state.
-   * @param useDummyNarrator Flag to use a dummy AI.
-   * @param aiConnections User's configured AI connections.
-   * @returns A Promise resolving with the parsed AI output, the generated log entry, and token usage.
-   */
-  processFirstTurnNarratorResponse(
-    userId: string,
-    card: PromptCard,
-    initialGameState: GameState,
-    useDummyNarrator: boolean,
-    aiConnections: AiConnection[],
-  ): Promise<{
-    parsedOutput: ParsedNarrationOutput;
-    logEntry: LogEntry;
-    aiRawOutput: string;
-    tokenUsage: TokenSummary | null;
-  }>;
-
-  /**
    * Processes a player's action, generating the AI response and updating conversation history/logs.
+   * Handles both the initial turn and subsequent turns.
+   *
    * @param userId The ID of the current user.
    * @param card The PromptCard used for the game.
    * @param currentGameState The current game state before the turn.
@@ -39,7 +27,7 @@ export interface ITurnProcessor {
    * @param turnNumber The current turn number.
    * @param useDummyNarrator Flag to use a dummy AI.
    * @param aiConnections User's configured AI connections.
-   * @returns A Promise resolving with the parsed AI output, the generated log entry, and token usage.
+   * @param isFirstPlayerAction True if this is the first player input after game start.
    */
   processPlayerTurn(
     userId: string,
@@ -51,6 +39,7 @@ export interface ITurnProcessor {
     turnNumber: number,
     useDummyNarrator: boolean,
     aiConnections: AiConnection[],
+    isFirstPlayerAction: boolean // <-- PATCHED
   ): Promise<{
     parsedOutput: ParsedNarrationOutput;
     logEntry: LogEntry;

@@ -10,7 +10,6 @@ import { debugLog, errorLog } from '../utils/debug'; // ✅ Injected centralized
 export interface IGameSession {
   initializeGame(userId: string, cardId: string, existingSnapshotId?: string): Promise<void>;
   processPlayerAction(action: string, useDummyNarrator: boolean): Promise<GameSnapshot>;
-  processFirstNarratorTurn(useDummyNarrator: boolean): Promise<GameSnapshot>;
   getCurrentGameSnapshot(): GameSnapshot | null;
   saveGame(snapshot: GameSnapshot): Promise<void>;
   loadGame(userId: string, snapshotId: string): Promise<void>;
@@ -45,20 +44,20 @@ export class GameSession implements IGameSession {
   public async initializeGame(userId: string, cardId: string, existingSnapshotId?: string): Promise<void> {
     debugLog(`[gameSession.ts] initializeGame: Starting for User=${userId}, Card=${cardId}, Snapshot=${existingSnapshotId || 'new'}`);
     this.currentUserId = userId;
-
+  
     if (existingSnapshotId) {
       await this.loadGame(userId, existingSnapshotId);
       debugLog(`[gameSession.ts] initializeGame: Loaded existing game ${existingSnapshotId}.`);
       return;
     }
-
+  
     const card = await this.cardRepo.getPromptCard(userId, cardId);
     if (!card) {
       errorLog(`[gameSession.ts] initializeGame: PromptCard with ID ${cardId} not found.`);
       throw new Error(`PromptCard with ID ${cardId} not found.`);
     }
     this.currentPromptCard = card;
-
+  
     let initialWorldState = {};
     try {
       if (card.worldStateInit) {
@@ -70,10 +69,11 @@ export class GameSession implements IGameSession {
       errorLog("[gameSession.ts] initializeGame: Failed to parse worldStateInit JSON:", e);
       initialWorldState = {};
     }
-
+  
     const now = new Date().toISOString();
-    const firstTurnProse = card.firstTurnOnlyBlock || "The story begins...";
-
+  
+    // Unconditionally create a new snapshot because an existingSnapshotId was not provided.
+    // This ensures that any previous game state in this session instance is wiped.
     const initialSnapshot: GameSnapshot = {
       id: generateUuid(),
       userId: userId,
@@ -83,45 +83,22 @@ export class GameSession implements IGameSession {
       updatedAt: now,
       currentTurn: 0,
       gameState: {
-        narration: firstTurnProse,
+        narration: card.firstTurnOnlyBlock, // Initial scene description for the user
         worldState: initialWorldState,
         scene: { location: null, present: [] },
       },
-      conversationHistory: [{ role: 'assistant', content: firstTurnProse }],
+      // Pre-populate history with the initial scene so it's not lost.
+      conversationHistory: [
+        { role: 'assistant', content: card.firstTurnOnlyBlock }
+      ],
       logs: [],
       worldStatePinnedKeys: [],
     };
-
+  
     this.currentSnapshot = initialSnapshot;
     debugLog(`[gameSession.ts] initializeGame: NEW game initialized with ID ${initialSnapshot.id}. currentSnapshot set.`);
   }
-
-  public async processFirstNarratorTurn(useDummyNarrator: boolean): Promise<GameSnapshot> {
-    debugLog('[gameSession.ts] processFirstNarratorTurn: Starting.');
-    if (!this.currentSnapshot || !this.currentUserId || !this.currentPromptCard) {
-      errorLog('[gameSession.ts] processFirstNarratorTurn: Prerequisites missing.');
-      throw new Error("Cannot process first turn: Game not initialized correctly.");
-    }
-
-    const aiConnections = await this.gameRepo.getAiConnections(this.currentUserId);
-    debugLog(`[gameSession.ts] processFirstNarratorTurn: Calling turnProcessor.useDummyNarrator=${useDummyNarrator}.`);
-    const turnResult = await this.turnProcessor.processFirstTurnNarratorResponse(
-      this.currentUserId,
-      this.currentPromptCard,
-      this.currentSnapshot.gameState,
-      useDummyNarrator,
-      aiConnections
-    );
-
-    debugLog('[gameSession.ts] processFirstNarratorTurn: Calling snapshotUpdater.applyTurnResultToSnapshot.');
-    const newSnapshot = this.snapshotUpdater.applyTurnResultToSnapshot(this.currentSnapshot, turnResult);
-
-    this.currentSnapshot = newSnapshot;
-    debugLog(`[gameSession.ts] processFirstNarratorTurn: newSnapshot ${newSnapshot.id} applied. Saving game...`);
-    await this.saveGame(newSnapshot);
-    debugLog('[gameSession.ts] processFirstNarratorTurn: Finished and saved.');
-    return newSnapshot;
-  }
+  
 
   public async processPlayerAction(action: string, useDummyNarrator: boolean): Promise<GameSnapshot> {
     debugLog(`[gameSession.ts] processPlayerAction: Starting for action: "${action.substring(0, 50)}..."`);
@@ -132,6 +109,10 @@ export class GameSession implements IGameSession {
 
     const aiConnections = await this.gameRepo.getAiConnections(this.currentUserId);
     debugLog(`[gameSession.ts] processPlayerAction: Calling turnProcessor.useDummyNarrator=${useDummyNarrator}.`);
+
+    // Determine if this is the very first player action (turn 0 with no logs yet)
+    const isFirstPlayerAction = this.currentSnapshot.currentTurn === 0 && this.currentSnapshot.logs.length === 0;
+
     const turnResult = await this.turnProcessor.processPlayerTurn(
       this.currentUserId,
       this.currentPromptCard,
@@ -141,7 +122,8 @@ export class GameSession implements IGameSession {
       action,
       this.currentSnapshot.currentTurn,
       useDummyNarrator,
-      aiConnections
+      aiConnections,
+      isFirstPlayerAction
     );
 
     debugLog('[gameSession.ts] processPlayerAction: Calling snapshotUpdater.applyTurnResultToSnapshot.');
