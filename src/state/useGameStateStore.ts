@@ -1,6 +1,7 @@
 // src/state/useGameStateStore.ts
 
 import { create } from 'zustand';
+import type {  StoreApi } from 'zustand';
 import { useSettingsStore } from './useSettingsStore';
 import type { GameSnapshot, GameState, LogEntry, Message } from '../models';
 import type { IGameSession } from '../logic/gameSession';
@@ -8,35 +9,26 @@ import type { IGameSession } from '../logic/gameSession';
 // Module-level variable to hold the injected GameSession instance
 let _gameSessionInstance: IGameSession | null = null;
 
-/**
- * Initializes the GameStateStore with the GameSession instance.
- * This should be called once from a provider component.
- */
 export const initializeGameStateStore = (gameSession: IGameSession) => {
   if (_gameSessionInstance === null) {
     _gameSessionInstance = gameSession;
-    console.log("GameStateStore: GameSession instance injected.");
+    console.log('%c[useGameStateStore.ts] GameSession instance injected successfully.', 'color: green;');
+  } else {
+    console.warn('[useGameStateStore.ts] Attempted to re-inject GameSession instance. This should only happen once.');
   }
 };
 
-// Define the initial state, excluding actions.
-const initialState = {
-  currentSnapshot: null,
-  narratorInputText: '',
-  narratorScrollPosition: 0,
-  gameError: null,
-  gameLoading: false,
-  isProcessingTurn: false,
-};
-
-// Define the full store type including state and actions
-interface GameStateStore {
+// --- Define State and Actions Interfaces Separately ---
+interface GameStateState {
   currentSnapshot: GameSnapshot | null;
   narratorInputText: string;
   narratorScrollPosition: number;
   gameError: string | null;
-  gameLoading: boolean;
-  isProcessingTurn: boolean;
+  gameLoading: boolean; // This should only be true for major loading operations (initial game load, switching games)
+  isProcessingTurn: boolean; // This is for AI turn processing, separate from gameLoading
+}
+
+interface GameStateActions {
   initializeGame: (userId: string, cardId: string, existingSnapshotId?: string) => Promise<void>;
   processPlayerAction: (action: string) => Promise<void>;
   processFirstNarratorTurn: () => Promise<void>;
@@ -51,143 +43,220 @@ interface GameStateStore {
   deleteWorldEntity: (category: string, entity: string) => Promise<void>;
   editWorldKeyValue: (key: string, value: any) => Promise<void>;
   deleteWorldKey: (key: string) => Promise<void>;
-  reset: () => void;
   toggleWorldStatePin: (keyPath: string, type: 'variable' | 'entity' | 'category') => Promise<void>;
+  reset: () => void;
 }
 
-export const useGameStateStore = create<GameStateStore>((set, get) => {
-  // --- Internal Helpers ---
+// Combine them into the final store type
+type GameStateStore = GameStateState & GameStateActions;
 
-  /**
-   * Safely retrieves the game session instance, throwing an error if not initialized.
-   */
+// --- Define the initial state ---
+const initialState: GameStateState = {
+  currentSnapshot: null,
+  narratorInputText: '',
+  narratorScrollPosition: 0,
+  gameError: null,
+  gameLoading: false, // Initial state: not loading
+  isProcessingTurn: false,
+};
+
+// --- Create the store with separated actions ---
+export const useGameStateStore = create<GameStateStore>((set, get) => {
   const getGameSession = (): IGameSession => {
     if (!_gameSessionInstance) {
-      throw new Error("Game session instance not initialized. Ensure GameSessionAndStoreProvider is a parent component.");
+      console.error('%c[useGameStateStore.ts] CRITICAL ERROR: GameSession instance is NULL when getGameSession() called!', 'color: red; font-weight: bold;');
+      throw new Error("Game session instance not initialized.");
     }
     return _gameSessionInstance;
   };
 
-  /**
-   * Centralized function to update the store's state from a GameSnapshot.
-   */
-  const syncStateWithSnapshot = (snapshot: GameSnapshot | null) => {
-    set({ currentSnapshot: snapshot });
+    // Helper to sync state from a snapshot
+    const syncStateWithSnapshot = (snapshot: GameSnapshot | null) => {
+      // DEBUG: Log every time currentSnapshot is updated
+      // Removed gameLoading from this log as it's being de-coupled for minor updates
+      console.log(`%c[useGameStateStore.ts] syncStateWithSnapshot: Updating currentSnapshot to ${snapshot ? snapshot.id : 'null'}. isProcessingTurn: ${get().isProcessingTurn}`, 'color: dodgerblue;');
+      set({ currentSnapshot: snapshot });
+      // After setting the snapshot, let's verify immediately
+      const verifySnapshot = get().currentSnapshot;
+      console.log(`%c[useGameStateStore.ts] syncStateWithSnapshot: currentSnapshot is now ${verifySnapshot ? verifySnapshot.id : 'null'}.`, 'color: dodgerblue;');
   };
 
-  /**
-   * Generic wrapper for performing updates that modify the world state.
-   */
   const performWorldStateUpdate = async (updateFn: (session: IGameSession) => Promise<GameSnapshot | null>) => {
-    set({ gameLoading: true, gameError: null }); // Using gameLoading for this quick action
+    // DEBUG: Log start of any world state modification action
+    console.log('%c[useGameStateStore.ts] performWorldStateUpdate: Starting a world state modification.', 'color: purple;');
+    // It's crucial NOT to set gameLoading: true here, as this is for minor UI updates.
+    // AuthOrchestrator relies on gameLoading only for major app-level loads.
+    set({ gameError: null });
     try {
-      const session = getGameSession();
-      const updatedSnapshot = await updateFn(session);
-      syncStateWithSnapshot(updatedSnapshot);
+        const session = getGameSession();
+        const updatedSnapshot = await updateFn(session);
+        syncStateWithSnapshot(updatedSnapshot);
     } catch (error: any) {
-      console.error("Error performing world state update:", error);
-      set({ gameError: error.message });
+        console.error("[useGameStateStore.ts] performWorldStateUpdate: Error during update:", error);
+        set({ gameError: error.message });
     } finally {
-      set({ gameLoading: false });
+        // This is a crucial safety measure. Even if `gameLoading` wasn't explicitly set to `true`
+        // by this function, ensuring it's `false` here guarantees the global loading screen
+        // is dismissed after any world state modification.
+        set({ gameLoading: false });
+        console.log('[useGameStateStore.ts] performWorldStateUpdate: Finished a world state modification.');
     }
   };
-  return {
-    ...initialState,
 
-    // --- Actions ---
 
-    initializeGame: async (userId, cardId, existingSnapshotId) => {
-      set({ gameLoading: true, gameError: null });
-      try {
-        const gameSession = getGameSession();
-        await gameSession.initializeGame(userId, cardId, existingSnapshotId);
-        syncStateWithSnapshot(gameSession.getCurrentGameSnapshot());
-      } catch (error: any) {
-        set({ gameError: error.message, gameLoading: false });
-      }
-    },
+    // Return the state AND actions. Actions are defined here once.
+    return {
+        ...initialState,
 
-    processFirstNarratorTurn: async () => {
-      set({ isProcessingTurn: true, gameError: null });
-      const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
-      try {
-        const gameSession = getGameSession();
-        const updatedSnapshot = await gameSession.processFirstNarratorTurn(useDummyNarrator);
-        syncStateWithSnapshot(updatedSnapshot);
-      } catch (error: any) {
-        set({ gameError: error.message, isProcessingTurn: false });
-      }
-    },
-
-    processPlayerAction: async (action) => {
-      set({ isProcessingTurn: true, gameError: null, narratorInputText: '' });
-      const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
-      try {
-        const gameSession = getGameSession();
-        const updatedSnapshot = await gameSession.processPlayerAction(action, useDummyNarrator);
-        syncStateWithSnapshot(updatedSnapshot);
-      } catch (error: any) {
-        set({ gameError: error.message, isProcessingTurn: false });
-      }
-    },
-
-    saveGame: async () => {
-      const { currentSnapshot } = get();
-      if (!currentSnapshot) return;
-      try {
-        await getGameSession().saveGame(currentSnapshot);
-      } catch (error: any) {
-        set({ gameError: error.message });
-      }
-    },
-
-    loadGame: async (userId, snapshotId) => {
-      set({ gameLoading: true, gameError: null });
-      try {
-        const gameSession = getGameSession();
-        await gameSession.loadGame(userId, snapshotId);
-        syncStateWithSnapshot(gameSession.getCurrentGameSnapshot());
-      } catch (error: any) {
-        set({ gameError: error.message, gameLoading: false });
-      }
-    },
-    
-    loadLastActiveGame: async (userId: string): Promise<boolean> => {
-        set({ gameLoading: true, gameError: null });
-        try {
+        initializeGame: async (userId, cardId, existingSnapshotId) => {
+          console.log(`[useGameStateStore.ts] initializeGame action: userId=${userId}, cardId=${cardId}, existingSnapshotId=${existingSnapshotId}`);
+          set({ gameLoading: true, gameError: null }); // Set gameLoading for this major operation
+          try {
             const gameSession = getGameSession();
-            const gameLoaded = await gameSession.loadLastActiveGame(userId);
+            await gameSession.initializeGame(userId, cardId, existingSnapshotId);
             syncStateWithSnapshot(gameSession.getCurrentGameSnapshot());
-            set({ gameLoading: false });
-            return gameLoaded;
-        } catch (error: any) {
-            set({ gameError: error.message, gameLoading: false });
-            return false;
-        }
-    },
+          } catch (error: any) {
+            console.error("[useGameStateStore.ts] initializeGame action ERROR:", error);
+            set({ gameError: error.message });
+          } finally {
+            set({ gameLoading: false }); // Reset gameLoading regardless of success/failure
+          }
+        },
 
-    updateNarratorInputText: (text) => set({ narratorInputText: text }),
-    updateNarratorScrollPosition: (position) => set({ narratorScrollPosition: position }),
+        processFirstNarratorTurn: async () => {
+          console.log('[useGameStateStore.ts] processFirstNarratorTurn action started.');
+          set({ isProcessingTurn: true, gameError: null });
+          const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
+          try {
+            const gameSession = getGameSession();
+            const updatedSnapshot = await gameSession.processFirstNarratorTurn(useDummyNarrator);
+            syncStateWithSnapshot(updatedSnapshot);
+          } catch (error: any) {
+             console.error("[useGameStateStore.ts] processFirstNarratorTurn action ERROR:", error);
+             set({ gameError: error.message });
+          } finally {
+            set({ isProcessingTurn: false });
+            console.log('[useGameStateStore.ts] processFirstNarratorTurn action finished.');
+          }
+        },
 
-    // Refactored World State modifications using the helper
-    renameWorldCategory: (oldName, newName) => performWorldStateUpdate(session => session.renameWorldCategory(oldName, newName)),
-    renameWorldEntity: (category, oldName, newName) => performWorldStateUpdate(session => session.renameWorldEntity(category, oldName, newName)),
-    deleteWorldCategory: (category) => performWorldStateUpdate(session => session.deleteWorldCategory(category)),
-    deleteWorldEntity: (category, entity) => performWorldStateUpdate(session => session.deleteWorldEntity(category, entity)),
-    editWorldKeyValue: (key, value) => performWorldStateUpdate(session => session.editWorldKeyValue(key, value)),
-    deleteWorldKey: (key) => performWorldStateUpdate(session => session.deleteWorldKey(key)),
-    toggleWorldStatePin: (key, type) => performWorldStateUpdate(session => session.toggleWorldStatePin(key, type)),
+        processPlayerAction: async (action) => {
+          console.log(`[useGameStateStore.ts] processPlayerAction action started. Action: "${action}"`);
+          set({ isProcessingTurn: true, gameError: null, narratorInputText: '' });
+          const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
+          try {
+            const gameSession = getGameSession();
+            const updatedSnapshot = await gameSession.processPlayerAction(action, useDummyNarrator);
+            syncStateWithSnapshot(updatedSnapshot);
+          } catch (error: any) {
+            console.error("[useGameStateStore.ts] processPlayerAction action ERROR:", error);
+            set({ gameError: error.message });
+          } finally {
+             set({ isProcessingTurn: false });
+             console.log('[useGameStateStore.ts] processPlayerAction action finished.');
+          }
+        },
 
-    reset: () => {
-      console.log("Resetting GameStateStore.");
-      set(initialState);
-    },
-  };
+        saveGame: async () => {
+          console.log('[useGameStateStore.ts] saveGame action called.');
+          const { currentSnapshot } = get();
+          if (!currentSnapshot) {
+            console.warn('[useGameStateStore.ts] saveGame action: No currentSnapshot to save.');
+            return;
+          }
+          try {
+            await getGameSession().saveGame(currentSnapshot);
+            console.log(`[useGameStateStore.ts] saveGame action: Snapshot ${currentSnapshot.id} saved.`);
+          } catch (error: any) {
+            console.error("[useGameStateStore.ts] saveGame action ERROR:", error);
+            set({ gameError: error.message });
+          }
+        },
+        
+        loadGame: async (userId, snapshotId) => {
+            console.log(`[useGameStateStore.ts] loadGame action: userId=${userId}, snapshotId=${snapshotId}`);
+            set({ gameLoading: true, gameError: null }); // Set gameLoading for this major operation
+            try {
+                const gameSession = getGameSession();
+                await gameSession.loadGame(userId, snapshotId);
+                syncStateWithSnapshot(gameSession.getCurrentGameSnapshot());
+            } catch (error: any) {
+                console.error("[useGameStateStore.ts] loadGame action ERROR:", error);
+                set({ gameError: error.message });
+            } finally {
+                set({ gameLoading: false }); // Reset gameLoading regardless of success/failure
+                console.log('[useGameStateStore.ts] loadGame action finished.');
+            }
+        },
+
+        loadLastActiveGame: async (userId: string): Promise<boolean> => {
+            console.log('%c[useGameStateStore.ts] loadLastActiveGame action called.', 'color: blue; font-weight: bold;');
+            set({ gameLoading: true, gameError: null }); // Set gameLoading for this major operation
+            try {
+                const gameSession = getGameSession();
+                const gameLoaded = await gameSession.loadLastActiveGame(userId);
+                // DEBUG: Check what gameSession.getCurrentGameSnapshot() returns immediately after load
+                const snapshotAfterLoad = gameSession.getCurrentGameSnapshot();
+                console.log(`%c[useGameStateStore.ts] gameSession.getCurrentGameSnapshot() after loadLastActiveGame: ${snapshotAfterLoad ? snapshotAfterLoad.id : 'null'}`, 'color: blue;');
+                
+                syncStateWithSnapshot(snapshotAfterLoad); // Use the snapshot directly from session
+                console.log(`%c[useGameStateStore.ts] loadLastActiveGame action finished. Game loaded: ${gameLoaded}`, 'color: blue; font-weight: bold;');
+                return gameLoaded;
+            } catch (error: any) {
+                console.error("%c[useGameStateStore.ts] loadLastActiveGame action FAILED with error:", 'color: red; font-weight: bold;', error);
+                set({ gameError: error.message });
+                return false;
+            } finally {
+                set({ gameLoading: false }); // Reset gameLoading regardless of success/failure
+            }
+        },
+
+        updateNarratorInputText: (text) => {
+          // DEBUG: Log input text changes if not too frequent
+          // console.log(`[useGameStateStore.ts] updateNarratorInputText: "${text.substring(0, 30)}..."`);
+          set({ narratorInputText: text });
+        },
+        updateNarratorScrollPosition: (position) => {
+          // DEBUG: Log scroll position changes
+          // console.log(`[useGameStateStore.ts] updateNarratorScrollPosition: ${position}`);
+          set({ narratorScrollPosition: position });
+        },
+
+        renameWorldCategory: (oldName, newName) => performWorldStateUpdate(session => session.renameWorldCategory(oldName, newName)),
+        renameWorldEntity: (category, oldName, newName) => performWorldStateUpdate(session => session.renameWorldEntity(category, oldName, newName)),
+        deleteWorldCategory: (category) => performWorldStateUpdate(session => session.deleteWorldCategory(category)),
+        deleteWorldEntity: (category, entity) => performWorldStateUpdate(session => session.deleteWorldEntity(category, entity)),
+        editWorldKeyValue: (key, value) => performWorldStateUpdate(session => session.editWorldKeyValue(key, value)),
+        deleteWorldKey: (key) => performWorldStateUpdate(session => session.deleteWorldKey(key)),
+        toggleWorldStatePin: (key, type) => performWorldStateUpdate(session => session.toggleWorldStatePin(key, type)),
+
+        reset: () => {
+          console.log('%c[useGameStateStore.ts] RESETTING GameStateStore to initialState.', 'color: red; font-weight: bold;');
+          set(initialState);
+        },
+    };
 });
 
+
 // --- Selectors ---
-// Components should use these selectors to get derived data from the snapshot.
-export const selectCurrentGameState = (state: GameStateStore): GameState | null => state.currentSnapshot?.gameState ?? null;
-export const selectGameLogs = (state: GameStateStore): LogEntry[] => state.currentSnapshot?.logs ?? [];
-export const selectConversationHistory = (state: GameStateStore): Message[] => state.currentSnapshot?.conversationHistory ?? [];
-export const selectWorldStatePinnedKeys = (state: GameStateStore): string[] => state.currentSnapshot?.worldStatePinnedKeys ?? [];
+// DEBUG: Log when selectors are accessed. Be careful, this can be noisy.
+export const selectCurrentGameState = (state: GameStateStore): GameState | null => {
+  const gameState = state.currentSnapshot?.gameState ?? null;
+  // console.log(`[useGameStateStore.ts] Selector: selectCurrentGameState. State ID: ${state.currentSnapshot?.id || 'null'}. GameState: ${gameState ? 'present' : 'null'}`);
+  return gameState;
+};
+export const selectGameLogs = (state: GameStateStore): LogEntry[] => {
+  const logs = state.currentSnapshot?.logs ?? [];
+  // console.log(`[useGameStateStore.ts] Selector: selectGameLogs. State ID: ${state.currentSnapshot?.id || 'null'}. Logs Count: ${logs.length}`);
+  return logs;
+};
+export const selectConversationHistory = (state: GameStateStore): Message[] => {
+  const history = state.currentSnapshot?.conversationHistory ?? [];
+  // console.log(`[useGameStateStore.ts] Selector: selectConversationHistory. State ID: ${state.currentSnapshot?.id || 'null'}. History Count: ${history.length}`);
+  return history;
+};
+export const selectWorldStatePinnedKeys = (state: GameStateStore): string[] => {
+  const pinnedKeys = state.currentSnapshot?.worldStatePinnedKeys ?? [];
+  // console.log(`[useGameStateStore.ts] Selector: selectWorldStatePinnedKeys. State ID: ${state.currentSnapshot?.id || 'null'}. Pinned Keys Count: ${pinnedKeys.length}`);
+  return pinnedKeys;
+};

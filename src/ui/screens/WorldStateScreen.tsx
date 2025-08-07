@@ -10,7 +10,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
-import { useGameStateStore } from '../../state/useGameStateStore';
+import { useGameStateStore, selectCurrentGameState, selectWorldStatePinnedKeys } from '../../state/useGameStateStore'; // Selectors imported
 import { useWorldStateViewLogic } from '../../utils/hooks/useWorldStateViewLogic';
 import { WorldStateItemRow } from '../components/WorldStateItemRow';
 
@@ -19,27 +19,33 @@ interface WorldStateScreenProps {
 }
 
 const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
-  const { currentGameState, gameLoading, gameError } = useGameStateStore();
+  const currentGameState = useGameStateStore(selectCurrentGameState);
+  const worldStatePinnedKeys = useGameStateStore(selectWorldStatePinnedKeys); // Use selector
+  const { gameLoading, gameError } = useGameStateStore(); // Top-level state is fine
+
+  // --- Keep your existing DEBUG LINES here for verification ---
+  console.log('%c[WorldStateScreen.tsx] Component re-rendered.', 'color: #008080; font-weight: bold;');
+  console.log('[WorldStateScreen.tsx] Current Game State (from store selector):', currentGameState);
+  console.log('[WorldStateScreen.tsx] World State (extracted from store selector):', JSON.stringify(currentGameState?.worldState, null, 2));
+  console.log('[WorldStateScreen.tsx] World State keys length (extracted from store selector):', Object.keys(currentGameState?.worldState || {}).length);
+  console.log('[WorldStateScreen.tsx] Pinned Keys (from store selector):', worldStatePinnedKeys);
+  // --- END DEBUG LINES ---
+
   const {
     groupedByCategory,
-    worldStatePinnedKeys,
-    isAnyChildPinned,
-    areAllChildrenPinned,
+    // All other state variables (expandedCategories, editingCategory, etc.) are now correctly sourced from the hook:
     expandedCategories,
     expandedEntities,
     editingCategory,
     newCategoryName,
     editingEntity,
     newEntityName,
-    deleteWorldCategory,
-    deleteWorldEntity,
-    editWorldKeyValue,
-    deleteWorldKey,
-    toggleWorldStatePin,
-    handleToggleCategoryExpand,
-    handleToggleEntityExpand,
-    handleToggleCategoryPin,
-    handleToggleEntityPin,
+    isAnyChildPinned, // These methods come from the hook
+    areAllChildrenPinned, // These methods come from the hook
+    handleToggleCategoryExpand, // Local handlers returned by hook
+    handleToggleEntityExpand,   // Local handlers returned by hook
+    handleToggleCategoryPin,    // Local handlers returned by hook
+    handleToggleEntityPin,      // Local handlers returned by hook
     handleStartRenameCategory,
     handleConfirmRenameCategory,
     setNewCategoryName,
@@ -47,16 +53,13 @@ const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
     handleConfirmRenameEntity,
     setNewEntityName,
     cancelEdit,
+    // Actions passed directly from store (for clarity)
+    deleteWorldCategory,
+    deleteWorldEntity,
+    editWorldKeyValue,
+    deleteWorldKey,
+    toggleWorldStatePin, // Ensure actions from store are correctly accessible
   } = useWorldStateViewLogic(currentGameState);
-
-  if (gameLoading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress />
-        <Typography variant="h6" ml={2}>Loading World State...</Typography>
-      </Box>
-    );
-  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
@@ -81,6 +84,7 @@ const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
                 <IconButton size="small" sx={{ mr: 1 }}>{expandedCategories.has(category) ? <ExpandLessIcon /> : <ExpandMoreIcon />}</IconButton>
                 <Typography variant="h6" sx={{ flexGrow: 1 }}>{category}</Typography>
                 <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleStartRenameCategory(category); }}><EditIcon fontSize="small" /></IconButton>
+                {/* Use the hook's own methods correctly */}
                 <Checkbox checked={areAllChildrenPinned(category)} indeterminate={isAnyChildPinned(category) && !areAllChildrenPinned(category)} onClick={(e) => { e.stopPropagation(); handleToggleCategoryPin(category); }} />
                 <IconButton size="small" onClick={(e) => { e.stopPropagation(); deleteWorldCategory(category); }}><DeleteIcon fontSize="small" color="error" /></IconButton>
               </Box>
@@ -100,6 +104,7 @@ const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
                           <IconButton size="small" sx={{ mr: 1 }}>{expandedEntities.has(entityPath) ? <ExpandLessIcon /> : <ExpandMoreIcon />}</IconButton>
                           <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>{entity}</Typography>
                           <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleStartRenameEntity([category, entity]); }}><EditIcon fontSize="small" /></IconButton>
+                           {/* Use the hook's own methods correctly */}
                           <Checkbox checked={areAllChildrenPinned(entityPath)} indeterminate={isAnyChildPinned(entityPath) && !areAllChildrenPinned(entityPath)} onClick={(e) => { e.stopPropagation(); handleToggleEntityPin(entityPath); }} />
                           <IconButton size="small" onClick={(e) => { e.stopPropagation(); deleteWorldEntity(category, entity); }}><DeleteIcon fontSize="small" color="error" /></IconButton>
                         </Box>

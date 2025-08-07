@@ -12,6 +12,9 @@ import { usePromptCardStore } from './state/usePromptCardStore';
 import { useLogStore } from './state/useLogStore';
 
 const App: React.FC = () => {
+  // DEBUG: Log App component renders
+  console.log('%c[App.tsx] App component rendering', 'color: purple; font-weight: bold;');
+
   const { themeMode } = useSettingsStore();
   const theme = React.useMemo(() => getAppTheme(themeMode), [themeMode]);
 
@@ -19,10 +22,13 @@ const App: React.FC = () => {
   const wasUserLoggedIn = useRef(!!user);
 
   useEffect(() => {
+    // DEBUG: Log App component useEffect execution
+    console.log('[App.tsx] App component useEffect fired. User:', user ? user.uid : 'null');
+
     const isLoggingOut = wasUserLoggedIn.current && !user;
 
     if (isLoggingOut) {
-      console.log("User is logging out. Resetting all data stores.");
+      console.log("[App.tsx] User is logging out. Resetting all data stores.");
       useGameStateStore.getState().reset();
       usePromptCardStore.getState().reset();
       useSettingsStore.getState().reset();

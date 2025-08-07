@@ -24,24 +24,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // Action to handle sign-in
   signIn: async () => {
+    console.log('[useAuthStore.ts] signIn action called.');
     set({ error: null }); // Clear previous errors
     try {
       await signInWithGoogle();
       // The onAuthStateChanged listener will update the 'user' state,
       // so we don't need to manually set it here based on the signIn result.
     } catch (err: any) {
-      console.error("AuthStore signIn error:", err);
+      console.error("[useAuthStore.ts] AuthStore signIn error:", err);
       set({ error: err.message || "Failed to sign in." });
     }
   },
 
   // Action to handle sign-out
   signOut: async () => {
+    console.log('[useAuthStore.ts] signOut action called.');
     set({ error: null }); // Clear previous errors
     try {
       await signOutUser();
     } catch (err: any) {
-      console.error("AuthStore signOut error:", err);
+      console.error("[useAuthStore.ts] AuthStore signOut error:", err);
       set({ error: err.message || "Failed to sign out." });
     }
   },
@@ -51,8 +53,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 // This part ensures our store's 'user' state is always in sync with Firebase Auth.
 // It runs only once when the module is loaded.
 const unsubscribe = subscribeToAuthChanges((user) => {
-  useAuthStore.setState({ user: user, isLoading: false }); // Update user and set loading to false
-  console.log("Auth State Updated:", user ? user.uid : "No user");
+  // DEBUG: Log exact auth state updates
+  useAuthStore.setState({ user: user, isLoading: false });
+  console.log(`%c[useAuthStore.ts] Auth State Updated: ${user ? user.uid : "No user"}, IsLoading: false`, 'color: brown;');
 });
 
 // Optional: You might want to handle unsubscription if your app could unmount this module,

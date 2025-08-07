@@ -6,36 +6,37 @@ import type { ISnapshotUpdater, ITurnResult } from './ISnapshotUpdater';
 import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
 
 export class SnapshotUpdater implements ISnapshotUpdater {
-  constructor(private gameStateManager: IGameStateManager) {}
+  constructor(private gameStateManager: IGameStateManager) {
+    console.log('[SnapshotUpdater.ts] SnapshotUpdater constructor called.');
+  }
 
   public applyTurnResultToSnapshot(snapshot: GameSnapshot, turnResult: ITurnResult): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyTurnResultToSnapshot: Starting for snapshot ${snapshot.id}. Turn: ${snapshot.currentTurn}`);
     const { parsedOutput, logEntry, playerAction } = turnResult;
 
-    return produce(snapshot, draft => {
-      // 1. Apply deltas and scene changes to get the next game state
+    const newSnapshot = produce(snapshot, draft => {
       let stateAfterDeltas = this.gameStateManager.applyDeltasToGameState(draft.gameState, parsedOutput.deltas);
       let finalGameState = this.gameStateManager.updateSceneState(stateAfterDeltas, parsedOutput.scene, parsedOutput.deltas);
 
-      // 2. Update the narration within the new game state
       finalGameState.narration = parsedOutput.prose;
       draft.gameState = finalGameState;
 
-      // 3. Update conversation history
       if (playerAction) {
         draft.conversationHistory.push({ role: 'user', content: playerAction });
       }
       draft.conversationHistory.push({ role: 'assistant', content: parsedOutput.prose });
       
-      // 4. Add the new log entry
       draft.logs.push(logEntry);
 
-      // 5. Increment turn and update timestamp
       draft.currentTurn += 1;
       draft.updatedAt = new Date().toISOString();
     });
+    console.log(`[SnapshotUpdater.ts] applyTurnResultToSnapshot: Finished. New snapshot ID: ${newSnapshot.id}.`);
+    return newSnapshot;
   }
 
   public applyCategoryRename(snapshot: GameSnapshot, oldName: string, newName: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyCategoryRename: ${oldName} -> ${newName}`);
     return produce(snapshot, draft => {
       const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.renameCategory(
         draft.gameState.worldState,
@@ -50,6 +51,7 @@ export class SnapshotUpdater implements ISnapshotUpdater {
   }
 
   public applyEntityRename(snapshot: GameSnapshot, category: string, oldName: string, newName: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyEntityRename: ${category}.${oldName} -> ${category}.${newName}`);
     return produce(snapshot, draft => {
       const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.renameEntity(
         draft.gameState.worldState,
@@ -65,6 +67,7 @@ export class SnapshotUpdater implements ISnapshotUpdater {
   }
   
   public applyCategoryDelete(snapshot: GameSnapshot, category: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyCategoryDelete: ${category}`);
      return produce(snapshot, draft => {
       const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.deleteCategory(
         draft.gameState.worldState,
@@ -78,6 +81,7 @@ export class SnapshotUpdater implements ISnapshotUpdater {
   }
 
   public applyEntityDelete(snapshot: GameSnapshot, category: string, entity: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyEntityDelete: ${category}.${entity}`);
      return produce(snapshot, draft => {
       const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.deleteEntity(
         draft.gameState.worldState,
@@ -92,6 +96,7 @@ export class SnapshotUpdater implements ISnapshotUpdater {
   }
 
   public applyKeyValueEdit(snapshot: GameSnapshot, key: string, value: any): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyKeyValueEdit: ${key} = ${JSON.stringify(value)}`);
      return produce(snapshot, draft => {
       draft.gameState.worldState = this.gameStateManager.editKeyValue(
         draft.gameState.worldState,
@@ -103,6 +108,7 @@ export class SnapshotUpdater implements ISnapshotUpdater {
   }
 
   public applyKeyDelete(snapshot: GameSnapshot, key: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyKeyDelete: ${key}`);
      return produce(snapshot, draft => {
       const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.deleteKey(
         draft.gameState.worldState,
@@ -116,7 +122,8 @@ export class SnapshotUpdater implements ISnapshotUpdater {
   }
 
   public applyPinToggle(snapshot: GameSnapshot, keyPath: string, type: 'variable' | 'entity' | 'category'): GameSnapshot {
-    return produce(snapshot, draft => {
+    console.log(`[SnapshotUpdater.ts] applyPinToggle: Starting for snapshot ${snapshot.id}, keyPath: ${keyPath}, type: ${type}.`);
+    const newSnapshot = produce(snapshot, draft => {
       const currentWorldState = draft.gameState.worldState || {};
       const currentPinnedKeys = draft.worldStatePinnedKeys || [];
       const newPinnedKeys = new Set(currentPinnedKeys);
@@ -124,7 +131,8 @@ export class SnapshotUpdater implements ISnapshotUpdater {
       const getAllChildVariableKeys = (basePath: string): string[] => {
         const nestedData = getNestedValue(currentWorldState, basePath.split('.'));
         if (typeof nestedData !== 'object' || nestedData === null) return [];
-        return Object.keys(flattenJsonObject(nestedData, basePath));
+        const flattened = flattenJsonObject(nestedData, basePath);
+        return Object.keys(flattened).filter(key => flattened[key] !== undefined); // Only include existing keys
       };
 
       let relevantKeysToToggle: string[] = [];
@@ -134,7 +142,16 @@ export class SnapshotUpdater implements ISnapshotUpdater {
         relevantKeysToToggle = getAllChildVariableKeys(keyPath);
       }
 
-      const shouldPin = relevantKeysToToggle.length > 0 && !relevantKeysToToggle.every(key => newPinnedKeys.has(key));
+      // If there are no keys to toggle (e.g., entity doesn't exist), do nothing.
+      if (relevantKeysToToggle.length === 0) {
+        console.warn(`[SnapshotUpdater.ts] applyPinToggle: No relevant keys found for ${type} at "${keyPath}". No change.`);
+        return; // No changes to draft
+      }
+      
+      const areAllChildrenCurrentlyPinned = relevantKeysToToggle.every(key => newPinnedKeys.has(key));
+      const shouldPin = !areAllChildrenCurrentlyPinned; 
+
+      console.log(`[SnapshotUpdater.ts] applyPinToggle: Relevant keys (${relevantKeysToToggle.length}): ${relevantKeysToToggle.join(', ')}. ShouldPin: ${shouldPin}`);
 
       relevantKeysToToggle.forEach(key => {
         if (shouldPin) {
@@ -144,8 +161,11 @@ export class SnapshotUpdater implements ISnapshotUpdater {
         }
       });
 
-      draft.worldStatePinnedKeys = Array.from(newPinnedKeys).sort(); // Sort for consistency
+      draft.worldStatePinnedKeys = Array.from(newPinnedKeys).sort();
       draft.updatedAt = new Date().toISOString();
+      console.log(`[SnapshotUpdater.ts] applyPinToggle: Final pinned keys count: ${draft.worldStatePinnedKeys.length}.`);
     });
+    console.log(`[SnapshotUpdater.ts] applyPinToggle: Finished. New snapshot ID: ${newSnapshot.id}.`);
+    return newSnapshot;
   }
 }

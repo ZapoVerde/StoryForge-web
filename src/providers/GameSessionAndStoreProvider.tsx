@@ -18,7 +18,9 @@ export const GameSessionAndStoreProvider: React.FC<GameSessionAndStoreProviderPr
   const gameSessionInstanceRef = useRef<IGameSession | null>(null);
 
   if (!gameSessionInstanceRef.current) {
-    console.log("GameSessionAndStoreProvider: Instantiating GameSession...");
+    // DEBUG: Log the very first instantiation
+    console.log('%c[GameSessionAndStoreProvider.tsx] Instantiating GameSession and Initializing GameStateStore for the first time.', 'color: blue; font-weight: bold;');
+
     
     // The GameSession constructor is now much cleaner
     gameSessionInstanceRef.current = new GameSession(
@@ -27,10 +29,14 @@ export const GameSessionAndStoreProvider: React.FC<GameSessionAndStoreProviderPr
       turnProcessor,
       snapshotUpdater
     );
-    
-    initializeGameStateStore(gameSessionInstanceRef.current);
-  }
 
+    // DEBUG: Confirm GameSession injection
+    initializeGameStateStore(gameSessionInstanceRef.current);
+  } else {
+    // DEBUG: Log if it's NOT the first time (should happen once per app lifecycle)
+    console.log('[GameSessionAndStoreProvider.tsx] Re-rendering, GameSession already instantiated.');
+  }   
+   
   return (
     <GameSessionProvider gameSession={gameSessionInstanceRef.current}>
       {children}

@@ -57,6 +57,9 @@ import { usePromptCardStore } from './state/usePromptCardStore';
 import { useLogStore } from './state/useLogStore';
 
 const App: React.FC = () => {
+  // DEBUG: Log App component renders
+  console.log('%c[App.tsx] App component rendering', 'color: purple; font-weight: bold;');
+
   const { themeMode } = useSettingsStore();
   const theme = React.useMemo(() => getAppTheme(themeMode), [themeMode]);
 
@@ -64,10 +67,13 @@ const App: React.FC = () => {
   const wasUserLoggedIn = useRef(!!user);
 
   useEffect(() => {
+    // DEBUG: Log App component useEffect execution
+    console.log('[App.tsx] App component useEffect fired. User:', user ? user.uid : 'null');
+
     const isLoggingOut = wasUserLoggedIn.current && !user;
 
     if (isLoggingOut) {
-      console.log("User is logging out. Resetting all data stores.");
+      console.log("[App.tsx] User is logging out. Resetting all data stores.");
       useGameStateStore.getState().reset();
       usePromptCardStore.getState().reset();
       useSettingsStore.getState().reset();
@@ -1420,36 +1426,37 @@ import type { ISnapshotUpdater, ITurnResult } from './ISnapshotUpdater';
 import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
 
 export class SnapshotUpdater implements ISnapshotUpdater {
-  constructor(private gameStateManager: IGameStateManager) {}
+  constructor(private gameStateManager: IGameStateManager) {
+    console.log('[SnapshotUpdater.ts] SnapshotUpdater constructor called.');
+  }
 
   public applyTurnResultToSnapshot(snapshot: GameSnapshot, turnResult: ITurnResult): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyTurnResultToSnapshot: Starting for snapshot ${snapshot.id}. Turn: ${snapshot.currentTurn}`);
     const { parsedOutput, logEntry, playerAction } = turnResult;
 
-    return produce(snapshot, draft => {
-      // 1. Apply deltas and scene changes to get the next game state
+    const newSnapshot = produce(snapshot, draft => {
       let stateAfterDeltas = this.gameStateManager.applyDeltasToGameState(draft.gameState, parsedOutput.deltas);
       let finalGameState = this.gameStateManager.updateSceneState(stateAfterDeltas, parsedOutput.scene, parsedOutput.deltas);
 
-      // 2. Update the narration within the new game state
       finalGameState.narration = parsedOutput.prose;
       draft.gameState = finalGameState;
 
-      // 3. Update conversation history
       if (playerAction) {
         draft.conversationHistory.push({ role: 'user', content: playerAction });
       }
       draft.conversationHistory.push({ role: 'assistant', content: parsedOutput.prose });
       
-      // 4. Add the new log entry
       draft.logs.push(logEntry);
 
-      // 5. Increment turn and update timestamp
       draft.currentTurn += 1;
       draft.updatedAt = new Date().toISOString();
     });
+    console.log(`[SnapshotUpdater.ts] applyTurnResultToSnapshot: Finished. New snapshot ID: ${newSnapshot.id}.`);
+    return newSnapshot;
   }
 
   public applyCategoryRename(snapshot: GameSnapshot, oldName: string, newName: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyCategoryRename: ${oldName} -> ${newName}`);
     return produce(snapshot, draft => {
       const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.renameCategory(
         draft.gameState.worldState,
@@ -1464,6 +1471,7 @@ export class SnapshotUpdater implements ISnapshotUpdater {
   }
 
   public applyEntityRename(snapshot: GameSnapshot, category: string, oldName: string, newName: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyEntityRename: ${category}.${oldName} -> ${category}.${newName}`);
     return produce(snapshot, draft => {
       const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.renameEntity(
         draft.gameState.worldState,
@@ -1479,6 +1487,7 @@ export class SnapshotUpdater implements ISnapshotUpdater {
   }
   
   public applyCategoryDelete(snapshot: GameSnapshot, category: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyCategoryDelete: ${category}`);
      return produce(snapshot, draft => {
       const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.deleteCategory(
         draft.gameState.worldState,
@@ -1492,6 +1501,7 @@ export class SnapshotUpdater implements ISnapshotUpdater {
   }
 
   public applyEntityDelete(snapshot: GameSnapshot, category: string, entity: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyEntityDelete: ${category}.${entity}`);
      return produce(snapshot, draft => {
       const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.deleteEntity(
         draft.gameState.worldState,
@@ -1506,6 +1516,7 @@ export class SnapshotUpdater implements ISnapshotUpdater {
   }
 
   public applyKeyValueEdit(snapshot: GameSnapshot, key: string, value: any): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyKeyValueEdit: ${key} = ${JSON.stringify(value)}`);
      return produce(snapshot, draft => {
       draft.gameState.worldState = this.gameStateManager.editKeyValue(
         draft.gameState.worldState,
@@ -1517,6 +1528,7 @@ export class SnapshotUpdater implements ISnapshotUpdater {
   }
 
   public applyKeyDelete(snapshot: GameSnapshot, key: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyKeyDelete: ${key}`);
      return produce(snapshot, draft => {
       const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.deleteKey(
         draft.gameState.worldState,
@@ -1530,7 +1542,8 @@ export class SnapshotUpdater implements ISnapshotUpdater {
   }
 
   public applyPinToggle(snapshot: GameSnapshot, keyPath: string, type: 'variable' | 'entity' | 'category'): GameSnapshot {
-    return produce(snapshot, draft => {
+    console.log(`[SnapshotUpdater.ts] applyPinToggle: Starting for snapshot ${snapshot.id}, keyPath: ${keyPath}, type: ${type}.`);
+    const newSnapshot = produce(snapshot, draft => {
       const currentWorldState = draft.gameState.worldState || {};
       const currentPinnedKeys = draft.worldStatePinnedKeys || [];
       const newPinnedKeys = new Set(currentPinnedKeys);
@@ -1538,7 +1551,8 @@ export class SnapshotUpdater implements ISnapshotUpdater {
       const getAllChildVariableKeys = (basePath: string): string[] => {
         const nestedData = getNestedValue(currentWorldState, basePath.split('.'));
         if (typeof nestedData !== 'object' || nestedData === null) return [];
-        return Object.keys(flattenJsonObject(nestedData, basePath));
+        const flattened = flattenJsonObject(nestedData, basePath);
+        return Object.keys(flattened).filter(key => flattened[key] !== undefined); // Only include existing keys
       };
 
       let relevantKeysToToggle: string[] = [];
@@ -1548,7 +1562,16 @@ export class SnapshotUpdater implements ISnapshotUpdater {
         relevantKeysToToggle = getAllChildVariableKeys(keyPath);
       }
 
-      const shouldPin = relevantKeysToToggle.length > 0 && !relevantKeysToToggle.every(key => newPinnedKeys.has(key));
+      // If there are no keys to toggle (e.g., entity doesn't exist), do nothing.
+      if (relevantKeysToToggle.length === 0) {
+        console.warn(`[SnapshotUpdater.ts] applyPinToggle: No relevant keys found for ${type} at "${keyPath}". No change.`);
+        return; // No changes to draft
+      }
+      
+      const areAllChildrenCurrentlyPinned = relevantKeysToToggle.every(key => newPinnedKeys.has(key));
+      const shouldPin = !areAllChildrenCurrentlyPinned; 
+
+      console.log(`[SnapshotUpdater.ts] applyPinToggle: Relevant keys (${relevantKeysToToggle.length}): ${relevantKeysToToggle.join(', ')}. ShouldPin: ${shouldPin}`);
 
       relevantKeysToToggle.forEach(key => {
         if (shouldPin) {
@@ -1558,9 +1581,12 @@ export class SnapshotUpdater implements ISnapshotUpdater {
         }
       });
 
-      draft.worldStatePinnedKeys = Array.from(newPinnedKeys).sort(); // Sort for consistency
+      draft.worldStatePinnedKeys = Array.from(newPinnedKeys).sort();
       draft.updatedAt = new Date().toISOString();
+      console.log(`[SnapshotUpdater.ts] applyPinToggle: Final pinned keys count: ${draft.worldStatePinnedKeys.length}.`);
     });
+    console.log(`[SnapshotUpdater.ts] applyPinToggle: Finished. New snapshot ID: ${newSnapshot.id}.`);
+    return newSnapshot;
   }
 }
 @@FILE: src/logic/TurnProcessor.ts
@@ -2391,13 +2417,12 @@ export function parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput 
 // src/logic/gameSession.ts
 import type { IGameRepository } from '../data/repositories/gameRepository';
 import type { IPromptCardRepository } from '../data/repositories/promptCardRepository';
-import type { GameSnapshot, GameState, LogEntry, PromptCard } from '../models';
+import type { GameSnapshot, GameState, LogEntry, Message, PromptCard } from '../models';
 import { formatIsoDateForDisplay } from '../utils/formatDate';
 import { generateUuid } from '../utils/uuid';
 import type { ITurnProcessor } from './ITurnProcessor';
 import type { ISnapshotUpdater } from './ISnapshotUpdater';
 
-// NOTE: The IGameSession interface is defined within this file.
 export interface IGameSession {
   initializeGame(userId: string, cardId: string, existingSnapshotId?: string): Promise<void>;
   processPlayerAction(action: string, useDummyNarrator: boolean): Promise<GameSnapshot>;
@@ -2416,8 +2441,6 @@ export interface IGameSession {
   deleteWorldEntity(category: string, entity: string): Promise<GameSnapshot | null>;
   editWorldKeyValue(key: string, value: any): Promise<GameSnapshot | null>;
   deleteWorldKey(key: string): Promise<GameSnapshot | null>;
-  
-  // NEW: Method for toggling world state pins, correctly implemented.
   toggleWorldStatePin(keyPath: string, type: 'variable' | 'entity' | 'category'): Promise<GameSnapshot | null>;
 }
 
@@ -2427,30 +2450,43 @@ export class GameSession implements IGameSession {
   private currentPromptCard: PromptCard | null = null;
 
   constructor(
-    public gameRepo: IGameRepository, // Keep public for settings screen access
+    public gameRepo: IGameRepository,
     private cardRepo: IPromptCardRepository,
     private turnProcessor: ITurnProcessor,
-    private snapshotUpdater: ISnapshotUpdater // The updater is injected here
-  ) {}
+    private snapshotUpdater: ISnapshotUpdater
+  ) {
+    console.log('[gameSession.ts] GameSession constructor called.');
+  }
 
   public async initializeGame(userId: string, cardId: string, existingSnapshotId?: string): Promise<void> {
-    console.log(`GameSession: Initializing game. User: ${userId}, Card: ${cardId}, Snapshot: ${existingSnapshotId}`);
+    console.log(`[gameSession.ts] initializeGame: Starting for User=${userId}, Card=${cardId}, Snapshot=${existingSnapshotId || 'new'}`);
     this.currentUserId = userId;
 
     if (existingSnapshotId) {
       await this.loadGame(userId, existingSnapshotId);
+      console.log(`[gameSession.ts] initializeGame: Loaded existing game ${existingSnapshotId}.`);
       return;
     }
 
     const card = await this.cardRepo.getPromptCard(userId, cardId);
-    if (!card) throw new Error(`PromptCard with ID ${cardId} not found.`);
+    if (!card) {
+      console.error(`[gameSession.ts] initializeGame: PromptCard with ID ${cardId} not found.`);
+      throw new Error(`PromptCard with ID ${cardId} not found.`);
+    }
     this.currentPromptCard = card;
 
     let initialWorldState = {};
     try {
-      if (card.worldStateInit) initialWorldState = JSON.parse(card.worldStateInit);
+      // Fix: Ensure that if card.worldStateInit is an empty string, it defaults to an empty object
+      if (card.worldStateInit) {
+        initialWorldState = JSON.parse(card.worldStateInit);
+      } else {
+        initialWorldState = {}; // Explicitly set to empty object if string is empty
+      }
     } catch (e) {
-      console.error("Failed to parse worldStateInit JSON:", e);
+      console.error("[gameSession.ts] initializeGame: Failed to parse worldStateInit JSON:", e);
+      // Fallback to empty object if parsing fails
+      initialWorldState = {};
     }
     
     const now = new Date().toISOString();
@@ -2471,19 +2507,22 @@ export class GameSession implements IGameSession {
       },
       conversationHistory: [{ role: 'assistant', content: firstTurnProse }],
       logs: [],
-      worldStatePinnedKeys: [], // Initialize pinned keys as empty
+      worldStatePinnedKeys: [],
     };
 
     this.currentSnapshot = initialSnapshot;
-    console.log(`GameSession: New game initialized with ID ${initialSnapshot.id}.`);
+    console.log(`%c[gameSession.ts] initializeGame: NEW game initialized with ID ${initialSnapshot.id}. currentSnapshot set.`, 'color: green;');
   }
 
   public async processFirstNarratorTurn(useDummyNarrator: boolean): Promise<GameSnapshot> {
+    console.log('[gameSession.ts] processFirstNarratorTurn: Starting.');
     if (!this.currentSnapshot || !this.currentUserId || !this.currentPromptCard) {
+      console.error('[gameSession.ts] processFirstNarratorTurn: Prerequisites missing.');
       throw new Error("Cannot process first turn: Game not initialized correctly.");
     }
     
     const aiConnections = await this.gameRepo.getAiConnections(this.currentUserId);
+    console.log(`[gameSession.ts] processFirstNarratorTurn: Calling turnProcessor.useDummyNarrator=${useDummyNarrator}.`);
     const turnResult = await this.turnProcessor.processFirstTurnNarratorResponse(
       this.currentUserId,
       this.currentPromptCard,
@@ -2492,20 +2531,25 @@ export class GameSession implements IGameSession {
       aiConnections
     );
 
-    // Use the snapshot updater to apply the turn result
+    console.log('[gameSession.ts] processFirstNarratorTurn: Calling snapshotUpdater.applyTurnResultToSnapshot.');
     const newSnapshot = this.snapshotUpdater.applyTurnResultToSnapshot(this.currentSnapshot, turnResult);
     
     this.currentSnapshot = newSnapshot;
-    await this.saveGame(newSnapshot); // Save after processing
+    console.log(`[gameSession.ts] processFirstNarratorTurn: newSnapshot ${newSnapshot.id} applied. Saving game...`);
+    await this.saveGame(newSnapshot);
+    console.log('[gameSession.ts] processFirstNarratorTurn: Finished and saved.');
     return newSnapshot;
   }
 
   public async processPlayerAction(action: string, useDummyNarrator: boolean): Promise<GameSnapshot> {
+    console.log(`[gameSession.ts] processPlayerAction: Starting for action: "${action.substring(0, 50)}..."`);
     if (!this.currentSnapshot || !this.currentUserId || !this.currentPromptCard) {
+      console.error('[gameSession.ts] processPlayerAction: Prerequisites missing.');
       throw new Error("Cannot process player action: Game not initialized correctly.");
     }
 
     const aiConnections = await this.gameRepo.getAiConnections(this.currentUserId);
+    console.log(`[gameSession.ts] processPlayerAction: Calling turnProcessor.useDummyNarrator=${useDummyNarrator}.`);
     const turnResult = await this.turnProcessor.processPlayerTurn(
       this.currentUserId,
       this.currentPromptCard,
@@ -2518,25 +2562,31 @@ export class GameSession implements IGameSession {
       aiConnections
     );
     
-    // Use the snapshot updater to apply the turn result, including player action
+    console.log('[gameSession.ts] processPlayerAction: Calling snapshotUpdater.applyTurnResultToSnapshot.');
     const newSnapshot = this.snapshotUpdater.applyTurnResultToSnapshot(this.currentSnapshot, { ...turnResult, playerAction: action });
     
     this.currentSnapshot = newSnapshot;
-    await this.saveGame(newSnapshot); // Save after processing
+    console.log(`[gameSession.ts] processPlayerAction: newSnapshot ${newSnapshot.id} applied. Saving game...`);
+    await this.saveGame(newSnapshot);
+    console.log('[gameSession.ts] processPlayerAction: Finished and saved.');
     return newSnapshot;
   }
 
-  // Helper to apply an update via the snapshot updater and then save.
   private async updateAndSave(updater: (snapshot: GameSnapshot) => GameSnapshot): Promise<GameSnapshot | null> {
-    if (!this.currentSnapshot) return null;
+    console.log(`[gameSession.ts] updateAndSave: Applying update and saving. currentSnapshot before update: ${this.currentSnapshot?.id || 'null'}`);
+    if (!this.currentSnapshot) {
+      console.warn('[gameSession.ts] updateAndSave: No currentSnapshot to update. Returning null.');
+      return null;
+    }
     
     const newSnapshot = updater(this.currentSnapshot);
-    this.currentSnapshot = newSnapshot; // Update local state first
-    await this.saveGame(newSnapshot); // Then persist
+    this.currentSnapshot = newSnapshot;
+    console.log(`[gameSession.ts] updateAndSave: currentSnapshot updated to ${this.currentSnapshot.id}. Persisting...`);
+    await this.saveGame(newSnapshot);
+    console.log('[gameSession.ts] updateAndSave: Persisted successfully.');
     return newSnapshot;
   }
 
-  // --- World State Modification Methods ---
   public async renameWorldCategory(oldName: string, newName: string): Promise<GameSnapshot | null> {
     return this.updateAndSave(snap => this.snapshotUpdater.applyCategoryRename(snap, oldName, newName));
   }
@@ -2561,40 +2611,58 @@ export class GameSession implements IGameSession {
     return this.updateAndSave(snap => this.snapshotUpdater.applyKeyDelete(snap, key));
   }
 
-  // NEW: Public method to call the pin toggle logic via the snapshot updater.
   public async toggleWorldStatePin(keyPath: string, type: 'variable' | 'entity' | 'category'): Promise<GameSnapshot | null> {
+    console.log(`[gameSession.ts] toggleWorldStatePin: Toggling pin for ${type} at path "${keyPath}".`);
     return this.updateAndSave(snap => this.snapshotUpdater.applyPinToggle(snap, keyPath, type));
   }
 
-  // --- Loading, Saving, and Getters ---
-
   public async loadGame(userId: string, snapshotId: string): Promise<void> {
+    console.log(`[gameSession.ts] loadGame: Attempting to load snapshot ${snapshotId} for user ${userId}.`);
     const snapshot = await this.gameRepo.getGameSnapshot(userId, snapshotId);
-    if (!snapshot) throw new Error(`Game snapshot ${snapshotId} not found.`);
+    if (!snapshot) {
+      console.error(`[gameSession.ts] loadGame: Snapshot ${snapshotId} not found.`);
+      throw new Error(`Game snapshot ${snapshotId} not found.`);
+    }
     const card = await this.cardRepo.getPromptCard(userId, snapshot.promptCardId);
-    if (!card) throw new Error(`PromptCard ${snapshot.promptCardId} not found.`);
+    if (!card) {
+      console.error(`[gameSession.ts] loadGame: PromptCard ${snapshot.promptCardId} not found for loaded game.`);
+      throw new Error(`PromptCard ${snapshot.promptCardId} not found.`);
+    }
     
     this.currentUserId = userId;
     this.currentSnapshot = snapshot;
     this.currentPromptCard = card;
+    console.log(`%c[gameSession.ts] loadGame: Successfully loaded snapshot ${snapshot.id} and card ${card.id}. currentSnapshot set.`, 'color: green;');
   }
 
   public async loadLastActiveGame(userId: string): Promise<boolean> {
+    console.log(`[gameSession.ts] loadLastActiveGame: Checking for last active game for user ${userId}.`);
     const allSnapshots = await this.gameRepo.getAllGameSnapshots(userId);
     if (allSnapshots.length > 0) {
-      // Load the most recent one
+      console.log(`[gameSession.ts] loadLastActiveGame: Found ${allSnapshots.length} snapshots. Loading most recent: ${allSnapshots[0].id}.`);
       await this.loadGame(userId, allSnapshots[0].id);
+      console.log('[gameSession.ts] loadLastActiveGame: Finished loading last active game. Returning true.');
       return true;
     }
+    console.log('[gameSession.ts] loadLastActiveGame: No last active game found. Returning false.');
     return false;
   }
 
   public async saveGame(snapshot: GameSnapshot): Promise<void> {
-    if (!this.currentUserId) throw new Error("User not initialized.");
+    console.log(`[gameSession.ts] saveGame: Attempting to save snapshot ${snapshot.id}.`);
+    if (!this.currentUserId) {
+      console.error('[gameSession.ts] saveGame: User not initialized during save. Throwing error.');
+      throw new Error("User not initialized.");
+    }
     await this.gameRepo.saveGameSnapshot(this.currentUserId, snapshot);
+    console.log(`[gameSession.ts] saveGame: Snapshot ${snapshot.id} saved successfully.`);
   }
 
-  public getCurrentGameSnapshot = () => this.currentSnapshot;
+  public getCurrentGameSnapshot = () => {
+    // DEBUG: Log currentSnapshot getter access
+    // console.log(`[gameSession.ts] getCurrentGameSnapshot: returning ${this.currentSnapshot?.id || 'null'}.`);
+    return this.currentSnapshot;
+  };
   public getCurrentPromptCard = () => this.currentPromptCard;
   public getCurrentGameState = () => this.currentSnapshot?.gameState || null;
   public getGameLogs = () => this.currentSnapshot?.logs || [];
@@ -3332,7 +3400,9 @@ export const GameSessionAndStoreProvider: React.FC<GameSessionAndStoreProviderPr
   const gameSessionInstanceRef = useRef<IGameSession | null>(null);
 
   if (!gameSessionInstanceRef.current) {
-    console.log("GameSessionAndStoreProvider: Instantiating GameSession...");
+    // DEBUG: Log the very first instantiation
+    console.log('%c[GameSessionAndStoreProvider.tsx] Instantiating GameSession and Initializing GameStateStore for the first time.', 'color: blue; font-weight: bold;');
+
     
     // The GameSession constructor is now much cleaner
     gameSessionInstanceRef.current = new GameSession(
@@ -3341,10 +3411,14 @@ export const GameSessionAndStoreProvider: React.FC<GameSessionAndStoreProviderPr
       turnProcessor,
       snapshotUpdater
     );
-    
-    initializeGameStateStore(gameSessionInstanceRef.current);
-  }
 
+    // DEBUG: Confirm GameSession injection
+    initializeGameStateStore(gameSessionInstanceRef.current);
+  } else {
+    // DEBUG: Log if it's NOT the first time (should happen once per app lifecycle)
+    console.log('[GameSessionAndStoreProvider.tsx] Re-rendering, GameSession already instantiated.');
+  }   
+   
   return (
     <GameSessionProvider gameSession={gameSessionInstanceRef.current}>
       {children}
@@ -3379,24 +3453,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // Action to handle sign-in
   signIn: async () => {
+    console.log('[useAuthStore.ts] signIn action called.');
     set({ error: null }); // Clear previous errors
     try {
       await signInWithGoogle();
       // The onAuthStateChanged listener will update the 'user' state,
       // so we don't need to manually set it here based on the signIn result.
     } catch (err: any) {
-      console.error("AuthStore signIn error:", err);
+      console.error("[useAuthStore.ts] AuthStore signIn error:", err);
       set({ error: err.message || "Failed to sign in." });
     }
   },
 
   // Action to handle sign-out
   signOut: async () => {
+    console.log('[useAuthStore.ts] signOut action called.');
     set({ error: null }); // Clear previous errors
     try {
       await signOutUser();
     } catch (err: any) {
-      console.error("AuthStore signOut error:", err);
+      console.error("[useAuthStore.ts] AuthStore signOut error:", err);
       set({ error: err.message || "Failed to sign out." });
     }
   },
@@ -3406,8 +3482,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 // This part ensures our store's 'user' state is always in sync with Firebase Auth.
 // It runs only once when the module is loaded.
 const unsubscribe = subscribeToAuthChanges((user) => {
-  useAuthStore.setState({ user: user, isLoading: false }); // Update user and set loading to false
-  console.log("Auth State Updated:", user ? user.uid : "No user");
+  // DEBUG: Log exact auth state updates
+  useAuthStore.setState({ user: user, isLoading: false });
+  console.log(`%c[useAuthStore.ts] Auth State Updated: ${user ? user.uid : "No user"}, IsLoading: false`, 'color: brown;');
 });
 
 // Optional: You might want to handle unsubscription if your app could unmount this module,
@@ -3418,6 +3495,7 @@ const unsubscribe = subscribeToAuthChanges((user) => {
 // src/state/useGameStateStore.ts
 
 import { create } from 'zustand';
+import type {  StoreApi } from 'zustand';
 import { useSettingsStore } from './useSettingsStore';
 import type { GameSnapshot, GameState, LogEntry, Message } from '../models';
 import type { IGameSession } from '../logic/gameSession';
@@ -3425,35 +3503,26 @@ import type { IGameSession } from '../logic/gameSession';
 // Module-level variable to hold the injected GameSession instance
 let _gameSessionInstance: IGameSession | null = null;
 
-/**
- * Initializes the GameStateStore with the GameSession instance.
- * This should be called once from a provider component.
- */
 export const initializeGameStateStore = (gameSession: IGameSession) => {
   if (_gameSessionInstance === null) {
     _gameSessionInstance = gameSession;
-    console.log("GameStateStore: GameSession instance injected.");
+    console.log('%c[useGameStateStore.ts] GameSession instance injected successfully.', 'color: green;');
+  } else {
+    console.warn('[useGameStateStore.ts] Attempted to re-inject GameSession instance. This should only happen once.');
   }
 };
 
-// Define the initial state, excluding actions.
-const initialState = {
-  currentSnapshot: null,
-  narratorInputText: '',
-  narratorScrollPosition: 0,
-  gameError: null,
-  gameLoading: false,
-  isProcessingTurn: false,
-};
-
-// Define the full store type including state and actions
-interface GameStateStore {
+// --- Define State and Actions Interfaces Separately ---
+interface GameStateState {
   currentSnapshot: GameSnapshot | null;
   narratorInputText: string;
   narratorScrollPosition: number;
   gameError: string | null;
-  gameLoading: boolean;
-  isProcessingTurn: boolean;
+  gameLoading: boolean; // This should only be true for major loading operations (initial game load, switching games)
+  isProcessingTurn: boolean; // This is for AI turn processing, separate from gameLoading
+}
+
+interface GameStateActions {
   initializeGame: (userId: string, cardId: string, existingSnapshotId?: string) => Promise<void>;
   processPlayerAction: (action: string) => Promise<void>;
   processFirstNarratorTurn: () => Promise<void>;
@@ -3468,146 +3537,223 @@ interface GameStateStore {
   deleteWorldEntity: (category: string, entity: string) => Promise<void>;
   editWorldKeyValue: (key: string, value: any) => Promise<void>;
   deleteWorldKey: (key: string) => Promise<void>;
-  reset: () => void;
   toggleWorldStatePin: (keyPath: string, type: 'variable' | 'entity' | 'category') => Promise<void>;
+  reset: () => void;
 }
 
-export const useGameStateStore = create<GameStateStore>((set, get) => {
-  // --- Internal Helpers ---
+// Combine them into the final store type
+type GameStateStore = GameStateState & GameStateActions;
 
-  /**
-   * Safely retrieves the game session instance, throwing an error if not initialized.
-   */
+// --- Define the initial state ---
+const initialState: GameStateState = {
+  currentSnapshot: null,
+  narratorInputText: '',
+  narratorScrollPosition: 0,
+  gameError: null,
+  gameLoading: false, // Initial state: not loading
+  isProcessingTurn: false,
+};
+
+// --- Create the store with separated actions ---
+export const useGameStateStore = create<GameStateStore>((set, get) => {
   const getGameSession = (): IGameSession => {
     if (!_gameSessionInstance) {
-      throw new Error("Game session instance not initialized. Ensure GameSessionAndStoreProvider is a parent component.");
+      console.error('%c[useGameStateStore.ts] CRITICAL ERROR: GameSession instance is NULL when getGameSession() called!', 'color: red; font-weight: bold;');
+      throw new Error("Game session instance not initialized.");
     }
     return _gameSessionInstance;
   };
 
-  /**
-   * Centralized function to update the store's state from a GameSnapshot.
-   */
-  const syncStateWithSnapshot = (snapshot: GameSnapshot | null) => {
-    set({ currentSnapshot: snapshot });
+    // Helper to sync state from a snapshot
+    const syncStateWithSnapshot = (snapshot: GameSnapshot | null) => {
+      // DEBUG: Log every time currentSnapshot is updated
+      // Removed gameLoading from this log as it's being de-coupled for minor updates
+      console.log(`%c[useGameStateStore.ts] syncStateWithSnapshot: Updating currentSnapshot to ${snapshot ? snapshot.id : 'null'}. isProcessingTurn: ${get().isProcessingTurn}`, 'color: dodgerblue;');
+      set({ currentSnapshot: snapshot });
+      // After setting the snapshot, let's verify immediately
+      const verifySnapshot = get().currentSnapshot;
+      console.log(`%c[useGameStateStore.ts] syncStateWithSnapshot: currentSnapshot is now ${verifySnapshot ? verifySnapshot.id : 'null'}.`, 'color: dodgerblue;');
   };
 
-  /**
-   * Generic wrapper for performing updates that modify the world state.
-   */
   const performWorldStateUpdate = async (updateFn: (session: IGameSession) => Promise<GameSnapshot | null>) => {
-    set({ gameLoading: true, gameError: null }); // Using gameLoading for this quick action
+    // DEBUG: Log start of any world state modification action
+    console.log('%c[useGameStateStore.ts] performWorldStateUpdate: Starting a world state modification.', 'color: purple;');
+    // It's crucial NOT to set gameLoading: true here, as this is for minor UI updates.
+    // AuthOrchestrator relies on gameLoading only for major app-level loads.
+    set({ gameError: null });
     try {
-      const session = getGameSession();
-      const updatedSnapshot = await updateFn(session);
-      syncStateWithSnapshot(updatedSnapshot);
+        const session = getGameSession();
+        const updatedSnapshot = await updateFn(session);
+        syncStateWithSnapshot(updatedSnapshot);
     } catch (error: any) {
-      console.error("Error performing world state update:", error);
-      set({ gameError: error.message });
+        console.error("[useGameStateStore.ts] performWorldStateUpdate: Error during update:", error);
+        set({ gameError: error.message });
     } finally {
-      set({ gameLoading: false });
+        // This is a crucial safety measure. Even if `gameLoading` wasn't explicitly set to `true`
+        // by this function, ensuring it's `false` here guarantees the global loading screen
+        // is dismissed after any world state modification.
+        set({ gameLoading: false });
+        console.log('[useGameStateStore.ts] performWorldStateUpdate: Finished a world state modification.');
     }
   };
-  return {
-    ...initialState,
 
-    // --- Actions ---
 
-    initializeGame: async (userId, cardId, existingSnapshotId) => {
-      set({ gameLoading: true, gameError: null });
-      try {
-        const gameSession = getGameSession();
-        await gameSession.initializeGame(userId, cardId, existingSnapshotId);
-        syncStateWithSnapshot(gameSession.getCurrentGameSnapshot());
-      } catch (error: any) {
-        set({ gameError: error.message, gameLoading: false });
-      }
-    },
+    // Return the state AND actions. Actions are defined here once.
+    return {
+        ...initialState,
 
-    processFirstNarratorTurn: async () => {
-      set({ isProcessingTurn: true, gameError: null });
-      const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
-      try {
-        const gameSession = getGameSession();
-        const updatedSnapshot = await gameSession.processFirstNarratorTurn(useDummyNarrator);
-        syncStateWithSnapshot(updatedSnapshot);
-      } catch (error: any) {
-        set({ gameError: error.message, isProcessingTurn: false });
-      }
-    },
-
-    processPlayerAction: async (action) => {
-      set({ isProcessingTurn: true, gameError: null, narratorInputText: '' });
-      const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
-      try {
-        const gameSession = getGameSession();
-        const updatedSnapshot = await gameSession.processPlayerAction(action, useDummyNarrator);
-        syncStateWithSnapshot(updatedSnapshot);
-      } catch (error: any) {
-        set({ gameError: error.message, isProcessingTurn: false });
-      }
-    },
-
-    saveGame: async () => {
-      const { currentSnapshot } = get();
-      if (!currentSnapshot) return;
-      try {
-        await getGameSession().saveGame(currentSnapshot);
-      } catch (error: any) {
-        set({ gameError: error.message });
-      }
-    },
-
-    loadGame: async (userId, snapshotId) => {
-      set({ gameLoading: true, gameError: null });
-      try {
-        const gameSession = getGameSession();
-        await gameSession.loadGame(userId, snapshotId);
-        syncStateWithSnapshot(gameSession.getCurrentGameSnapshot());
-      } catch (error: any) {
-        set({ gameError: error.message, gameLoading: false });
-      }
-    },
-    
-    loadLastActiveGame: async (userId: string): Promise<boolean> => {
-        set({ gameLoading: true, gameError: null });
-        try {
+        initializeGame: async (userId, cardId, existingSnapshotId) => {
+          console.log(`[useGameStateStore.ts] initializeGame action: userId=${userId}, cardId=${cardId}, existingSnapshotId=${existingSnapshotId}`);
+          set({ gameLoading: true, gameError: null }); // Set gameLoading for this major operation
+          try {
             const gameSession = getGameSession();
-            const gameLoaded = await gameSession.loadLastActiveGame(userId);
+            await gameSession.initializeGame(userId, cardId, existingSnapshotId);
             syncStateWithSnapshot(gameSession.getCurrentGameSnapshot());
-            set({ gameLoading: false });
-            return gameLoaded;
-        } catch (error: any) {
-            set({ gameError: error.message, gameLoading: false });
-            return false;
-        }
-    },
+          } catch (error: any) {
+            console.error("[useGameStateStore.ts] initializeGame action ERROR:", error);
+            set({ gameError: error.message });
+          } finally {
+            set({ gameLoading: false }); // Reset gameLoading regardless of success/failure
+          }
+        },
 
-    updateNarratorInputText: (text) => set({ narratorInputText: text }),
-    updateNarratorScrollPosition: (position) => set({ narratorScrollPosition: position }),
+        processFirstNarratorTurn: async () => {
+          console.log('[useGameStateStore.ts] processFirstNarratorTurn action started.');
+          set({ isProcessingTurn: true, gameError: null });
+          const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
+          try {
+            const gameSession = getGameSession();
+            const updatedSnapshot = await gameSession.processFirstNarratorTurn(useDummyNarrator);
+            syncStateWithSnapshot(updatedSnapshot);
+          } catch (error: any) {
+             console.error("[useGameStateStore.ts] processFirstNarratorTurn action ERROR:", error);
+             set({ gameError: error.message });
+          } finally {
+            set({ isProcessingTurn: false });
+            console.log('[useGameStateStore.ts] processFirstNarratorTurn action finished.');
+          }
+        },
 
-    // Refactored World State modifications using the helper
-    renameWorldCategory: (oldName, newName) => performWorldStateUpdate(session => session.renameWorldCategory(oldName, newName)),
-    renameWorldEntity: (category, oldName, newName) => performWorldStateUpdate(session => session.renameWorldEntity(category, oldName, newName)),
-    deleteWorldCategory: (category) => performWorldStateUpdate(session => session.deleteWorldCategory(category)),
-    deleteWorldEntity: (category, entity) => performWorldStateUpdate(session => session.deleteWorldEntity(category, entity)),
-    editWorldKeyValue: (key, value) => performWorldStateUpdate(session => session.editWorldKeyValue(key, value)),
-    deleteWorldKey: (key) => performWorldStateUpdate(session => session.deleteWorldKey(key)),
-    toggleWorldStatePin: (key, type) => performWorldStateUpdate(session => session.toggleWorldStatePin(key, type)),
+        processPlayerAction: async (action) => {
+          console.log(`[useGameStateStore.ts] processPlayerAction action started. Action: "${action}"`);
+          set({ isProcessingTurn: true, gameError: null, narratorInputText: '' });
+          const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
+          try {
+            const gameSession = getGameSession();
+            const updatedSnapshot = await gameSession.processPlayerAction(action, useDummyNarrator);
+            syncStateWithSnapshot(updatedSnapshot);
+          } catch (error: any) {
+            console.error("[useGameStateStore.ts] processPlayerAction action ERROR:", error);
+            set({ gameError: error.message });
+          } finally {
+             set({ isProcessingTurn: false });
+             console.log('[useGameStateStore.ts] processPlayerAction action finished.');
+          }
+        },
 
-    reset: () => {
-      console.log("Resetting GameStateStore.");
-      set(initialState);
-    },
-  };
+        saveGame: async () => {
+          console.log('[useGameStateStore.ts] saveGame action called.');
+          const { currentSnapshot } = get();
+          if (!currentSnapshot) {
+            console.warn('[useGameStateStore.ts] saveGame action: No currentSnapshot to save.');
+            return;
+          }
+          try {
+            await getGameSession().saveGame(currentSnapshot);
+            console.log(`[useGameStateStore.ts] saveGame action: Snapshot ${currentSnapshot.id} saved.`);
+          } catch (error: any) {
+            console.error("[useGameStateStore.ts] saveGame action ERROR:", error);
+            set({ gameError: error.message });
+          }
+        },
+        
+        loadGame: async (userId, snapshotId) => {
+            console.log(`[useGameStateStore.ts] loadGame action: userId=${userId}, snapshotId=${snapshotId}`);
+            set({ gameLoading: true, gameError: null }); // Set gameLoading for this major operation
+            try {
+                const gameSession = getGameSession();
+                await gameSession.loadGame(userId, snapshotId);
+                syncStateWithSnapshot(gameSession.getCurrentGameSnapshot());
+            } catch (error: any) {
+                console.error("[useGameStateStore.ts] loadGame action ERROR:", error);
+                set({ gameError: error.message });
+            } finally {
+                set({ gameLoading: false }); // Reset gameLoading regardless of success/failure
+                console.log('[useGameStateStore.ts] loadGame action finished.');
+            }
+        },
+
+        loadLastActiveGame: async (userId: string): Promise<boolean> => {
+            console.log('%c[useGameStateStore.ts] loadLastActiveGame action called.', 'color: blue; font-weight: bold;');
+            set({ gameLoading: true, gameError: null }); // Set gameLoading for this major operation
+            try {
+                const gameSession = getGameSession();
+                const gameLoaded = await gameSession.loadLastActiveGame(userId);
+                // DEBUG: Check what gameSession.getCurrentGameSnapshot() returns immediately after load
+                const snapshotAfterLoad = gameSession.getCurrentGameSnapshot();
+                console.log(`%c[useGameStateStore.ts] gameSession.getCurrentGameSnapshot() after loadLastActiveGame: ${snapshotAfterLoad ? snapshotAfterLoad.id : 'null'}`, 'color: blue;');
+                
+                syncStateWithSnapshot(snapshotAfterLoad); // Use the snapshot directly from session
+                console.log(`%c[useGameStateStore.ts] loadLastActiveGame action finished. Game loaded: ${gameLoaded}`, 'color: blue; font-weight: bold;');
+                return gameLoaded;
+            } catch (error: any) {
+                console.error("%c[useGameStateStore.ts] loadLastActiveGame action FAILED with error:", 'color: red; font-weight: bold;', error);
+                set({ gameError: error.message });
+                return false;
+            } finally {
+                set({ gameLoading: false }); // Reset gameLoading regardless of success/failure
+            }
+        },
+
+        updateNarratorInputText: (text) => {
+          // DEBUG: Log input text changes if not too frequent
+          // console.log(`[useGameStateStore.ts] updateNarratorInputText: "${text.substring(0, 30)}..."`);
+          set({ narratorInputText: text });
+        },
+        updateNarratorScrollPosition: (position) => {
+          // DEBUG: Log scroll position changes
+          // console.log(`[useGameStateStore.ts] updateNarratorScrollPosition: ${position}`);
+          set({ narratorScrollPosition: position });
+        },
+
+        renameWorldCategory: (oldName, newName) => performWorldStateUpdate(session => session.renameWorldCategory(oldName, newName)),
+        renameWorldEntity: (category, oldName, newName) => performWorldStateUpdate(session => session.renameWorldEntity(category, oldName, newName)),
+        deleteWorldCategory: (category) => performWorldStateUpdate(session => session.deleteWorldCategory(category)),
+        deleteWorldEntity: (category, entity) => performWorldStateUpdate(session => session.deleteWorldEntity(category, entity)),
+        editWorldKeyValue: (key, value) => performWorldStateUpdate(session => session.editWorldKeyValue(key, value)),
+        deleteWorldKey: (key) => performWorldStateUpdate(session => session.deleteWorldKey(key)),
+        toggleWorldStatePin: (key, type) => performWorldStateUpdate(session => session.toggleWorldStatePin(key, type)),
+
+        reset: () => {
+          console.log('%c[useGameStateStore.ts] RESETTING GameStateStore to initialState.', 'color: red; font-weight: bold;');
+          set(initialState);
+        },
+    };
 });
 
+
 // --- Selectors ---
-// Components should use these selectors to get derived data from the snapshot.
-export const selectCurrentGameState = (state: GameStateStore): GameState | null => state.currentSnapshot?.gameState ?? null;
-export const selectGameLogs = (state: GameStateStore): LogEntry[] => state.currentSnapshot?.logs ?? [];
-export const selectConversationHistory = (state: GameStateStore): Message[] => state.currentSnapshot?.conversationHistory ?? [];
-export const selectWorldStatePinnedKeys = (state: GameStateStore): string[] => state.currentSnapshot?.worldStatePinnedKeys ?? [];
+// DEBUG: Log when selectors are accessed. Be careful, this can be noisy.
+export const selectCurrentGameState = (state: GameStateStore): GameState | null => {
+  const gameState = state.currentSnapshot?.gameState ?? null;
+  // console.log(`[useGameStateStore.ts] Selector: selectCurrentGameState. State ID: ${state.currentSnapshot?.id || 'null'}. GameState: ${gameState ? 'present' : 'null'}`);
+  return gameState;
+};
+export const selectGameLogs = (state: GameStateStore): LogEntry[] => {
+  const logs = state.currentSnapshot?.logs ?? [];
+  // console.log(`[useGameStateStore.ts] Selector: selectGameLogs. State ID: ${state.currentSnapshot?.id || 'null'}. Logs Count: ${logs.length}`);
+  return logs;
+};
+export const selectConversationHistory = (state: GameStateStore): Message[] => {
+  const history = state.currentSnapshot?.conversationHistory ?? [];
+  // console.log(`[useGameStateStore.ts] Selector: selectConversationHistory. State ID: ${state.currentSnapshot?.id || 'null'}. History Count: ${history.length}`);
+  return history;
+};
+export const selectWorldStatePinnedKeys = (state: GameStateStore): string[] => {
+  const pinnedKeys = state.currentSnapshot?.worldStatePinnedKeys ?? [];
+  // console.log(`[useGameStateStore.ts] Selector: selectWorldStatePinnedKeys. State ID: ${state.currentSnapshot?.id || 'null'}. Pinned Keys Count: ${pinnedKeys.length}`);
+  return pinnedKeys;
+};
 @@FILE: src/state/useLogStore.ts
 // src/state/useLogStore.ts
 
@@ -4304,41 +4450,78 @@ export const AiSettingsEditor: React.FC<AiSettingsEditorProps> = ({
   );
 };
 @@FILE: src/ui/components/AuthOrchestrator.tsx
-// src/components/AuthOrchestrator.tsx
-import React, { useState, useEffect } from 'react';
+// src/ui/components/AuthOrchestrator.tsx
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { Box, CircularProgress, Typography } from '@mui/material';
 
 const AuthOrchestrator: React.FC = () => {
+  console.log('%c[AuthOrchestrator.tsx] Component rendering.', 'color: green;');
+
   const { user } = useAuthStore();
-  const { loadLastActiveGame, gameLoading } = useGameStateStore();
+  const gameLoading = useGameStateStore(state => state.gameLoading); 
   const navigate = useNavigate();
   const location = useLocation();
-  const [initialLoadChecked, setInitialLoadChecked] = useState(false);
+  const initialLoadAttempted = useRef(false);
+
+  // Capture current action references for debugging useEffect dependencies
+  const loadLastActiveGameAction = useGameStateStore(state => state.loadLastActiveGame);
+  const userRef = useRef(user);
+  const gameLoadingRef = useRef(gameLoading);
+  const locationPathnameRef = useRef(location.pathname);
+
 
   useEffect(() => {
-    if (!user || initialLoadChecked) {
-      return;
-    }
+    // DEBUG: Log dependency changes
+    console.log('%c[AuthOrchestrator.tsx] useEffect triggered.', 'color: blue;');
+    if (userRef.current !== user) console.log(`[AuthOrchestrator.tsx] useEffect dependency change: user from ${userRef.current?.uid || 'null'} to ${user?.uid || 'null'}`);
+    if (gameLoadingRef.current !== gameLoading) console.log(`[AuthOrchestrator.tsx] useEffect dependency change: gameLoading from ${gameLoadingRef.current} to ${gameLoading}`);
+    if (locationPathnameRef.current !== location.pathname) console.log(`[AuthOrchestrator.tsx] useEffect dependency change: location.pathname from ${locationPathnameRef.current} to ${location.pathname}`);
+    
+    // Update refs for next comparison
+    userRef.current = user;
+    gameLoadingRef.current = gameLoading;
+    locationPathnameRef.current = location.pathname;
 
-    console.log("AuthOrchestrator: User authenticated, loading last active game...");
-    loadLastActiveGame(user.uid).then((gameLoaded) => {
-      setInitialLoadChecked(true);
-      // Redirect only if the user is at the root path after login.
-      // This avoids overriding intentional navigation to other pages like /cards or /settings.
-      if (location.pathname === '/') {
-        if (gameLoaded) {
-          navigate('/game', { replace: true });
+
+    // Logic to prevent re-attempts for game loading
+    if (user && !initialLoadAttempted.current) {
+      initialLoadAttempted.current = true; // Mark that we are attempting this load
+      
+      console.log(`%c[AuthOrchestrator.tsx] Authenticated user (${user.uid}), attempting initial game load.`, 'color: orange; font-weight: bold;');
+
+      loadLastActiveGameAction(user.uid).then((gameLoaded) => {
+        console.log(`%c[AuthOrchestrator.tsx] loadLastActiveGameAction resolved. Game loaded: ${gameLoaded}. Current path: ${location.pathname}`, 'color: orange;');
+        if (location.pathname === '/') {
+          if (gameLoaded) {
+            console.log('[AuthOrchestrator.tsx] Navigating to /game');
+            navigate('/game', { replace: true });
+          } else {
+            console.log('[AuthOrchestrator.tsx] Navigating to /library (no game loaded)');
+            navigate('/library', { replace: true });
+          }
         } else {
-          navigate('/library', { replace: true });
+             console.log(`[AuthOrchestrator.tsx] Not navigating from non-root path: ${location.pathname}`);
         }
-      }
-    });
-  }, [user, initialLoadChecked, loadLastActiveGame, navigate, location.pathname]);
+      }).catch((error) => {
+          console.error("[AuthOrchestrator.tsx] Error during loadLastActiveGameAction:", error);
+          if (location.pathname === '/') {
+              navigate('/library', { replace: true });
+          }
+      });
+    } else if (!user && initialLoadAttempted.current) {
+        // If user logs out and we had previously attempted to load, reset the flag.
+        console.log('[AuthOrchestrator.tsx] User logged out, resetting initialLoadAttempted flag.');
+        initialLoadAttempted.current = false;
+    } else {
+        console.log('[AuthOrchestrator.tsx] useEffect: No user or initialLoadAttempted already true. Skipping load logic.');
+    }
+  }, [user, gameLoading, location.pathname, navigate, loadLastActiveGameAction]); // loadLastActiveGameAction is now a stable reference due to Zustand's action pattern.
 
-  if (!initialLoadChecked || gameLoading) {
+  if ((user && !initialLoadAttempted.current) || gameLoading) {
+    console.log(`[AuthOrchestrator.tsx] Displaying loading screen. User: ${user ? 'present' : 'null'}, InitialLoadAttempted: ${initialLoadAttempted.current}, GameLoading: ${gameLoading}`);
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
@@ -4347,7 +4530,7 @@ const AuthOrchestrator: React.FC = () => {
     );
   }
 
-  // Once the orchestration is complete, render the designated child route.
+  console.log('[AuthOrchestrator.tsx] Rendering Outlet (loading complete).');
   return <Outlet />;
 };
 
@@ -4895,11 +5078,11 @@ export const PinnedEntityGroup: React.FC<PinnedEntityGroupProps> = ({
 
 @@FILE: src/ui/components/PinnedItemsView.tsx
 // src/ui/components/PinnedItemsView.tsx
-
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback } from 'react'; // Add useCallback
 import { Box, Typography, Paper, Stack } from '@mui/material';
 import type { GameState } from '../../models';
-import { useGameStateStore } from '../../state/useGameStateStore';
+// Import the specific selectors for cleaner access and better type inference
+import { useGameStateStore, selectWorldStatePinnedKeys } from '../../state/useGameStateStore';
 import { flattenJsonObject, getNestedValue } from '../../utils/jsonUtils'; // Ensure getNestedValue is imported
 import { PinnedEntityGroup } from './PinnedEntityGroup';
 
@@ -4907,76 +5090,103 @@ interface PinnedItemsViewProps {
   gameState: GameState;
 }
 
-export const PinnedItemsView: React.FC<PinnedItemsViewProps> = ({ gameState }) => {
-  // Directly select worldStatePinnedKeys and the actions from the store
-  // Make sure currentGameState is destructured here if you use it in the component's render or memoized values.
-  const { worldStatePinnedKeys, unpinAllForEntity, unpinIndividualVariable } = useGameStateStore();
+export const PinnedItemsView: React.FC<PinnedItemsViewProps> = React.memo(
+  ({ gameState }) => {
+    // Correctly select worldStatePinnedKeys using the selector.
+    // This ensures it comes from the currentSnapshot and is typed as string[].
+    const worldStatePinnedKeys = useGameStateStore(selectWorldStatePinnedKeys);
+    // Directly get the action from the store for stability
+    const toggleWorldStatePin = useGameStateStore(state => state.toggleWorldStatePin);
 
-  // IMPORTANT: Ensure this `worldState` is the actual, current GameState from the prop.
-  // We're relying on `gameState` prop being updated by GameScreen
-  const worldState = gameState?.worldState || {};
+    // IMPORTANT: Ensure this `worldState` is the actual, current GameState from the prop.
+    // We're relying on `gameState` prop being updated by GameScreen
+    const worldState = gameState?.worldState || {};
 
-  // Memoize the flattened world state. This should only re-run if the gameState.worldState object reference changes.
-  const flattenedWorld = React.useMemo(() => {
-    return flattenJsonObject(worldState);
-  }, [worldState]); // Depend on the worldState object itself
+    // --- ADD THESE NEW DEBUG LINES HERE ---
+    console.log('%c[PinnedItemsView.tsx] Component re-rendered (from GameScreen).', 'color: #8B4513; font-weight: bold;');
+    console.log('[PinnedItemsView.tsx] Received gameState prop:', JSON.stringify(gameState, null, 2));
+    console.log('[PinnedItemsView.tsx] Extracted worldState from prop (gameState?.worldState):', JSON.stringify(worldState, null, 2));
+    console.log('[PinnedItemsView.tsx] Extracted worldState keys length (gameState?.worldState):', Object.keys(worldState).length);
+    console.log('[PinnedItemsView.tsx] worldStatePinnedKeys from store directly:', worldStatePinnedKeys);
+    // --- END NEW DEBUG LINES ---
+
+    // Memoize the flattened world state. This should only re-run if the gameState.worldState object reference changes.
+    const flattenedWorld = React.useMemo(() => {
+      return flattenJsonObject(worldState);
+    }, [worldState]); // Depend on the worldState object itself
 
 
-  // Memoize the list of items to be displayed (key-value pairs)
-  // This is the array that feeds into the grouping logic.
-  const pinnedItems = React.useMemo(() => {
-    // Filter `worldStatePinnedKeys` directly from the store based on `flattenedWorld`'s existence
-    const items = worldStatePinnedKeys
-      .map(key => ({
-        key,
-        value: flattenedWorld[key], // Access value from the memoized flattened object
-      }))
-      .filter(item => {
-          // This filter is critical. An item should only be considered if its value is not undefined.
-          // This handles cases where a pinned item might no longer exist in the worldState.
-          return item.value !== undefined;
+    // Memoize the list of items to be displayed (key-value pairs)
+    // This is the array that feeds into the grouping logic.
+    const pinnedItems = React.useMemo(() => {
+      // Filter `worldStatePinnedKeys` directly from the store based on `flattenedWorld`'s existence
+      const items = worldStatePinnedKeys
+        .map((key: string) => ({ // Explicitly type 'key'
+          key,
+          value: flattenedWorld[key], // Access value from the memoized flattened object
+        }))
+        .filter((item: { key: string; value: any }) => { // Explicitly type 'item'
+            // This filter is critical. An item should only be considered if its value is not undefined.
+            // This handles cases where a pinned item might no longer exist in the worldState.
+            return item.value !== undefined;
+        });
+
+        console.log("[PinnedItemsView:pinnedItems] Calculated pinnedItems. Length:", items.length, "Items:", items);
+        return items;
+    }, [worldStatePinnedKeys, flattenedWorld]); // Depend on both for re-calculation
+
+    // Grouped pinned items logic
+    const groupedPinnedItems = React.useMemo(() => {
+      const grouped: { [entityPath: string]: { label: string; value: any; fullKey: string }[] } = {};
+      pinnedItems.forEach(item => {
+        const parts = item.key.split('.');
+        if (parts.length >= 2) {
+          const secondPart = parts[1];
+          const isTaggedEntity = secondPart.startsWith('#') || secondPart.startsWith('@') || secondPart.startsWith('$');
+          let entityPath: string;
+          let label: string;
+
+          if (parts.length >= 3 && isTaggedEntity) {
+            entityPath = parts.slice(0, 2).join('.');
+            label = parts.slice(2).join('.');
+          } else {
+            entityPath = parts[0];
+            label = parts.slice(1).join('.');
+          }
+
+          // This fallback might have been the source of the 31 vs 32 discrepancy if a root-level key was accidentally pinned as a variable
+          // but based on your logs, all pinned keys seem deeply nested. Let's keep it robust.
+          if (label === '') {
+            label = parts[parts.length - 1]; // Fallback, e.g., if key is "world"
+          }
+
+          grouped[entityPath] = grouped[entityPath] || [];
+          grouped[entityPath].push({ label, value: item.value, fullKey: item.key });
+        }
       });
+      // Sort attributes within each group for consistent rendering
+      Object.keys(grouped).forEach(entityPath => {
+        grouped[entityPath].sort((a, b) => a.label.localeCompare(b.label));
+      });
+      // --- ADD THESE NEW DEBUG LINES HERE ---
+    console.log('%c[PinnedItemsView.tsx] Component re-rendered (from GameScreen).', 'color: #8B4513; font-weight: bold;');
+    console.log('[PinnedItemsView.tsx] Received gameState prop:', JSON.stringify(gameState, null, 2));
+    console.log('[PinnedItemsView.tsx] Extracted worldState from prop (gameState?.worldState):', JSON.stringify(worldState, null, 2));
+    console.log('[PinnedItemsView.tsx] Extracted worldState keys length (gameState?.worldState):', Object.keys(worldState).length);
+    console.log('[PinnedItemsView.tsx] worldStatePinnedKeys from store directly:', worldStatePinnedKeys);
+    // --- END NEW DEBUG LINES ---
+      return grouped;
+    }, [pinnedItems]); // Recalculate if pinnedItems array changes
 
-      console.log("[PinnedItemsView:pinnedItems] Calculated pinnedItems. Length:", items.length, "Items:", items);
-      return items;
-  }, [worldStatePinnedKeys, flattenedWorld]); // Depend on both for re-calculation
+    // Define memoized callbacks for unpinning, using the correct store action
+    const handleUnpinEntity = useCallback((entityPath: string) => {
+        toggleWorldStatePin(entityPath, 'entity');
+    }, [toggleWorldStatePin]);
 
-  // Grouped pinned items logic
-  const groupedPinnedItems = React.useMemo(() => {
-    const grouped: { [entityPath: string]: { label: string; value: any; fullKey: string }[] } = {};
-    pinnedItems.forEach(item => {
-      const parts = item.key.split('.');
-      if (parts.length >= 2) {
-        const secondPart = parts[1];
-        const isTaggedEntity = secondPart.startsWith('#') || secondPart.startsWith('@') || secondPart.startsWith('$');
-        let entityPath: string;
-        let label: string;
+    const handleUnpinVariable = useCallback((key: string) => {
+        toggleWorldStatePin(key, 'variable');
+    }, [toggleWorldStatePin]);
 
-        if (parts.length >= 3 && isTaggedEntity) {
-          entityPath = parts.slice(0, 2).join('.');
-          label = parts.slice(2).join('.');
-        } else {
-          entityPath = parts[0];
-          label = parts.slice(1).join('.');
-        }
-
-        // This fallback might have been the source of the 31 vs 32 discrepancy if a root-level key was accidentally pinned as a variable
-        // but based on your logs, all pinned keys seem deeply nested. Let's keep it robust.
-        if (label === '') {
-          label = parts[parts.length - 1]; // Fallback, e.g., if key is "world"
-        }
-
-        grouped[entityPath] = grouped[entityPath] || [];
-        grouped[entityPath].push({ label, value: item.value, fullKey: item.key });
-      }
-    });
-    // Sort attributes within each group for consistent rendering
-    Object.keys(grouped).forEach(entityPath => {
-      grouped[entityPath].sort((a, b) => a.label.localeCompare(b.label));
-    });
-    console.log("[PinnedItemsView] Grouped Pinned Items (re-calculated):", grouped); // Updated log message
-    return grouped;
-  }, [pinnedItems]); // Recalculate if pinnedItems array changes
 
   // Logging effect for re-renders and key count
   useEffect(() => {
@@ -5015,13 +5225,13 @@ export const PinnedItemsView: React.FC<PinnedItemsViewProps> = ({ gameState }) =
           key={entityPath} // Keying by entityPath is correct for entity groups
           entityPath={entityPath}
           attributes={attributes}
-          onUnpinEntity={unpinAllForEntity}
-          onUnpinVariable={unpinIndividualVariable}
+          onUnpinEntity={handleUnpinEntity} // Use the new memoized callback
+          onUnpinVariable={handleUnpinVariable} // Use the new memoized callback
         />
       ))}
     </Stack>
   );
-};
+});
 @@FILE: src/ui/components/ProtectedRoute.tsx
 // src/ui/components/ProtectedRoute.tsx
 import React from 'react';
@@ -6377,18 +6587,22 @@ import MenuIcon from '@mui/icons-material/Menu';
 import { useGameScreenLogic } from '../../utils/hooks/useGameScreenLogic';
 import { LogView } from '../components/LogView';
 import { PinnedItemsView } from '../components/PinnedItemsView';
+import { useGameStateStore, selectCurrentGameState } from '../../state/useGameStateStore'; // Import selectCurrentGameState
 
 interface GameScreenProps {
   onNavToggle: () => void;
 }
 
 const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
+  // DEBUG: Log GameScreen component renders
+  console.log('%c[GameScreen.tsx] Component rendering.', 'color: darkgreen; font-weight: bold;');
+
   const {
     isReady,
-    isLoading,
+    isLoading, // This is useGameScreenLogic's internal loading, tied to useGameStateStore's gameLoading
     isProcessingTurn,
     gameError,
-    gameState,
+    // gameState is now passed from useGameScreenLogic
     conversationHistory,
     narratorInputText,
     logContainerRef,
@@ -6405,9 +6619,14 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
     closeSnackbar,
   } = useGameScreenLogic();
 
-  // --- Render Logic ---
+  // Explicitly get the currentGameState from the store for rendering checks
+  const currentGameStateFromStore = useGameStateStore(selectCurrentGameState);
+
+  // DEBUG: Log readiness check status
+  console.log(`[GameScreen.tsx] Readiness Check: isReady=${isReady}, isLoading=${isLoading}, currentGameStateFromStore=${currentGameStateFromStore ? currentGameStateFromStore.narration.substring(0,20) : 'null'}.`);
 
   if (isLoading) {
+    console.log('[GameScreen.tsx] Displaying GameScreen loading state.');
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
@@ -6416,7 +6635,9 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
     );
   }
 
-  if (!isReady) {
+  // Check if currentGameStateFromStore is null AFTER loading is false
+  if (!currentGameStateFromStore) {
+    console.log('%c[GameScreen.tsx] Displaying Game Not Initialized state.', 'color: red; font-weight: bold;');
     return (
       <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
         <Typography variant="h6" color="error">Game Not Initialized</Typography>
@@ -6429,7 +6650,8 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
     );
   }
 
-  // The main game UI is rendered here, now that we know we are `isReady`
+  // The main game UI is rendered here, now that we know we are `isReady` and currentGameStateFromStore is present
+  console.log('[GameScreen.tsx] Displaying full GameScreen UI.');
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2, position: 'relative' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, flexShrink: 0 }}>
@@ -6439,7 +6661,8 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
 
       {/* Pinned Items View floats on top */}
       <Box sx={{ position: 'relative', zIndex: 10, flexShrink: 0 }}>
-        <PinnedItemsView gameState={gameState} />
+        {/* Pass the actual currentGameState object from the store for PinnedItemsView */}
+        <PinnedItemsView gameState={currentGameStateFromStore} />
       </Box>
 
       {/* Log/Chat View */}
@@ -7338,7 +7561,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
-import { useGameStateStore } from '../../state/useGameStateStore';
+import { useGameStateStore, selectCurrentGameState, selectWorldStatePinnedKeys } from '../../state/useGameStateStore'; // Selectors imported
 import { useWorldStateViewLogic } from '../../utils/hooks/useWorldStateViewLogic';
 import { WorldStateItemRow } from '../components/WorldStateItemRow';
 
@@ -7347,27 +7570,33 @@ interface WorldStateScreenProps {
 }
 
 const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
-  const { currentGameState, gameLoading, gameError } = useGameStateStore();
+  const currentGameState = useGameStateStore(selectCurrentGameState);
+  const worldStatePinnedKeys = useGameStateStore(selectWorldStatePinnedKeys); // Use selector
+  const { gameLoading, gameError } = useGameStateStore(); // Top-level state is fine
+
+  // --- Keep your existing DEBUG LINES here for verification ---
+  console.log('%c[WorldStateScreen.tsx] Component re-rendered.', 'color: #008080; font-weight: bold;');
+  console.log('[WorldStateScreen.tsx] Current Game State (from store selector):', currentGameState);
+  console.log('[WorldStateScreen.tsx] World State (extracted from store selector):', JSON.stringify(currentGameState?.worldState, null, 2));
+  console.log('[WorldStateScreen.tsx] World State keys length (extracted from store selector):', Object.keys(currentGameState?.worldState || {}).length);
+  console.log('[WorldStateScreen.tsx] Pinned Keys (from store selector):', worldStatePinnedKeys);
+  // --- END DEBUG LINES ---
+
   const {
     groupedByCategory,
-    worldStatePinnedKeys,
-    isAnyChildPinned,
-    areAllChildrenPinned,
+    // All other state variables (expandedCategories, editingCategory, etc.) are now correctly sourced from the hook:
     expandedCategories,
     expandedEntities,
     editingCategory,
     newCategoryName,
     editingEntity,
     newEntityName,
-    deleteWorldCategory,
-    deleteWorldEntity,
-    editWorldKeyValue,
-    deleteWorldKey,
-    toggleWorldStatePin,
-    handleToggleCategoryExpand,
-    handleToggleEntityExpand,
-    handleToggleCategoryPin,
-    handleToggleEntityPin,
+    isAnyChildPinned, // These methods come from the hook
+    areAllChildrenPinned, // These methods come from the hook
+    handleToggleCategoryExpand, // Local handlers returned by hook
+    handleToggleEntityExpand,   // Local handlers returned by hook
+    handleToggleCategoryPin,    // Local handlers returned by hook
+    handleToggleEntityPin,      // Local handlers returned by hook
     handleStartRenameCategory,
     handleConfirmRenameCategory,
     setNewCategoryName,
@@ -7375,16 +7604,13 @@ const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
     handleConfirmRenameEntity,
     setNewEntityName,
     cancelEdit,
+    // Actions passed directly from store (for clarity)
+    deleteWorldCategory,
+    deleteWorldEntity,
+    editWorldKeyValue,
+    deleteWorldKey,
+    toggleWorldStatePin, // Ensure actions from store are correctly accessible
   } = useWorldStateViewLogic(currentGameState);
-
-  if (gameLoading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress />
-        <Typography variant="h6" ml={2}>Loading World State...</Typography>
-      </Box>
-    );
-  }
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
@@ -7409,6 +7635,7 @@ const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
                 <IconButton size="small" sx={{ mr: 1 }}>{expandedCategories.has(category) ? <ExpandLessIcon /> : <ExpandMoreIcon />}</IconButton>
                 <Typography variant="h6" sx={{ flexGrow: 1 }}>{category}</Typography>
                 <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleStartRenameCategory(category); }}><EditIcon fontSize="small" /></IconButton>
+                {/* Use the hook's own methods correctly */}
                 <Checkbox checked={areAllChildrenPinned(category)} indeterminate={isAnyChildPinned(category) && !areAllChildrenPinned(category)} onClick={(e) => { e.stopPropagation(); handleToggleCategoryPin(category); }} />
                 <IconButton size="small" onClick={(e) => { e.stopPropagation(); deleteWorldCategory(category); }}><DeleteIcon fontSize="small" color="error" /></IconButton>
               </Box>
@@ -7428,6 +7655,7 @@ const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
                           <IconButton size="small" sx={{ mr: 1 }}>{expandedEntities.has(entityPath) ? <ExpandLessIcon /> : <ExpandMoreIcon />}</IconButton>
                           <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>{entity}</Typography>
                           <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleStartRenameEntity([category, entity]); }}><EditIcon fontSize="small" /></IconButton>
+                           {/* Use the hook's own methods correctly */}
                           <Checkbox checked={areAllChildrenPinned(entityPath)} indeterminate={isAnyChildPinned(entityPath) && !areAllChildrenPinned(entityPath)} onClick={(e) => { e.stopPropagation(); handleToggleEntityPin(entityPath); }} />
                           <IconButton size="small" onClick={(e) => { e.stopPropagation(); deleteWorldEntity(category, entity); }}><DeleteIcon fontSize="small" color="error" /></IconButton>
                         </Box>
@@ -7796,27 +8024,30 @@ export function getPromptCardContentForHash(card: {
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../state/useAuthStore';
-import { useGameStateStore } from '../../state/useGameStateStore';
+import { useGameStateStore, selectCurrentGameState, selectConversationHistory } from '../../state/useGameStateStore'; // Import selectors
 import { DiceRoller } from '../../utils/diceRoller';
 import type { GameState } from '../../models';
 
 export const useGameScreenLogic = () => {
+  console.log('[useGameScreenLogic.ts] Hook execution started.');
+
   const navigate = useNavigate();
   const { user } = useAuthStore();
 
-  // 1. Consume the global state stores
-  const {
-    currentSnapshot,
-    currentGameState,
-    conversationHistory,
-    narratorInputText,
-    gameLoading,
-    isProcessingTurn,
-    gameError,
-    processPlayerAction,
-    updateNarratorInputText,
-    processFirstNarratorTurn,
-  } = useGameStateStore();
+  // 1. Consume the global state stores using selectors for stability
+  const currentSnapshot = useGameStateStore(state => state.currentSnapshot);
+  const currentGameState = useGameStateStore(selectCurrentGameState); // Use selector
+  const conversationHistory = useGameStateStore(selectConversationHistory); // Use selector
+  const narratorInputText = useGameStateStore(state => state.narratorInputText);
+  const gameLoading = useGameStateStore(state => state.gameLoading);
+  const isProcessingTurn = useGameStateStore(state => state.isProcessingTurn);
+  const gameError = useGameStateStore(state => state.gameError);
+
+  // Get actions directly from the store's current state (stable references)
+  const processPlayerAction = useGameStateStore(state => state.processPlayerAction);
+  const updateNarratorInputText = useGameStateStore(state => state.updateNarratorInputText);
+  const processFirstNarratorTurn = useGameStateStore(state => state.processFirstNarratorTurn);
+
 
   // 2. All local UI state is moved here
   const [showRollDialog, setShowRollDialog] = useState(false);
@@ -7825,10 +8056,12 @@ export const useGameScreenLogic = () => {
 
   // 3. All refs are moved here
   const logContainerRef = useRef<HTMLDivElement>(null);
+  // This ref ensures processFirstNarratorTurn is only called once per snapshot ID
   const initialTurnTriggeredForSnapshot = useRef<string | null>(null);
 
   // 4. All useEffects are moved here
   useEffect(() => {
+    console.log(`[useGameScreenLogic.ts] useEffect (auto-scroll): conversationHistory changed. Count: ${conversationHistory.length}`);
     // Auto-scroll to the bottom of the log on new messages
     if (logContainerRef.current) {
       logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
@@ -7836,72 +8069,89 @@ export const useGameScreenLogic = () => {
   }, [conversationHistory]);
 
   useEffect(() => {
-    // This effect intelligently triggers the AI's first turn response only once
-    // when a new game is started (turn 0).
-    if (!currentSnapshot || gameLoading) return;
+    console.log(`%c[useGameScreenLogic.ts] useEffect (first turn check) triggered. Snapshot ID: ${currentSnapshot?.id || 'null'}, gameLoading: ${gameLoading}, currentTurn: ${currentSnapshot?.currentTurn}.`, 'color: grey;');
+
+    if (!currentSnapshot || gameLoading) {
+      console.log('[useGameScreenLogic.ts] First turn check: Skipping (no snapshot or still loading).');
+      return;
+    }
 
     const needsFirstTurn =
       currentSnapshot.currentTurn === 0 &&
-      currentSnapshot.conversationHistory?.length === 1 &&
-      initialTurnTriggeredForSnapshot.current !== currentSnapshot.id;
+      currentSnapshot.conversationHistory?.length === 1 && // Only the initial narrator prose
+      initialTurnTriggeredForSnapshot.current !== currentSnapshot.id; // Not yet triggered for THIS snapshot
 
     if (needsFirstTurn) {
       initialTurnTriggeredForSnapshot.current = currentSnapshot.id;
-      console.log("GameScreenLogic: Detected start of Turn 0. Triggering narrator's first response.");
+      console.log(`%c[useGameScreenLogic.ts] First turn check: Detected start of Turn 0. Triggering narrator's first response for snapshot ${currentSnapshot.id}.`, 'color: #8B008B; font-weight: bold;');
       processFirstNarratorTurn();
+    } else {
+        console.log('[useGameScreenLogic.ts] First turn check: No first turn needed or already triggered.');
     }
   }, [currentSnapshot, gameLoading, processFirstNarratorTurn]);
 
   // 5. All handler functions are moved here and wrapped in useCallback
   const showSnackbar = useCallback((message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
+    console.log(`[useGameScreenLogic.ts] showSnackbar: Message: "${message}", Severity: ${severity}`);
     setSnackbar({ open: true, message, severity });
   }, []);
 
   const handleSendAction = useCallback(async () => {
-    if (narratorInputText.trim() === '' || isProcessingTurn) return;
+    console.log(`[useGameScreenLogic.ts] handleSendAction: Input: "${narratorInputText.substring(0, 50)}...". IsProcessing: ${isProcessingTurn}`);
+    if (narratorInputText.trim() === '' || isProcessingTurn) {
+        console.warn('[useGameScreenLogic.ts] handleSendAction: Skipping due to empty input or already processing.');
+        return;
+    }
     try {
       await processPlayerAction(narratorInputText);
-      // Success message is optional, as the UI updates with the AI response
+      console.log('[useGameScreenLogic.ts] handleSendAction: processPlayerAction completed.');
     } catch (e) {
+      console.error('[useGameScreenLogic.ts] handleSendAction: Error processing action:', e);
       showSnackbar(`Failed to process action: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
     }
   }, [narratorInputText, isProcessingTurn, processPlayerAction, showSnackbar]);
 
   const handleRollDice = useCallback(async () => {
+    console.log(`[useGameScreenLogic.ts] handleRollDice: Rolling with formula: ${rollFormula}`);
     try {
       const result = DiceRoller.roll(rollFormula);
       const summary = DiceRoller.format(result);
+      console.log(`[useGameScreenLogic.ts] handleRollDice: Roll result: ${summary}`);
       await processPlayerAction(`I roll the dice (${rollFormula}) and get the following result:\n${summary}`);
       showSnackbar(`Rolled ${rollFormula}: ${summary}`, 'success');
       setShowRollDialog(false);
     } catch (e) {
+      console.error('[useGameScreenLogic.ts] handleRollDice: Error rolling dice:', e);
       showSnackbar(`Failed to roll dice: ${e instanceof Error ? e.message : 'Invalid formula'}`, 'error');
     }
   }, [rollFormula, processPlayerAction, showSnackbar]);
 
   const handleOpenRollDialog = useCallback(() => {
+      console.log('[useGameScreenLogic.ts] handleOpenRollDialog: Opening roll dialog.');
       setShowRollDialog(true);
   }, []);
 
   const handleKeyPress = useCallback((event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && !event.shiftKey) {
+      console.log('[useGameScreenLogic.ts] handleKeyPress: Enter pressed, calling handleSendAction.');
       event.preventDefault();
       handleSendAction();
     }
   }, [handleSendAction]);
 
   const closeSnackbar = useCallback(() => {
+    console.log('[useGameScreenLogic.ts] closeSnackbar: Closing snackbar.');
     setSnackbar(prev => ({ ...prev, open: false }));
   }, []);
 
   // 6. Return a clean API for the component
   return {
     // State and Data for Rendering
-    isReady: !!user && !!currentSnapshot && !!currentGameState,
-    isLoading: gameLoading,
+    isReady: !!user && !!currentSnapshot && !!currentGameState, // Ensure currentGameState is actually an object
+    isLoading: gameLoading, // Use gameLoading from store
     isProcessingTurn,
     gameError,
-    gameState: currentGameState as GameState, // Assert non-null for the component
+    gameState: currentGameState as GameState, // Assert non-null for the component's direct use
     conversationHistory,
     narratorInputText,
     logContainerRef,
@@ -7914,13 +8164,19 @@ export const useGameScreenLogic = () => {
     },
 
     // Handlers for UI Events
-    handleGoToLogin: () => navigate('/login'),
+    handleGoToLogin: () => {
+      console.log('[useGameScreenLogic.ts] handleGoToLogin: Navigating to /login.');
+      navigate('/login');
+    },
     handleSendAction,
-    handleInputChange: updateNarratorInputText,
+    handleInputChange: updateNarratorInputText, // Direct use of store action
     handleKeyPress,
     handleRollDice,
     handleOpenRollDialog,
-    handleCloseRollDialog: () => setShowRollDialog(false),
+    handleCloseRollDialog: () => {
+      console.log('[useGameScreenLogic.ts] handleCloseRollDialog: Closing roll dialog.');
+      setShowRollDialog(false);
+    },
     handleRollFormulaChange: setRollFormula,
     closeSnackbar,
   };
@@ -8448,7 +8704,8 @@ export const useSettingsLogic = () => {
 @@FILE: src/utils/hooks/useWorldStateViewLogic.ts
 // src/utils/hooks/useWorldStateViewLogic.ts
 import { useState, useMemo, useCallback } from 'react';
-import { useGameStateStore } from '../../state/useGameStateStore';
+// IMPORT THE SELECTOR FOR PINNED KEYS
+import { useGameStateStore, selectWorldStatePinnedKeys } from '../../state/useGameStateStore';
 import { flattenJsonObject, getNestedValue } from '../../utils/jsonUtils';
 import type { GameState } from '../../models';
 
@@ -8461,29 +8718,41 @@ interface GroupedWorldState {
 }
 
 export const useWorldStateViewLogic = (gameState: GameState | null) => {
-    // 1. Get the global state actions we need from the store
+    // 1. Get necessary state and actions from the store
+    const worldStatePinnedKeys = useGameStateStore(selectWorldStatePinnedKeys);
     const {
-        worldStatePinnedKeys,
-        toggleWorldStatePin,
-        renameWorldCategory,
-        renameWorldEntity,
-        deleteWorldCategory,
-        deleteWorldEntity,
-        editWorldKeyValue,
-        deleteWorldKey,
-    } = useGameStateStore();
+        toggleWorldStatePin, // Action to toggle pins
+        renameWorldCategory, // Action to rename categories
+        renameWorldEntity,   // Action to rename entities
+        deleteWorldCategory, // Action to delete categories
+        deleteWorldEntity,   // Action to delete entities
+        editWorldKeyValue,   // Action to edit key-value pairs
+        deleteWorldKey,      // Action to delete keys
+    } = useGameStateStore(); // Destructure actions directly
 
-    // 2. Move all local UI state here
+    // 2. Declare and initialize all local UI state variables
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
     const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
     const [editingCategory, setEditingCategory] = useState<string | null>(null);
     const [newCategoryName, setNewCategoryName] = useState('');
-    const [editingEntity, setEditingEntity] = useState<[string, string] | null>(null);
+    const [editingEntity, setEditingEntity] = useState<[string, string] | null>(null); // Stores [category, entity]
     const [newEntityName, setNewEntityName] = useState('');
 
-    // 3. Move all memoized calculations here
+    // --- KEEP EXISTING DEBUG LINES ---
+    console.log('%c[useWorldStateViewLogic.ts] Hook re-executed.', 'color: #B8860B; font-weight: bold;');
+    console.log('[useWorldStateViewLogic.ts] Received gameState prop from WorldStateScreen:', JSON.stringify(gameState, null, 2));
+    console.log('[useWorldStateViewLogic.ts] Extracted worldState from prop (gameState?.worldState):', JSON.stringify(gameState?.worldState, null, 2));
+    console.log('[useWorldStateViewLogic.ts] Extracted worldState keys length (gameState?.worldState):', Object.keys(gameState?.worldState || {}).length);
+    console.log('[useWorldStateViewLogic.ts] Pinned keys directly from store (in logic):', worldStatePinnedKeys);
+    // --- END DEBUG LINES ---
+
     const worldState = gameState?.worldState || {};
-    const flattenedWorld = useMemo(() => flattenJsonObject(worldState), [worldState]);
+    const flattenedWorld = useMemo(() => {
+        const flat = flattenJsonObject(worldState);
+        console.log('[useWorldStateViewLogic.ts] Calculated flattenedWorld (inside useMemo):', JSON.stringify(flat, null, 2));
+        console.log('[useWorldStateViewLogic.ts] Flattened World keys length (inside useMemo):', Object.keys(flat).length);
+        return flat;
+    }, [worldState]);
 
     const groupedByCategory = useMemo(() => {
         const grouped: GroupedWorldState = {};
@@ -8506,15 +8775,20 @@ export const useWorldStateViewLogic = (gameState: GameState | null) => {
                 delete grouped[category]['@@_direct'];
             }
         }
+        console.log('[useWorldStateViewLogic.ts] Grouped by Category (inside useMemo):', JSON.stringify(grouped, null, 2));
+        console.log('[useWorldStateViewLogic.ts] Grouped by Category keys length (inside useMemo):', Object.keys(grouped).length);
         return grouped;
     }, [flattenedWorld]);
 
+    // Utility to get all variable keys under a given path (entity or category)
     const getAllChildVariableKeys = useCallback((basePath: string): string[] => {
         const nestedData = getNestedValue(worldState, basePath.split('.'));
         if (typeof nestedData !== 'object' || nestedData === null) return [];
+        // Flatten the nested data starting from the basePath to get its direct children keys
         return Object.keys(flattenJsonObject(nestedData, basePath));
     }, [worldState]);
 
+    // Memoized checks for pinning status
     const isAnyChildPinned = useCallback((parentPath: string) => {
         return getAllChildVariableKeys(parentPath).some(key => worldStatePinnedKeys.includes(key));
     }, [getAllChildVariableKeys, worldStatePinnedKeys]);
@@ -8524,7 +8798,7 @@ export const useWorldStateViewLogic = (gameState: GameState | null) => {
         return childKeys.length > 0 && childKeys.every(key => worldStatePinnedKeys.includes(key));
     }, [getAllChildVariableKeys, worldStatePinnedKeys]);
 
-    // 4. Move all callback handlers here
+    // Handlers for expanding/collapsing categories and entities
     const handleToggleCategoryExpand = useCallback((category: string) => {
         setExpandedCategories(prev => {
             const newSet = new Set(prev);
@@ -8542,6 +8816,7 @@ export const useWorldStateViewLogic = (gameState: GameState | null) => {
         });
     }, []);
 
+    // Handlers for pinning/unpinning
     const handleToggleCategoryPin = useCallback((category: string) => {
         toggleWorldStatePin(category, 'category');
     }, [toggleWorldStatePin]);
@@ -8550,20 +8825,41 @@ export const useWorldStateViewLogic = (gameState: GameState | null) => {
         toggleWorldStatePin(entityPath, 'entity');
     }, [toggleWorldStatePin]);
 
+    // Handlers for renaming category
+    const handleStartRenameCategory = useCallback((category: string) => {
+        setEditingCategory(category);
+        setNewCategoryName(category); // Initialize input with current name
+    }, []);
+
     const handleConfirmRenameCategory = useCallback(async () => {
         if (editingCategory && newCategoryName.trim() && newCategoryName !== editingCategory) {
-            await renameWorldCategory(editingCategory, newCategoryName);
+            await renameWorldCategory(editingCategory, newCategoryName.trim());
         }
-        setEditingCategory(null);
+        setEditingCategory(null); // Exit edit mode
+        setNewCategoryName(''); // Clear input
     }, [editingCategory, newCategoryName, renameWorldCategory]);
+
+    // Handlers for renaming entity
+    const handleStartRenameEntity = useCallback((entityPathParts: [string, string]) => { // entityPathParts is [category, entity]
+        setEditingEntity(entityPathParts);
+        setNewEntityName(entityPathParts[1]); // Initialize input with current entity name
+    }, []);
 
     const handleConfirmRenameEntity = useCallback(async () => {
         if (editingEntity && newEntityName.trim() && newEntityName !== editingEntity[1]) {
-            await renameWorldEntity(editingEntity[0], editingEntity[1], newEntityName);
+            await renameWorldEntity(editingEntity[0], editingEntity[1], newEntityName.trim());
         }
-        setEditingEntity(null);
+        setEditingEntity(null); // Exit edit mode
+        setNewEntityName(''); // Clear input
     }, [editingEntity, newEntityName, renameWorldEntity]);
 
+    // Handler to cancel any edit operation
+    const cancelEdit = useCallback(() => {
+        setEditingCategory(null);
+        setEditingEntity(null);
+        setNewCategoryName('');
+        setNewEntityName('');
+    }, []);
 
     // 5. Return the clean API
     return {
@@ -8573,7 +8869,7 @@ export const useWorldStateViewLogic = (gameState: GameState | null) => {
         isAnyChildPinned,
         areAllChildrenPinned,
 
-        // UI State
+        // Local UI State
         expandedCategories,
         expandedEntities,
         editingCategory,
@@ -8581,29 +8877,25 @@ export const useWorldStateViewLogic = (gameState: GameState | null) => {
         editingEntity,
         newEntityName,
 
-        // Handlers from Store
-        renameWorldEntity,
-        deleteWorldCategory,
-        deleteWorldEntity,
-        editWorldKeyValue,
-        deleteWorldKey,
-        toggleWorldStatePin,
-
-        // Local UI Handlers
+        // Handlers (from store and local)
         handleToggleCategoryExpand,
         handleToggleEntityExpand,
         handleToggleCategoryPin,
         handleToggleEntityPin,
-        handleStartRenameCategory: setEditingCategory,
+        handleStartRenameCategory,
         handleConfirmRenameCategory,
         setNewCategoryName,
-        handleStartRenameEntity: setEditingEntity,
+        handleStartRenameEntity,
         handleConfirmRenameEntity,
         setNewEntityName,
-        cancelEdit: () => {
-          setEditingCategory(null);
-          setEditingEntity(null);
-        },
+        cancelEdit,
+
+        // Actions passed directly from store (for clarity)
+        deleteWorldCategory,
+        deleteWorldEntity,
+        editWorldKeyValue,
+        deleteWorldKey,
+        toggleWorldStatePin, // Ensure this is correctly passed if needed elsewhere
     };
 };
 @@FILE: src/utils/jsonUtils.ts

@@ -10,18 +10,22 @@ import MenuIcon from '@mui/icons-material/Menu';
 import { useGameScreenLogic } from '../../utils/hooks/useGameScreenLogic';
 import { LogView } from '../components/LogView';
 import { PinnedItemsView } from '../components/PinnedItemsView';
+import { useGameStateStore, selectCurrentGameState } from '../../state/useGameStateStore'; // Import selectCurrentGameState
 
 interface GameScreenProps {
   onNavToggle: () => void;
 }
 
 const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
+  // DEBUG: Log GameScreen component renders
+  console.log('%c[GameScreen.tsx] Component rendering.', 'color: darkgreen; font-weight: bold;');
+
   const {
     isReady,
-    isLoading,
+    isLoading, // This is useGameScreenLogic's internal loading, tied to useGameStateStore's gameLoading
     isProcessingTurn,
     gameError,
-    gameState,
+    // gameState is now passed from useGameScreenLogic
     conversationHistory,
     narratorInputText,
     logContainerRef,
@@ -38,9 +42,14 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
     closeSnackbar,
   } = useGameScreenLogic();
 
-  // --- Render Logic ---
+  // Explicitly get the currentGameState from the store for rendering checks
+  const currentGameStateFromStore = useGameStateStore(selectCurrentGameState);
+
+  // DEBUG: Log readiness check status
+  console.log(`[GameScreen.tsx] Readiness Check: isReady=${isReady}, isLoading=${isLoading}, currentGameStateFromStore=${currentGameStateFromStore ? currentGameStateFromStore.narration.substring(0,20) : 'null'}.`);
 
   if (isLoading) {
+    console.log('[GameScreen.tsx] Displaying GameScreen loading state.');
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
@@ -49,7 +58,9 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
     );
   }
 
-  if (!isReady) {
+  // Check if currentGameStateFromStore is null AFTER loading is false
+  if (!currentGameStateFromStore) {
+    console.log('%c[GameScreen.tsx] Displaying Game Not Initialized state.', 'color: red; font-weight: bold;');
     return (
       <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
         <Typography variant="h6" color="error">Game Not Initialized</Typography>
@@ -62,7 +73,8 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
     );
   }
 
-  // The main game UI is rendered here, now that we know we are `isReady`
+  // The main game UI is rendered here, now that we know we are `isReady` and currentGameStateFromStore is present
+  console.log('[GameScreen.tsx] Displaying full GameScreen UI.');
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2, position: 'relative' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, flexShrink: 0 }}>
@@ -72,7 +84,8 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
 
       {/* Pinned Items View floats on top */}
       <Box sx={{ position: 'relative', zIndex: 10, flexShrink: 0 }}>
-        <PinnedItemsView gameState={gameState} />
+        {/* Pass the actual currentGameState object from the store for PinnedItemsView */}
+        <PinnedItemsView gameState={currentGameStateFromStore} />
       </Box>
 
       {/* Log/Chat View */}

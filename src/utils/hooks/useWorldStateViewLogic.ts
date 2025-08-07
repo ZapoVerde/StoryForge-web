@@ -1,6 +1,7 @@
 // src/utils/hooks/useWorldStateViewLogic.ts
 import { useState, useMemo, useCallback } from 'react';
-import { useGameStateStore } from '../../state/useGameStateStore';
+// IMPORT THE SELECTOR FOR PINNED KEYS
+import { useGameStateStore, selectWorldStatePinnedKeys } from '../../state/useGameStateStore';
 import { flattenJsonObject, getNestedValue } from '../../utils/jsonUtils';
 import type { GameState } from '../../models';
 
@@ -13,29 +14,41 @@ interface GroupedWorldState {
 }
 
 export const useWorldStateViewLogic = (gameState: GameState | null) => {
-    // 1. Get the global state actions we need from the store
+    // 1. Get necessary state and actions from the store
+    const worldStatePinnedKeys = useGameStateStore(selectWorldStatePinnedKeys);
     const {
-        worldStatePinnedKeys,
-        toggleWorldStatePin,
-        renameWorldCategory,
-        renameWorldEntity,
-        deleteWorldCategory,
-        deleteWorldEntity,
-        editWorldKeyValue,
-        deleteWorldKey,
-    } = useGameStateStore();
+        toggleWorldStatePin, // Action to toggle pins
+        renameWorldCategory, // Action to rename categories
+        renameWorldEntity,   // Action to rename entities
+        deleteWorldCategory, // Action to delete categories
+        deleteWorldEntity,   // Action to delete entities
+        editWorldKeyValue,   // Action to edit key-value pairs
+        deleteWorldKey,      // Action to delete keys
+    } = useGameStateStore(); // Destructure actions directly
 
-    // 2. Move all local UI state here
+    // 2. Declare and initialize all local UI state variables
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
     const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
     const [editingCategory, setEditingCategory] = useState<string | null>(null);
     const [newCategoryName, setNewCategoryName] = useState('');
-    const [editingEntity, setEditingEntity] = useState<[string, string] | null>(null);
+    const [editingEntity, setEditingEntity] = useState<[string, string] | null>(null); // Stores [category, entity]
     const [newEntityName, setNewEntityName] = useState('');
 
-    // 3. Move all memoized calculations here
+    // --- KEEP EXISTING DEBUG LINES ---
+    console.log('%c[useWorldStateViewLogic.ts] Hook re-executed.', 'color: #B8860B; font-weight: bold;');
+    console.log('[useWorldStateViewLogic.ts] Received gameState prop from WorldStateScreen:', JSON.stringify(gameState, null, 2));
+    console.log('[useWorldStateViewLogic.ts] Extracted worldState from prop (gameState?.worldState):', JSON.stringify(gameState?.worldState, null, 2));
+    console.log('[useWorldStateViewLogic.ts] Extracted worldState keys length (gameState?.worldState):', Object.keys(gameState?.worldState || {}).length);
+    console.log('[useWorldStateViewLogic.ts] Pinned keys directly from store (in logic):', worldStatePinnedKeys);
+    // --- END DEBUG LINES ---
+
     const worldState = gameState?.worldState || {};
-    const flattenedWorld = useMemo(() => flattenJsonObject(worldState), [worldState]);
+    const flattenedWorld = useMemo(() => {
+        const flat = flattenJsonObject(worldState);
+        console.log('[useWorldStateViewLogic.ts] Calculated flattenedWorld (inside useMemo):', JSON.stringify(flat, null, 2));
+        console.log('[useWorldStateViewLogic.ts] Flattened World keys length (inside useMemo):', Object.keys(flat).length);
+        return flat;
+    }, [worldState]);
 
     const groupedByCategory = useMemo(() => {
         const grouped: GroupedWorldState = {};
@@ -58,15 +71,20 @@ export const useWorldStateViewLogic = (gameState: GameState | null) => {
                 delete grouped[category]['@@_direct'];
             }
         }
+        console.log('[useWorldStateViewLogic.ts] Grouped by Category (inside useMemo):', JSON.stringify(grouped, null, 2));
+        console.log('[useWorldStateViewLogic.ts] Grouped by Category keys length (inside useMemo):', Object.keys(grouped).length);
         return grouped;
     }, [flattenedWorld]);
 
+    // Utility to get all variable keys under a given path (entity or category)
     const getAllChildVariableKeys = useCallback((basePath: string): string[] => {
         const nestedData = getNestedValue(worldState, basePath.split('.'));
         if (typeof nestedData !== 'object' || nestedData === null) return [];
+        // Flatten the nested data starting from the basePath to get its direct children keys
         return Object.keys(flattenJsonObject(nestedData, basePath));
     }, [worldState]);
 
+    // Memoized checks for pinning status
     const isAnyChildPinned = useCallback((parentPath: string) => {
         return getAllChildVariableKeys(parentPath).some(key => worldStatePinnedKeys.includes(key));
     }, [getAllChildVariableKeys, worldStatePinnedKeys]);
@@ -76,7 +94,7 @@ export const useWorldStateViewLogic = (gameState: GameState | null) => {
         return childKeys.length > 0 && childKeys.every(key => worldStatePinnedKeys.includes(key));
     }, [getAllChildVariableKeys, worldStatePinnedKeys]);
 
-    // 4. Move all callback handlers here
+    // Handlers for expanding/collapsing categories and entities
     const handleToggleCategoryExpand = useCallback((category: string) => {
         setExpandedCategories(prev => {
             const newSet = new Set(prev);
@@ -94,6 +112,7 @@ export const useWorldStateViewLogic = (gameState: GameState | null) => {
         });
     }, []);
 
+    // Handlers for pinning/unpinning
     const handleToggleCategoryPin = useCallback((category: string) => {
         toggleWorldStatePin(category, 'category');
     }, [toggleWorldStatePin]);
@@ -102,20 +121,41 @@ export const useWorldStateViewLogic = (gameState: GameState | null) => {
         toggleWorldStatePin(entityPath, 'entity');
     }, [toggleWorldStatePin]);
 
+    // Handlers for renaming category
+    const handleStartRenameCategory = useCallback((category: string) => {
+        setEditingCategory(category);
+        setNewCategoryName(category); // Initialize input with current name
+    }, []);
+
     const handleConfirmRenameCategory = useCallback(async () => {
         if (editingCategory && newCategoryName.trim() && newCategoryName !== editingCategory) {
-            await renameWorldCategory(editingCategory, newCategoryName);
+            await renameWorldCategory(editingCategory, newCategoryName.trim());
         }
-        setEditingCategory(null);
+        setEditingCategory(null); // Exit edit mode
+        setNewCategoryName(''); // Clear input
     }, [editingCategory, newCategoryName, renameWorldCategory]);
+
+    // Handlers for renaming entity
+    const handleStartRenameEntity = useCallback((entityPathParts: [string, string]) => { // entityPathParts is [category, entity]
+        setEditingEntity(entityPathParts);
+        setNewEntityName(entityPathParts[1]); // Initialize input with current entity name
+    }, []);
 
     const handleConfirmRenameEntity = useCallback(async () => {
         if (editingEntity && newEntityName.trim() && newEntityName !== editingEntity[1]) {
-            await renameWorldEntity(editingEntity[0], editingEntity[1], newEntityName);
+            await renameWorldEntity(editingEntity[0], editingEntity[1], newEntityName.trim());
         }
-        setEditingEntity(null);
+        setEditingEntity(null); // Exit edit mode
+        setNewEntityName(''); // Clear input
     }, [editingEntity, newEntityName, renameWorldEntity]);
 
+    // Handler to cancel any edit operation
+    const cancelEdit = useCallback(() => {
+        setEditingCategory(null);
+        setEditingEntity(null);
+        setNewCategoryName('');
+        setNewEntityName('');
+    }, []);
 
     // 5. Return the clean API
     return {
@@ -125,7 +165,7 @@ export const useWorldStateViewLogic = (gameState: GameState | null) => {
         isAnyChildPinned,
         areAllChildrenPinned,
 
-        // UI State
+        // Local UI State
         expandedCategories,
         expandedEntities,
         editingCategory,
@@ -133,28 +173,24 @@ export const useWorldStateViewLogic = (gameState: GameState | null) => {
         editingEntity,
         newEntityName,
 
-        // Handlers from Store
-        renameWorldEntity,
-        deleteWorldCategory,
-        deleteWorldEntity,
-        editWorldKeyValue,
-        deleteWorldKey,
-        toggleWorldStatePin,
-
-        // Local UI Handlers
+        // Handlers (from store and local)
         handleToggleCategoryExpand,
         handleToggleEntityExpand,
         handleToggleCategoryPin,
         handleToggleEntityPin,
-        handleStartRenameCategory: setEditingCategory,
+        handleStartRenameCategory,
         handleConfirmRenameCategory,
         setNewCategoryName,
-        handleStartRenameEntity: setEditingEntity,
+        handleStartRenameEntity,
         handleConfirmRenameEntity,
         setNewEntityName,
-        cancelEdit: () => {
-          setEditingCategory(null);
-          setEditingEntity(null);
-        },
+        cancelEdit,
+
+        // Actions passed directly from store (for clarity)
+        deleteWorldCategory,
+        deleteWorldEntity,
+        editWorldKeyValue,
+        deleteWorldKey,
+        toggleWorldStatePin, // Ensure this is correctly passed if needed elsewhere
     };
 };
