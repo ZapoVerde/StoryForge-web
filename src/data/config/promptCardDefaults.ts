@@ -16,6 +16,7 @@ export const defaultAiSettingsInCard: AiSettings = {
   presencePenalty: 0.0,
   frequencyPenalty: 0.0,
   functionCallingEnabled: false,
+  enableTypingEffect: true, 
 };
 
 /**

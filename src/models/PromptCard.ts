@@ -4,7 +4,7 @@ import type { StackInstructions} from './index';
 /**
  * Defines the configuration settings for an AI connection.
  * These fields are embedded directly within PromptCard.
- * This is a pure data definition, with no default values.
+ * This is a pure data definition, without logic or companion methods.
  */
 export interface AiSettings {
   selectedConnectionId: string;
@@ -14,6 +14,7 @@ export interface AiSettings {
   presencePenalty: number;
   frequencyPenalty: number;
   functionCallingEnabled: boolean;
+  enableTypingEffect: boolean; // NEW: Controls the typing animation
 }
 
 /**

@@ -1,4 +1,3 @@
-// src/ui/components/AiSettingsEditor.tsx
 
 import React from 'react';
 import {
@@ -150,6 +149,21 @@ export const AiSettingsEditor: React.FC<AiSettingsEditorProps> = ({
       <Typography variant="body2" color="text.secondary">
         Allows AI to call structured functions (if you've defined them in the
         prompt).
+      </Typography>
+
+      <FormControlLabel // NEW: Typing Effect Setting
+        control={
+          <Switch
+            checked={settings.enableTypingEffect}
+            onChange={(e) =>
+              handleSwitchChange('enableTypingEffect', e.target.checked)
+            }
+          />
+        }
+        label="Enable Typing Effect for AI Output"
+      />
+      <Typography variant="body2" color="text.secondary">
+        Displays AI-generated narrative text one character at a time, like it's being typed.
       </Typography>
     </CollapsibleSection>
   );

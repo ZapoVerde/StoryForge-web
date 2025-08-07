@@ -1,32 +1,22 @@
-// src/ui/screens/GameScreen.tsx
 import React from 'react';
 import {
-  Box, Typography, Button, TextField, Paper, IconButton, CircularProgress,
+  Box, Typography, Button, TextField, IconButton, CircularProgress,
   Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert, Tooltip,
+  useTheme, useMediaQuery, InputAdornment,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import CasinoIcon from '@mui/icons-material/Casino';
-// REMOVE: MenuIcon is not used here; it's in MainLayout.
-// import MenuIcon from '@mui/icons-material/Menu';
 import { useGameScreenLogic } from '../../utils/hooks/useGameScreenLogic';
 import { LogView } from '../components/LogView';
 import { PinnedItemsView } from '../components/PinnedItemsView';
-// REMOVE: This direct subscription is redundant and causes the errors.
-// import { useGameStateStore, selectCurrentGameState } from '../../state/useGameStateStore';
 
-// REMOVE: The onNavToggle prop is no longer needed.
-// const GameScreen: React.FC = () => {
 const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
-
-  console.log('%c[GameScreen.tsx] Component rendering.', 'color: darkgreen; font-weight: bold;');
-
-  // ADD `gameState` to the destructuring. This is the state from your logic hook.
   const {
     isReady,
     isLoading,
     isProcessingTurn,
     gameError,
-    gameState, // <-- USE THIS
+    gameState,
     conversationHistory,
     narratorInputText,
     logContainerRef,
@@ -43,14 +33,11 @@ const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
     closeSnackbar,
   } = useGameScreenLogic();
 
-  // REMOVE this redundant subscription.
-  // const currentGameStateFromStore = useGameStateStore(selectCurrentGameState);
-
-  // The readiness check should be based on what the hook provides.
-  console.log(`[GameScreen.tsx] Readiness Check: isReady=${isReady}, isLoading=${isLoading}`);
+  const theme = useTheme();
+  const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
+  const pinnedHeight = isSmallScreen ? theme.spacing(14) : theme.spacing(16);
 
   if (isLoading) {
-    console.log('[GameScreen.tsx] Displaying GameScreen loading state.');
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
@@ -59,9 +46,7 @@ const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
     );
   }
 
-  // UPDATE: The primary condition should be the isReady flag from the hook.
   if (!isReady) {
-    console.log('%c[GameScreen.tsx] Displaying Game Not Initialized state (isReady=false).', 'color: red; font-weight: bold;');
     return (
       <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
         <Typography variant="h6" color="error">Game Not Initialized</Typography>
@@ -74,26 +59,49 @@ const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
     );
   }
 
-  // If we get here, isReady is true, and gameState is guaranteed to be available.
-  console.log('[GameScreen.tsx] Displaying full GameScreen UI.');
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2, position: 'relative' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, flexShrink: 0 }}>
-        <Typography variant="h5" component="h1">Narrator</Typography>
-        {/* REMOVE: The Nav Toggle button is handled by MainLayout now. */}
-      </Box>
-      
-      <Box sx={{ position: 'relative', zIndex: 10, flexShrink: 0 }}>
-        {/* PinnedItemsView now gets its own data from the store. No props are needed. */}
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100vh',
+        position: 'relative',
+        overflow: 'hidden',
+        px: isSmallScreen ? 1 : 2,
+        pt: 0,
+      }}
+    >
+      {/* Floating pinned items */}
+      <Box
+        sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 10,
+          px: isSmallScreen ? 1 : 2,
+          py: 1,
+          //pointerEvents: 'none',
+        }}
+      >
         <PinnedItemsView />
       </Box>
 
-      {/* The rest of the component remains the same */}
-      <Paper ref={logContainerRef} elevation={1} sx={{ flexGrow: 1, mt: 1, p: 2, overflowY: 'auto' }}>
+      {/* Scrollable log view, fully flush to background */}
+      <Box
+        ref={logContainerRef}
+        sx={{
+          flexGrow: 1,
+          overflowY: 'auto',
+          px: isSmallScreen ? 1 : 2,
+          typography: isSmallScreen ? 'body2' : 'body1',
+        }}
+      >
         <LogView conversationHistory={conversationHistory} />
-      </Paper>
+      </Box>
 
-      <Box sx={{ display: 'flex', mt: 2, gap: 1, flexShrink: 0 }}>
+      {/* Input area with floating dice icon */}
+      <Box sx={{ position: 'relative', mt: 1 }}>
         <TextField
           fullWidth
           multiline
@@ -104,29 +112,50 @@ const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
           onChange={(e) => handleInputChange(e.target.value)}
           onKeyPress={handleKeyPress}
           disabled={isProcessingTurn}
+          size={isSmallScreen ? 'small' : 'medium'}
+          InputProps={{
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton
+                  color="primary"
+                  onClick={handleSendAction}
+                  disabled={isProcessingTurn || narratorInputText.trim() === ''}
+                >
+                  {isProcessingTurn ? <CircularProgress size={20} color="inherit" /> : <SendIcon />}
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
         />
-        <Button
-          variant="contained"
-          onClick={handleSendAction}
-          endIcon={<SendIcon />}
-          disabled={isProcessingTurn || narratorInputText.trim() === ''}
-          sx={{ height: 'fit-content', alignSelf: 'flex-end' }}
-        >
-          {isProcessingTurn ? <CircularProgress size={24} color="inherit" /> : 'Send'}
-        </Button>
+
+        {/* Floating dice icon */}
         <Tooltip title="Roll Dice (Right-click to change formula)">
           <IconButton
-            color="primary"
+            color="secondary"
             onClick={handleRollDice}
-            onContextMenu={(e) => { e.preventDefault(); handleOpenRollDialog(); }}
-            aria-label="roll dice"
-            sx={{ height: 'fit-content', alignSelf: 'flex-end' }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              handleOpenRollDialog();
+            }}
+            sx={{
+              position: 'absolute',
+              right: 60,
+              top: -36,
+              zIndex: 20,
+              backgroundColor: theme.palette.frostedSurface[theme.palette.mode],
+              border: '1px solid',
+              borderColor: theme.palette.divider,
+              boxShadow: 2,
+              p: 0.5,
+              '&:hover': { backgroundColor: theme.palette.action.hover },
+            }}
           >
-            <CasinoIcon />
+            <CasinoIcon fontSize="small" />
           </IconButton>
         </Tooltip>
       </Box>
 
+      {/* Dice Roll Dialog */}
       <Dialog open={rollDialog.open} onClose={handleCloseRollDialog}>
         <DialogTitle>Dice Roll</DialogTitle>
         <DialogContent>
@@ -148,6 +177,7 @@ const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
         </DialogActions>
       </Dialog>
 
+      {/* Snackbar */}
       <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={closeSnackbar}>
         <Alert onClose={closeSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
           {snackbar.message}
