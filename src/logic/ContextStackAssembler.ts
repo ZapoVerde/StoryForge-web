@@ -1,12 +1,12 @@
 // src/logic/ContextStackAssembler.ts
+import { StackMode, FilterMode } from '../models';
+
 import type {
   PromptCard,
   GameState,
   LogEntry,
   Message,
   SceneState,
-  StackMode,
-  FilterMode,
   DigestLine,
 } from '../models';
 import type { IContextStackAssembler } from './IContextStackAssembler';

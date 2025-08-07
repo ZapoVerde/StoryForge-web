@@ -11,6 +11,7 @@ import WorldStateScreen from './ui/screens/WorldStateScreen';
 import LogViewerScreen from './ui/screens/LogViewerScreen';
 import SettingsScreen from './ui/screens/SettingsScreen';
 import SourceDump from './ui/screens/SourceDump';
+import type { JSX } from 'react';
 
 // A simple wrapper to protect routes that need an active game.
 const GameActiveRoute: React.FC<{ children: JSX.Element }> = ({ children }) => {

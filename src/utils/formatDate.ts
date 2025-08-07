@@ -28,3 +28,14 @@ export function formatIsoDateForDisplay(isoString: string): string {
     return "Error formatting date";
   }
 }
+
+/**
+ * Converts a Firestore Timestamp-like object to an ISO string if applicable.
+ * If not a Timestamp, returns the value unchanged.
+ */
+export function toIsoStringIfTimestamp(value: any): string {
+  return value instanceof Object && 'toDate' in value
+    ? value.toDate().toISOString()
+    : value;
+}
+

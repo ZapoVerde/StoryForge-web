@@ -1,6 +1,6 @@
 // src/utils/hash.ts
 
-import type { PromptCard, AiSettings, StackInstructions } from '../models';
+import type { AiSettings, StackInstructions } from '../models';
 
 
 /**

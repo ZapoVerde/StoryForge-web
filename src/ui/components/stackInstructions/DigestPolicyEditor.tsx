@@ -13,7 +13,10 @@ import {
 } from '@mui/material';
 import type {
   DigestFilterPolicy,
-  EmissionRule,
+  EmissionRule
+} from '../../../models';
+
+import  {
   StackMode,
   FilterMode,
 } from '../../../models';

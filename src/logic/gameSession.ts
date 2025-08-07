@@ -1,7 +1,7 @@
 // src/logic/gameSession.ts
 import type { IGameRepository } from '../data/repositories/gameRepository';
 import type { IPromptCardRepository } from '../data/repositories/promptCardRepository';
-import type { GameSnapshot, GameState, LogEntry, Message, PromptCard } from '../models';
+import type { GameSnapshot, GameState, LogEntry, PromptCard } from '../models';
 import { formatIsoDateForDisplay } from '../utils/formatDate';
 import { generateUuid } from '../utils/uuid';
 import type { ITurnProcessor } from './ITurnProcessor';

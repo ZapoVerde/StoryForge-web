@@ -104,6 +104,7 @@ import WorldStateScreen from './ui/screens/WorldStateScreen';
 import LogViewerScreen from './ui/screens/LogViewerScreen';
 import SettingsScreen from './ui/screens/SettingsScreen';
 import SourceDump from './ui/screens/SourceDump';
+import type { JSX } from 'react';
 
 // A simple wrapper to protect routes that need an active game.
 const GameActiveRoute: React.FC<{ children: JSX.Element }> = ({ children }) => {
@@ -358,16 +359,16 @@ export const defaultStackInstructions: StackInstructions = {
   narratorProseEmission: { mode: StackMode.FIRST_N, n: 3, filtering: FilterMode.SCENE_ONLY, enabled: true },
   digestPolicy: { filtering: FilterMode.TAGGED, enabled: true },
   digestEmission: {
-    "5": { mode: StackMode.ALWAYS },
+    "5": { mode: StackMode.ALWAYS, n: 0 }, // MODIFIED: Added n: 0
     "4": { mode: StackMode.AFTER_N, n: 1 },
     "3": { mode: StackMode.FIRST_N, n: 6 },
     "2": { mode: StackMode.FIRST_N, n: 3 },
-    "1": { mode: StackMode.NEVER },
+    "1": { mode: StackMode.NEVER, n: 0 }, // MODIFIED: Added n: 0
   },
-  expressionLogPolicy: { mode: StackMode.ALWAYS, n: 0, filtering: FilterMode.SCENE_ONLY, enabled: true }, // ADDED n: 0
+  expressionLogPolicy: { mode: StackMode.ALWAYS, n: 0, filtering: FilterMode.SCENE_ONLY, enabled: true },
   expressionLinesPerCharacter: 3,
   emotionWeighting: true,
-  worldStatePolicy: { mode: StackMode.FILTERED, n: 0, filtering: FilterMode.SCENE_ONLY, enabled: true }, // ADDED n: 0
+  worldStatePolicy: { mode: StackMode.FILTERED, n: 0, filtering: FilterMode.SCENE_ONLY, enabled: true },
   knownEntitiesPolicy: { mode: StackMode.FIRST_N, n: 2, filtering: FilterMode.TAGGED, enabled: true },
   // REMOVED: "outputFormat": "prose_digest_emit",
   tokenPolicy: {
@@ -410,7 +411,7 @@ export const DEFAULT_EMIT_SKELETON_STRING: string = `
     *   After the digest block, include a single newline, followed by the marker \`@delta\` on its own line.
     *   Immediately after the marker, provide a \`\`\`json\`\`\` block containing key-value deltas for the world state.
 
-4.  **Scene Change Block (\`@scene\`, Optional):**
+4.  **Scene Change Block (\`@scene\`, Optional):
     *   If the scene has shifted, include a single newline, followed by the marker \`@scene\` on its own line.
     *   Immediately after the marker, provide a \`\`\`json\`\`\` block with the new scene object.
 
@@ -784,13 +785,14 @@ import {
   setDoc,
   deleteDoc,
   query,
-  where,
   getDocs,
   serverTimestamp,
   orderBy
 } from 'firebase/firestore';
 import { db } from '../infrastructure/firebaseClient'; // Import our Firestore instance
 import type { PromptCard } from '../../models';
+import { toIsoStringIfTimestamp } from '../../utils/formatDate';
+
 /**
  * Defines the contract for PromptCard data persistence operations.
  * This interface can be implemented by different concrete repositories
@@ -886,12 +888,8 @@ export class FirestorePromptCardRepository implements IPromptCardRepository {
       // This is a common pattern: store one way, retrieve/convert to match app's type.
       return {
         ...data,
-        createdAt: data.createdAt instanceof Object && 'toDate' in data.createdAt
-          ? (data.createdAt as any).toDate().toISOString()
-          : data.createdAt,
-        updatedAt: data.updatedAt instanceof Object && 'toDate' in data.updatedAt
-          ? (data.updatedAt as any).toDate().toISOString()
-          : data.updatedAt,
+        createdAt: toIsoStringIfTimestamp(data.createdAt),
+        updatedAt: toIsoStringIfTimestamp(data.updatedAt),
       };
     } else {
       console.log(`No PromptCard found with ID: ${cardId} for user ${userId}`);
@@ -911,12 +909,8 @@ export class FirestorePromptCardRepository implements IPromptCardRepository {
       const data = doc.data() as PromptCard;
       cards.push({
         ...data,
-        createdAt: data.createdAt instanceof Object && 'toDate' in data.createdAt
-          ? (data.createdAt as any).toDate().toISOString()
-          : data.createdAt,
-        updatedAt: data.updatedAt instanceof Object && 'toDate' in data.updatedAt
-          ? (data.updatedAt as any).toDate().toISOString()
-          : data.updatedAt,
+        createdAt: toIsoStringIfTimestamp(data.createdAt),
+        updatedAt: toIsoStringIfTimestamp(data.updatedAt),
       });
     });
     console.log(`Retrieved ${cards.length} prompt cards for user ${userId}`);
@@ -982,14 +976,14 @@ html {
 @@FOLDER: src/logic
 @@FILE: src/logic/ContextStackAssembler.ts
 // src/logic/ContextStackAssembler.ts
+import { StackMode, FilterMode } from '../models';
+
 import type {
   PromptCard,
   GameState,
   LogEntry,
   Message,
   SceneState,
-  StackMode,
-  FilterMode,
   DigestLine,
 } from '../models';
 import type { IContextStackAssembler } from './IContextStackAssembler';
@@ -1068,8 +1062,7 @@ export class ContextStackAssembler implements IContextStackAssembler {
 
 import type { IGameStateManager } from './IGameStateManager';
 import { produce } from 'immer'; // For immutable updates
-import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
-import type { GameState, SceneState, DeltaMap } from '../models';
+import type { GameState, DeltaMap } from '../models';
 /**
  * Manages the mutable aspects of the game state (world state and scene).
  * All mutations here are designed to be immutable, returning new state objects.
@@ -1287,7 +1280,7 @@ export interface IContextStackAssembler {
 @@FILE: src/logic/IGameStateManager.ts
 // src/logic/IGameStateManager.ts
 
-import type { GameState, SceneState, GameSnapshot, DeltaMap } from '../models';
+import type { GameState, DeltaMap } from '../models';
 
 /**
  * Defines the contract for managing the mutable state of the game (worldState and scene).
@@ -1422,7 +1415,7 @@ export interface ITurnProcessor {
 @@FILE: src/logic/SnapshotUpdater.ts
 // src/logic/SnapshotUpdater.ts
 import { produce } from 'immer';
-import type { GameSnapshot, GameState } from '../models';
+import type { GameSnapshot } from '../models';
 import type { IGameStateManager } from './IGameStateManager';
 import type { ISnapshotUpdater, ITurnResult } from './ISnapshotUpdater';
 
@@ -1604,9 +1597,19 @@ class DummyAiClient implements IAiClient {
     return Promise.resolve(JSON.stringify(dummyResponse)); // Return as stringified JSON
   }
 
-  async testConnection(connection: AiConnection): Promise<boolean> {
-    return Promise.resolve(true); // Dummy always passes test
+  async testConnection(connection: AiConnection): Promise<{ success: boolean; message: string }> {
+    return Promise.resolve({
+      success: true,
+      message: "Dummy client: test always passes."
+    });
   }
+  
+  async listModels(connection: Pick<AiConnection, 'apiUrl' | 'apiToken'>): Promise<ModelInfo[]> {
+    return Promise.resolve([
+      { id: 'dummy-model', name: 'Dummy Model' }
+    ]);
+  }
+  
 }
 
 
@@ -1708,8 +1711,7 @@ export class TurnProcessor implements ITurnProcessor {
       currentGameState,
       logs,
       conversationHistory,
-      action,
-      turnNumber
+      action
     );
     const contextSnapshotForLog = JSON.stringify(messagesToSend, null, 2);
 
@@ -1907,7 +1909,7 @@ export const aiClient = new AiClient();
 @@FILE: src/logic/cardManager.ts
 // src/logic/cardManager.ts
 
-import type { PromptCard, NewPromptCardData} from '../models';
+import type { PromptCard, NewPromptCardData, StackInstructions} from '../models';
 import { generateUuid } from '../utils/uuid';
 import { generateContentHash, getPromptCardContentForHash } from '../utils/hash';
 import { promptCardRepository } from '../data/repositories/promptCardRepository';
@@ -2355,7 +2357,7 @@ export function parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput 
 // src/logic/gameSession.ts
 import type { IGameRepository } from '../data/repositories/gameRepository';
 import type { IPromptCardRepository } from '../data/repositories/promptCardRepository';
-import type { GameSnapshot, GameState, LogEntry, Message, PromptCard } from '../models';
+import type { GameSnapshot, GameState, LogEntry, PromptCard } from '../models';
 import { formatIsoDateForDisplay } from '../utils/formatDate';
 import { generateUuid } from '../utils/uuid';
 import type { ITurnProcessor } from './ITurnProcessor';
@@ -2568,10 +2570,8 @@ export const turnProcessor = new TurnProcessor(aiClient, promptBuilder, logManag
 import { DELTA_MARKER } from './deltaParser'; // Import DELTA_MARKER
 import type { 
   AiSettings, 
-  PromptCard, 
   ParsedNarrationOutput, 
   LogEntry,
-  DeltaInstruction, 
   DeltaMap,
   DigestLine, 
   TokenSummary, 
@@ -2653,7 +2653,6 @@ class LogManager implements ILogManager {
     let taggableKey = instruction.key;
     const pathParts = instruction.key.split(".");
     if (pathParts.length >= 2) {
-      const category = pathParts[0];
       const entity = pathParts[1];
       // Infer if this is a character or location declaration for a summary
       const valueAsObject = instruction.value as Record<string, any>;
@@ -2908,7 +2907,7 @@ export type DeltaMap = { [fullKey: string]: DeltaInstruction };
 @@FILE: src/models/GameSnapshot.ts
 // src/models/GameSnapshot.ts
 
-import type { GameState, LogEntry, PromptCard, Message } from './index';
+import type { GameState, LogEntry, Message } from './index';
 
 /**
  * Represents a full, self-contained snapshot of a game session.
@@ -5775,7 +5774,10 @@ import {
 } from '@mui/material';
 import type {
   DigestFilterPolicy,
-  EmissionRule,
+  EmissionRule
+} from '../../../models';
+
+import  {
   StackMode,
   FilterMode,
 } from '../../../models';
@@ -5897,7 +5899,8 @@ import {
   MenuItem,
   Switch,
 } from '@mui/material';
-import type { ProsePolicy, StackMode, FilterMode } from '../../../models';
+import type { ProsePolicy} from '../../../models';
+import {StackMode, FilterMode } from '../../../models';
 import { InfoDialog } from '../InfoDialog';
 
 interface PolicyEditorProps {
@@ -6081,7 +6084,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { usePromptCardStore } from '../../state/usePromptCardStore';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
-import { PromptCard } from '../../models/index';
+import type { PromptCard } from '../../models';
 import Snackbar from '@mui/material/Snackbar';
 import { useNavigate } from 'react-router-dom';
 
@@ -6948,6 +6951,7 @@ import {
   DialogActions,
   TextField,
   Snackbar,
+  ListItemButton
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import AddIcon from '@mui/icons-material/Add';
@@ -7037,17 +7041,23 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
               <ListItem><ListItemText primary="No cards yet. Create one!" sx={{ textAlign: 'center' }} /></ListItem>
             ) : (
               promptCards.map((card: PromptCard) => (
-                <ListItem
-                  key={card.id}
-                  selected={activePromptCard?.id === card.id}
-                  onClick={() => handleCardSelect(card)}
-                  sx={{ py: 1, pr: 0, cursor: 'pointer', '&:hover': { backgroundColor: (theme) => theme.palette.action.hover } }}
-                >
-                  <ListItemText primary={card.title} secondary={card.description || 'No description'} primaryTypographyProps={{ noWrap: true }} secondaryTypographyProps={{ noWrap: true }} />
-                  <IconButton edge="end" aria-label="duplicate" onClick={(e) => { e.stopPropagation(); handleDuplicateCard(card.id); }}><ContentCopyIcon fontSize="small" /></IconButton>
-                  <IconButton edge="end" aria-label="delete" onClick={(e) => { e.stopPropagation(); handleDeleteCard(card.id); }}><DeleteIcon fontSize="small" color="error" /></IconButton>
-                  <IconButton edge="end" aria-label="export" onClick={(e) => { e.stopPropagation(); handleExport(card.id); }}><FileDownloadIcon fontSize="small" /></IconButton>
+                <ListItem key={card.id} disablePadding component="li">
+                  <ListItemButton
+                    selected={activePromptCard?.id === card.id}
+                    onClick={() => handleCardSelect(card)}
+                    sx={{
+                      py: 1,
+                      pr: 2,
+                      cursor: 'pointer',
+                      '&:hover': {
+                        backgroundColor: (theme) => theme.palette.action.hover,
+                      },
+                    }}
+                  >
+                    <ListItemText primary={card.title || 'Untitled Card'} />
+                  </ListItemButton>
                 </ListItem>
+
               ))
             )}
           </List>
@@ -7695,11 +7705,22 @@ export function formatIsoDateForDisplay(isoString: string): string {
   }
 }
 
+/**
+ * Converts a Firestore Timestamp-like object to an ISO string if applicable.
+ * If not a Timestamp, returns the value unchanged.
+ */
+export function toIsoStringIfTimestamp(value: any): string {
+  return value instanceof Object && 'toDate' in value
+    ? value.toDate().toISOString()
+    : value;
+}
+
+
 @@FILE: src/utils/hash.test.ts
 // src/utils/hash.test.ts
 
 import { generateContentHash, getPromptCardContentForHash } from './hash';
-import type { PromptCard, AiSettings, StackInstructions } from '../models';
+import type { PromptCard } from '../models';
 import { defaultAiSettingsInCard, defaultStackInstructions, DEFAULT_FIRST_TURN_PROMPT_BLOCK, DEFAULT_EMIT_SKELETON_STRING } from '../data/config/promptCardDefaults';
 
 describe('hash utilities', () => {
@@ -7841,7 +7862,7 @@ describe('hash utilities', () => {
 @@FILE: src/utils/hash.ts
 // src/utils/hash.ts
 
-import type { PromptCard, AiSettings, StackInstructions } from '../models';
+import type { AiSettings, StackInstructions } from '../models';
 
 
 /**
@@ -8118,8 +8139,12 @@ export function useLongPress<T extends HTMLElement>(
   onClick?: (event: React.MouseEvent<T> | React.TouchEvent<T>) => void,
   { delay = 500 } = {}
 ) {
-  const timeout = useRef<NodeJS.Timeout>();
-  const target = useRef<T>();
+  // Initialize useRef with null to satisfy the 'initialValue' requirement
+  // and extend the type to allow null, as a timeout reference might be null initially
+  const timeout = useRef<NodeJS.Timeout | null>(null);
+  // Initialize useRef with null and extend the type to allow null,
+  // as the target element might not be immediately available or might be cleared
+  const target = useRef<T | null>(null);
 
   const start = useCallback(
     (event: React.MouseEvent<T> | React.TouchEvent<T>) => {
@@ -8132,7 +8157,8 @@ export function useLongPress<T extends HTMLElement>(
       target.current = event.currentTarget as T;
       timeout.current = setTimeout(() => {
         onLongPress(event);
-        target.current = undefined; // Clear target after long press
+        // Assign null instead of undefined, as the type for target.current is T | null
+        target.current = null; // Clear target after long press
       }, delay);
     },
     [onLongPress, delay]
@@ -8140,11 +8166,16 @@ export function useLongPress<T extends HTMLElement>(
 
   const clear = useCallback(
     (event: React.MouseEvent<T> | React.TouchEvent<T>, shouldClick = true) => {
-      clearTimeout(timeout.current);
+      // Clear the timeout if it exists
+      if (timeout.current) {
+        clearTimeout(timeout.current);
+      }
+
       if (shouldClick && onClick && target.current === event.currentTarget) {
         onClick(event);
       }
-      target.current = undefined;
+      // Assign null instead of undefined
+      target.current = null;
     },
     [onClick]
   );
@@ -8158,7 +8189,6 @@ export function useLongPress<T extends HTMLElement>(
     onTouchCancel: (e: React.TouchEvent<T>) => clear(e, false),
   };
 }
-
 @@FILE: src/utils/hooks/usePromptCardManagerLogic.ts
 // src/utils/hooks/usePromptCardManagerLogic.ts
 import { useState, useEffect, useCallback } from 'react';
@@ -8443,9 +8473,18 @@ export const useSettingsLogic = () => {
         userAgent: 'StoryForge/1.0', supportsModelDiscovery: false, commonModels: [],
     };
     setEditingConnection({
-      ...(template as AiConnection),
-      id: '', createdAt: '', lastUpdated: '',
+      displayName: template.displayName,
+      modelName: template.modelName,
+      modelSlug: template.modelSlug,
+      apiUrl: template.apiUrl,
+      apiToken: template.apiToken,
+      functionCallingEnabled: template.functionCallingEnabled,
+      userAgent: template.userAgent || null,
+      id: '',
+      createdAt: '',
+      lastUpdated: '',
     });
+    
     setAvailableModels(template.commonModels);
     setModelSearchTerm('');
     setDialogStep('details');
@@ -8717,7 +8756,6 @@ export const useWorldStateViewLogic = (gameState: GameState | null) => {
 // src/utils/jsonUtils.ts
 
 
-type JsonPrimitive = string | number | boolean | null;
 /**
  * Flattens a nested JSON object into a single-level map with dot-separated keys.
  * @param obj The JSON object to flatten.

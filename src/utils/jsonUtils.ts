@@ -1,7 +1,6 @@
 // src/utils/jsonUtils.ts
 
 
-type JsonPrimitive = string | number | boolean | null;
 /**
  * Flattens a nested JSON object into a single-level map with dot-separated keys.
  * @param obj The JSON object to flatten.

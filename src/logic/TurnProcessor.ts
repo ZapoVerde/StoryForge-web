@@ -65,9 +65,19 @@ class DummyAiClient implements IAiClient {
     return Promise.resolve(JSON.stringify(dummyResponse)); // Return as stringified JSON
   }
 
-  async testConnection(connection: AiConnection): Promise<boolean> {
-    return Promise.resolve(true); // Dummy always passes test
+  async testConnection(connection: AiConnection): Promise<{ success: boolean; message: string }> {
+    return Promise.resolve({
+      success: true,
+      message: "Dummy client: test always passes."
+    });
   }
+  
+  async listModels(connection: Pick<AiConnection, 'apiUrl' | 'apiToken'>): Promise<ModelInfo[]> {
+    return Promise.resolve([
+      { id: 'dummy-model', name: 'Dummy Model' }
+    ]);
+  }
+  
 }
 
 
@@ -169,8 +179,7 @@ export class TurnProcessor implements ITurnProcessor {
       currentGameState,
       logs,
       conversationHistory,
-      action,
-      turnNumber
+      action
     );
     const contextSnapshotForLog = JSON.stringify(messagesToSend, null, 2);
 

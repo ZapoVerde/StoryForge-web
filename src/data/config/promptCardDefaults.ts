@@ -26,16 +26,16 @@ export const defaultStackInstructions: StackInstructions = {
   narratorProseEmission: { mode: StackMode.FIRST_N, n: 3, filtering: FilterMode.SCENE_ONLY, enabled: true },
   digestPolicy: { filtering: FilterMode.TAGGED, enabled: true },
   digestEmission: {
-    "5": { mode: StackMode.ALWAYS },
+    "5": { mode: StackMode.ALWAYS, n: 0 }, // MODIFIED: Added n: 0
     "4": { mode: StackMode.AFTER_N, n: 1 },
     "3": { mode: StackMode.FIRST_N, n: 6 },
     "2": { mode: StackMode.FIRST_N, n: 3 },
-    "1": { mode: StackMode.NEVER },
+    "1": { mode: StackMode.NEVER, n: 0 }, // MODIFIED: Added n: 0
   },
-  expressionLogPolicy: { mode: StackMode.ALWAYS, n: 0, filtering: FilterMode.SCENE_ONLY, enabled: true }, // ADDED n: 0
+  expressionLogPolicy: { mode: StackMode.ALWAYS, n: 0, filtering: FilterMode.SCENE_ONLY, enabled: true },
   expressionLinesPerCharacter: 3,
   emotionWeighting: true,
-  worldStatePolicy: { mode: StackMode.FILTERED, n: 0, filtering: FilterMode.SCENE_ONLY, enabled: true }, // ADDED n: 0
+  worldStatePolicy: { mode: StackMode.FILTERED, n: 0, filtering: FilterMode.SCENE_ONLY, enabled: true },
   knownEntitiesPolicy: { mode: StackMode.FIRST_N, n: 2, filtering: FilterMode.TAGGED, enabled: true },
   // REMOVED: "outputFormat": "prose_digest_emit",
   tokenPolicy: {
@@ -78,7 +78,7 @@ export const DEFAULT_EMIT_SKELETON_STRING: string = `
     *   After the digest block, include a single newline, followed by the marker \`@delta\` on its own line.
     *   Immediately after the marker, provide a \`\`\`json\`\`\` block containing key-value deltas for the world state.
 
-4.  **Scene Change Block (\`@scene\`, Optional):**
+4.  **Scene Change Block (\`@scene\`, Optional):
     *   If the scene has shifted, include a single newline, followed by the marker \`@scene\` on its own line.
     *   Immediately after the marker, provide a \`\`\`json\`\`\` block with the new scene object.
 

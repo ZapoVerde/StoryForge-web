@@ -49,9 +49,18 @@ export const useSettingsLogic = () => {
         userAgent: 'StoryForge/1.0', supportsModelDiscovery: false, commonModels: [],
     };
     setEditingConnection({
-      ...(template as AiConnection),
-      id: '', createdAt: '', lastUpdated: '',
+      displayName: template.displayName,
+      modelName: template.modelName,
+      modelSlug: template.modelSlug,
+      apiUrl: template.apiUrl,
+      apiToken: template.apiToken,
+      functionCallingEnabled: template.functionCallingEnabled,
+      userAgent: template.userAgent || null,
+      id: '',
+      createdAt: '',
+      lastUpdated: '',
     });
+    
     setAvailableModels(template.commonModels);
     setModelSearchTerm('');
     setDialogStep('details');

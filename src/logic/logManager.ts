@@ -3,10 +3,8 @@
 import { DELTA_MARKER } from './deltaParser'; // Import DELTA_MARKER
 import type { 
   AiSettings, 
-  PromptCard, 
   ParsedNarrationOutput, 
   LogEntry,
-  DeltaInstruction, 
   DeltaMap,
   DigestLine, 
   TokenSummary, 
@@ -88,7 +86,6 @@ class LogManager implements ILogManager {
     let taggableKey = instruction.key;
     const pathParts = instruction.key.split(".");
     if (pathParts.length >= 2) {
-      const category = pathParts[0];
       const entity = pathParts[1];
       // Infer if this is a character or location declaration for a summary
       const valueAsObject = instruction.value as Record<string, any>;

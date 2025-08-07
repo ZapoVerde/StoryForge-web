@@ -1,6 +1,6 @@
 // src/logic/IGameStateManager.ts
 
-import type { GameState, SceneState, GameSnapshot, DeltaMap } from '../models';
+import type { GameState, DeltaMap } from '../models';
 
 /**
  * Defines the contract for managing the mutable state of the game (worldState and scene).

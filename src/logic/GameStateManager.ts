@@ -2,8 +2,7 @@
 
 import type { IGameStateManager } from './IGameStateManager';
 import { produce } from 'immer'; // For immutable updates
-import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
-import type { GameState, SceneState, DeltaMap } from '../models';
+import type { GameState, DeltaMap } from '../models';
 /**
  * Manages the mutable aspects of the game state (world state and scene).
  * All mutations here are designed to be immutable, returning new state objects.

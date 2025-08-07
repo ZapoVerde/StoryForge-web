@@ -1,6 +1,6 @@
 // src/logic/cardManager.ts
 
-import type { PromptCard, NewPromptCardData} from '../models';
+import type { PromptCard, NewPromptCardData, StackInstructions} from '../models';
 import { generateUuid } from '../utils/uuid';
 import { generateContentHash, getPromptCardContentForHash } from '../utils/hash';
 import { promptCardRepository } from '../data/repositories/promptCardRepository';

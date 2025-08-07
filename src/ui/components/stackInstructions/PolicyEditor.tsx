@@ -13,7 +13,8 @@ import {
   MenuItem,
   Switch,
 } from '@mui/material';
-import type { ProsePolicy, StackMode, FilterMode } from '../../../models';
+import type { ProsePolicy} from '../../../models';
+import {StackMode, FilterMode } from '../../../models';
 import { InfoDialog } from '../InfoDialog';
 
 interface PolicyEditorProps {

@@ -1,6 +1,6 @@
 // src/models/GameSnapshot.ts
 
-import type { GameState, LogEntry, PromptCard, Message } from './index';
+import type { GameState, LogEntry, Message } from './index';
 
 /**
  * Represents a full, self-contained snapshot of a game session.

@@ -18,6 +18,7 @@ import {
   DialogActions,
   TextField,
   Snackbar,
+  ListItemButton
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import AddIcon from '@mui/icons-material/Add';
@@ -107,17 +108,23 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
               <ListItem><ListItemText primary="No cards yet. Create one!" sx={{ textAlign: 'center' }} /></ListItem>
             ) : (
               promptCards.map((card: PromptCard) => (
-                <ListItem
-                  key={card.id}
-                  selected={activePromptCard?.id === card.id}
-                  onClick={() => handleCardSelect(card)}
-                  sx={{ py: 1, pr: 0, cursor: 'pointer', '&:hover': { backgroundColor: (theme) => theme.palette.action.hover } }}
-                >
-                  <ListItemText primary={card.title} secondary={card.description || 'No description'} primaryTypographyProps={{ noWrap: true }} secondaryTypographyProps={{ noWrap: true }} />
-                  <IconButton edge="end" aria-label="duplicate" onClick={(e) => { e.stopPropagation(); handleDuplicateCard(card.id); }}><ContentCopyIcon fontSize="small" /></IconButton>
-                  <IconButton edge="end" aria-label="delete" onClick={(e) => { e.stopPropagation(); handleDeleteCard(card.id); }}><DeleteIcon fontSize="small" color="error" /></IconButton>
-                  <IconButton edge="end" aria-label="export" onClick={(e) => { e.stopPropagation(); handleExport(card.id); }}><FileDownloadIcon fontSize="small" /></IconButton>
+                <ListItem key={card.id} disablePadding component="li">
+                  <ListItemButton
+                    selected={activePromptCard?.id === card.id}
+                    onClick={() => handleCardSelect(card)}
+                    sx={{
+                      py: 1,
+                      pr: 2,
+                      cursor: 'pointer',
+                      '&:hover': {
+                        backgroundColor: (theme) => theme.palette.action.hover,
+                      },
+                    }}
+                  >
+                    <ListItemText primary={card.title || 'Untitled Card'} />
+                  </ListItemButton>
                 </ListItem>
+
               ))
             )}
           </List>

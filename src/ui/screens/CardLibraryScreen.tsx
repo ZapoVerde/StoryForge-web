@@ -28,7 +28,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { usePromptCardStore } from '../../state/usePromptCardStore';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
-import { PromptCard } from '../../models/index';
+import type { PromptCard } from '../../models';
 import Snackbar from '@mui/material/Snackbar';
 import { useNavigate } from 'react-router-dom';
 

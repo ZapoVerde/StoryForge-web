@@ -14,8 +14,12 @@ export function useLongPress<T extends HTMLElement>(
   onClick?: (event: React.MouseEvent<T> | React.TouchEvent<T>) => void,
   { delay = 500 } = {}
 ) {
-  const timeout = useRef<NodeJS.Timeout>();
-  const target = useRef<T>();
+  // Initialize useRef with null to satisfy the 'initialValue' requirement
+  // and extend the type to allow null, as a timeout reference might be null initially
+  const timeout = useRef<NodeJS.Timeout | null>(null);
+  // Initialize useRef with null and extend the type to allow null,
+  // as the target element might not be immediately available or might be cleared
+  const target = useRef<T | null>(null);
 
   const start = useCallback(
     (event: React.MouseEvent<T> | React.TouchEvent<T>) => {
@@ -28,7 +32,8 @@ export function useLongPress<T extends HTMLElement>(
       target.current = event.currentTarget as T;
       timeout.current = setTimeout(() => {
         onLongPress(event);
-        target.current = undefined; // Clear target after long press
+        // Assign null instead of undefined, as the type for target.current is T | null
+        target.current = null; // Clear target after long press
       }, delay);
     },
     [onLongPress, delay]
@@ -36,11 +41,16 @@ export function useLongPress<T extends HTMLElement>(
 
   const clear = useCallback(
     (event: React.MouseEvent<T> | React.TouchEvent<T>, shouldClick = true) => {
-      clearTimeout(timeout.current);
+      // Clear the timeout if it exists
+      if (timeout.current) {
+        clearTimeout(timeout.current);
+      }
+
       if (shouldClick && onClick && target.current === event.currentTarget) {
         onClick(event);
       }
-      target.current = undefined;
+      // Assign null instead of undefined
+      target.current = null;
     },
     [onClick]
   );

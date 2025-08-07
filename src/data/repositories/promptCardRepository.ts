@@ -7,13 +7,14 @@ import {
   setDoc,
   deleteDoc,
   query,
-  where,
   getDocs,
   serverTimestamp,
   orderBy
 } from 'firebase/firestore';
 import { db } from '../infrastructure/firebaseClient'; // Import our Firestore instance
 import type { PromptCard } from '../../models';
+import { toIsoStringIfTimestamp } from '../../utils/formatDate';
+
 /**
  * Defines the contract for PromptCard data persistence operations.
  * This interface can be implemented by different concrete repositories
@@ -109,12 +110,8 @@ export class FirestorePromptCardRepository implements IPromptCardRepository {
       // This is a common pattern: store one way, retrieve/convert to match app's type.
       return {
         ...data,
-        createdAt: data.createdAt instanceof Object && 'toDate' in data.createdAt
-          ? (data.createdAt as any).toDate().toISOString()
-          : data.createdAt,
-        updatedAt: data.updatedAt instanceof Object && 'toDate' in data.updatedAt
-          ? (data.updatedAt as any).toDate().toISOString()
-          : data.updatedAt,
+        createdAt: toIsoStringIfTimestamp(data.createdAt),
+        updatedAt: toIsoStringIfTimestamp(data.updatedAt),
       };
     } else {
       console.log(`No PromptCard found with ID: ${cardId} for user ${userId}`);
@@ -134,12 +131,8 @@ export class FirestorePromptCardRepository implements IPromptCardRepository {
       const data = doc.data() as PromptCard;
       cards.push({
         ...data,
-        createdAt: data.createdAt instanceof Object && 'toDate' in data.createdAt
-          ? (data.createdAt as any).toDate().toISOString()
-          : data.createdAt,
-        updatedAt: data.updatedAt instanceof Object && 'toDate' in data.updatedAt
-          ? (data.updatedAt as any).toDate().toISOString()
-          : data.updatedAt,
+        createdAt: toIsoStringIfTimestamp(data.createdAt),
+        updatedAt: toIsoStringIfTimestamp(data.updatedAt),
       });
     });
     console.log(`Retrieved ${cards.length} prompt cards for user ${userId}`);
