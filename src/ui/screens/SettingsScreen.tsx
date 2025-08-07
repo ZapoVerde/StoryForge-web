@@ -1,13 +1,11 @@
 // src/ui/screens/SettingsScreen.tsx
 import React from 'react';
 import {
-  Box, Typography, Button, AppBar, Toolbar, IconButton, List, ListItem,
-  Paper, Divider, CircularProgress, Alert, TextField, Switch, FormControlLabel,
+  Box, Typography, Button, Paper, Divider, CircularProgress, Alert, TextField, Switch, FormControlLabel,
   Snackbar, Dialog, DialogTitle, DialogContent, DialogActions, ListItemButton,
   Stack, Select, MenuItem, InputLabel, FormControl, Card, CardActionArea, Grid,
-  ListSubheader, InputAdornment, ListItemText, Tooltip,
+  ListSubheader, InputAdornment, ListItemText, Tooltip, List, ListItem, IconButton
 } from '@mui/material';
-import MenuIcon from '@mui/icons-material/Menu';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -15,30 +13,24 @@ import SearchIcon from '@mui/icons-material/Search';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import WifiTetheringIcon from '@mui/icons-material/WifiTethering';
 import { useSettingsLogic } from '../../utils/hooks/useSettingsLogic';
-import { InfoDialog } from '../components/InfoDialog';
 import { CollapsibleSection } from '../components/CollapsibleSection';
 
-const SettingsScreen: React.FC<{ onNavToggle: () => void }> = ({ onNavToggle }) => {
+const SettingsScreen: React.FC = () => {
   const {
     aiConnections, selectedConnectionId, isLoadingConnections, connectionsError,
     useDummyNarrator, themeMode, setUseDummyNarrator, setThemeMode,
     isDialogOpen, dialogStep, editingConnection, isFetchingModels, testStatus, snackbar, templates,
-    modelSearchTerm, setModelSearchTerm, filteredModels,
+    setModelSearchTerm, filteredModels,
     handleOpenDialog, handleCloseDialog, handleLoadTemplate, handleUpdateEditingConnection, 
     handleFetchModels, handleSaveAndTest, handleDelete, closeSnackbar, setSelectedConnectionId, handleTest,
-    
-    // NEW state and handlers for the info dialog
     modelInfo, openModelInfo, handleOpenModelInfo, handleCloseModelInfo,
   } = useSettingsLogic();
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
-      <AppBar position="static" elevation={1}>
-        <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>Settings</Typography>
-          <IconButton edge="end" color="inherit" aria-label="menu" onClick={onNavToggle}><MenuIcon /></IconButton>
-        </Toolbar>
-      </AppBar>
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h5" component="h1">Settings</Typography>
+      </Box>
 
       {connectionsError && <Alert severity="error" sx={{ m: 2 }}>Error: {connectionsError}</Alert>}
       
@@ -103,6 +95,7 @@ const SettingsScreen: React.FC<{ onNavToggle: () => void }> = ({ onNavToggle }) 
           )}
 
           {dialogStep === 'details' && editingConnection && (
+            // ... (The rest of the dialog content is correct)
             <Stack spacing={2.5} sx={{ mt: 1 }}>
               <TextField label="Connection Name" value={editingConnection.displayName} onChange={(e) => handleUpdateEditingConnection({ displayName: e.target.value })} autoFocus fullWidth />
               <TextField label="API Token (Key)" value={editingConnection.apiToken} onChange={(e) => handleUpdateEditingConnection({ apiToken: e.target.value })} fullWidth type="password" />

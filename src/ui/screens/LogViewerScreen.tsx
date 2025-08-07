@@ -9,11 +9,7 @@ import { useLogViewerLogic } from '../../utils/hooks/useLogViewerLogic';
 import { LogViewMode } from '../../utils/types';
 import { CollapsibleLogEntry } from '../components/CollapsibleLogEntry';
 
-interface LogViewerScreenProps {
-  onNavToggle: () => void;
-}
-
-const LogViewerScreen: React.FC<LogViewerScreenProps> = ({ onNavToggle }) => {
+const LogViewerScreen: React.FC = () => {
   const {
     logEntries, selectedLogViewModes, isLoading, error,
     menuAnchorEl, isMenuOpen, handleMenuClick, handleMenuClose, handleCheckboxChange,
@@ -29,14 +25,9 @@ const LogViewerScreen: React.FC<LogViewerScreenProps> = ({ onNavToggle }) => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
-      <AppBar position="static" elevation={1}>
-        <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>Log Review</Typography>
-          <Button color="inherit" onClick={handleMenuClick}>Log Views ▼</Button>
-          <IconButton edge="end" color="inherit" aria-label="menu" onClick={onNavToggle}><MenuIcon /></IconButton>
-        </Toolbar>
-      </AppBar>
-
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h5" component="h1">Logs</Typography>
+      </Box>
       <Menu anchorEl={menuAnchorEl} open={isMenuOpen} onClose={handleMenuClose}>
         {Object.values(LogViewMode).map((mode) => (
           <MenuItem key={mode} onClick={() => handleCheckboxChange(mode)}>

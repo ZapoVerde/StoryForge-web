@@ -32,11 +32,9 @@ import { usePromptCardManagerLogic } from '../../utils/hooks/usePromptCardManage
 import PromptCardEditor from './PromptCardEditor';
 import type { PromptCard } from '../../models';
 
-interface PromptCardManagerProps {
-  onNavToggle: () => void;
-}
 
-const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) => {
+
+const PromptCardManager: React.FC = () => {
   const { user } = useAuthStore();
   const {
     isLoading,
@@ -78,9 +76,6 @@ const PromptCardManager: React.FC<PromptCardManagerProps> = ({ onNavToggle }) =>
         <Typography variant="h5" component="h1">
           Prompt Cards
         </Typography>
-        <IconButton onClick={onNavToggle} aria-label="menu">
-          <MenuIcon />
-        </IconButton>
       </Box>
 
       <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>

@@ -4,8 +4,8 @@ import { useAuthStore } from '../../state/useAuthStore';
 import { useSettingsStore } from '../../state/useSettingsStore';
 import type { AiConnection } from '../../models';
 import { aiClient } from '../../logic/aiClient';
-import { aiConnectionTemplates } from '../../data/config/aiConnectionTemplates'; // runtime
-import type { ModelInfo } from '../../data/config/aiConnectionTemplates'; // type-only
+import { aiConnectionTemplates } from '../../data/config/aiConnectionTemplates';
+import type { ModelInfo } from '../../data/config/aiConnectionTemplates';
 
 export const useSettingsLogic = () => {
   const { user } = useAuthStore();
@@ -19,6 +19,20 @@ export const useSettingsLogic = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [testStatus, setTestStatus] = useState<{ text: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({ open: false, message: '', severity: 'info' });
+
+  // --- START: ADDED STATE AND HANDLERS FOR MODEL INFO DIALOG ---
+  const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null);
+  const [openModelInfo, setOpenModelInfo] = useState(false);
+
+  const handleOpenModelInfo = useCallback((model: ModelInfo) => {
+    setModelInfo(model);
+    setOpenModelInfo(true);
+  }, []);
+
+  const handleCloseModelInfo = useCallback(() => {
+    setOpenModelInfo(false);
+  }, []);
+  // --- END: ADDED STATE AND HANDLERS ---
 
   useEffect(() => {
     if (user?.uid) {
@@ -43,6 +57,7 @@ export const useSettingsLogic = () => {
     setIsDialogOpen(true);
   }, []);
 
+  // ... (rest of the hook logic is correct and remains unchanged) ...
   const handleLoadTemplate = useCallback((templateKey: string) => {
     const template = aiConnectionTemplates[templateKey] || {
         displayName: 'Custom', modelName: '', modelSlug: '', apiUrl: '', apiToken: '', functionCallingEnabled: false,
@@ -165,5 +180,11 @@ export const useSettingsLogic = () => {
     handleDelete,
     closeSnackbar,
     handleTest,
+    // --- START: ADDED PROPERTIES TO RETURN OBJECT ---
+    modelInfo,
+    openModelInfo,
+    handleOpenModelInfo,
+    handleCloseModelInfo,
+    // --- END: ADDED PROPERTIES ---
   };
 };

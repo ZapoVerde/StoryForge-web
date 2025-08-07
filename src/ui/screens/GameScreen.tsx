@@ -6,26 +6,27 @@ import {
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import CasinoIcon from '@mui/icons-material/Casino';
-import MenuIcon from '@mui/icons-material/Menu';
+// REMOVE: MenuIcon is not used here; it's in MainLayout.
+// import MenuIcon from '@mui/icons-material/Menu';
 import { useGameScreenLogic } from '../../utils/hooks/useGameScreenLogic';
 import { LogView } from '../components/LogView';
 import { PinnedItemsView } from '../components/PinnedItemsView';
-import { useGameStateStore, selectCurrentGameState } from '../../state/useGameStateStore'; // Import selectCurrentGameState
+// REMOVE: This direct subscription is redundant and causes the errors.
+// import { useGameStateStore, selectCurrentGameState } from '../../state/useGameStateStore';
 
-interface GameScreenProps {
-  onNavToggle: () => void;
-}
+// REMOVE: The onNavToggle prop is no longer needed.
+// const GameScreen: React.FC = () => {
+const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
 
-const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
-  // DEBUG: Log GameScreen component renders
   console.log('%c[GameScreen.tsx] Component rendering.', 'color: darkgreen; font-weight: bold;');
 
+  // ADD `gameState` to the destructuring. This is the state from your logic hook.
   const {
     isReady,
-    isLoading, // This is useGameScreenLogic's internal loading, tied to useGameStateStore's gameLoading
+    isLoading,
     isProcessingTurn,
     gameError,
-    // gameState is now passed from useGameScreenLogic
+    gameState, // <-- USE THIS
     conversationHistory,
     narratorInputText,
     logContainerRef,
@@ -42,11 +43,11 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
     closeSnackbar,
   } = useGameScreenLogic();
 
-  // Explicitly get the currentGameState from the store for rendering checks
-  const currentGameStateFromStore = useGameStateStore(selectCurrentGameState);
+  // REMOVE this redundant subscription.
+  // const currentGameStateFromStore = useGameStateStore(selectCurrentGameState);
 
-  // DEBUG: Log readiness check status
-  console.log(`[GameScreen.tsx] Readiness Check: isReady=${isReady}, isLoading=${isLoading}, currentGameStateFromStore=${currentGameStateFromStore ? currentGameStateFromStore.narration.substring(0,20) : 'null'}.`);
+  // The readiness check should be based on what the hook provides.
+  console.log(`[GameScreen.tsx] Readiness Check: isReady=${isReady}, isLoading=${isLoading}`);
 
   if (isLoading) {
     console.log('[GameScreen.tsx] Displaying GameScreen loading state.');
@@ -58,9 +59,9 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
     );
   }
 
-  // Check if currentGameStateFromStore is null AFTER loading is false
-  if (!currentGameStateFromStore) {
-    console.log('%c[GameScreen.tsx] Displaying Game Not Initialized state.', 'color: red; font-weight: bold;');
+  // UPDATE: The primary condition should be the isReady flag from the hook.
+  if (!isReady) {
+    console.log('%c[GameScreen.tsx] Displaying Game Not Initialized state (isReady=false).', 'color: red; font-weight: bold;');
     return (
       <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
         <Typography variant="h6" color="error">Game Not Initialized</Typography>
@@ -73,27 +74,25 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
     );
   }
 
-  // The main game UI is rendered here, now that we know we are `isReady` and currentGameStateFromStore is present
+  // If we get here, isReady is true, and gameState is guaranteed to be available.
   console.log('[GameScreen.tsx] Displaying full GameScreen UI.');
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2, position: 'relative' }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, flexShrink: 0 }}>
         <Typography variant="h5" component="h1">Narrator</Typography>
-        <IconButton onClick={onNavToggle} aria-label="menu"><MenuIcon /></IconButton>
+        {/* REMOVE: The Nav Toggle button is handled by MainLayout now. */}
       </Box>
-
-      {/* Pinned Items View floats on top */}
+      
       <Box sx={{ position: 'relative', zIndex: 10, flexShrink: 0 }}>
-        {/* Pass the actual currentGameState object from the store for PinnedItemsView */}
-        <PinnedItemsView gameState={currentGameStateFromStore} />
+        {/* PinnedItemsView now gets its own data from the store. No props are needed. */}
+        <PinnedItemsView />
       </Box>
 
-      {/* Log/Chat View */}
+      {/* The rest of the component remains the same */}
       <Paper ref={logContainerRef} elevation={1} sx={{ flexGrow: 1, mt: 1, p: 2, overflowY: 'auto' }}>
         <LogView conversationHistory={conversationHistory} />
       </Paper>
 
-      {/* Input Field Section */}
       <Box sx={{ display: 'flex', mt: 2, gap: 1, flexShrink: 0 }}>
         <TextField
           fullWidth
@@ -128,7 +127,6 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
         </Tooltip>
       </Box>
 
-      {/* Dice Roller Dialog */}
       <Dialog open={rollDialog.open} onClose={handleCloseRollDialog}>
         <DialogTitle>Dice Roll</DialogTitle>
         <DialogContent>
@@ -150,7 +148,6 @@ const GameScreen: React.FC<GameScreenProps> = ({ onNavToggle }) => {
         </DialogActions>
       </Dialog>
 
-      {/* Snackbar for feedback */}
       <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={closeSnackbar}>
         <Alert onClose={closeSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
           {snackbar.message}

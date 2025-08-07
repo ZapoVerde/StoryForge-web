@@ -113,17 +113,11 @@ const GameLibraryScreen: React.FC = () => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
-      <AppBar position="static" color="default" elevation={1}
-        sx={{
-          backgroundColor: (theme) => theme.palette.background.paper,
-          color: (theme) => theme.palette.text.primary,
-        }}>
-        <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            Game Library (Saved Games)
-          </Typography>
-        </Toolbar>
-      </AppBar>
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h5" component="h1">
+          Game Library (Saved Games)
+        </Typography>
+      </Box>
 
       {savedGamesError && (
         <Alert

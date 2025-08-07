@@ -1,11 +1,10 @@
 // src/ui/screens/WorldStateScreen.tsx
 import React from 'react';
 import {
-  Box, Typography, Button, AppBar, Toolbar, IconButton, Paper, 
+  Box, Typography, Button, IconButton, Paper, 
   Alert, List, Collapse, Checkbox, TextField, Dialog, DialogTitle, DialogContent,
   DialogActions, Divider,
 } from '@mui/material';
-import MenuIcon from '@mui/icons-material/Menu';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -14,11 +13,7 @@ import { useGameStateStore, selectWorldStatePinnedKeys } from '../../state/useGa
 import { useWorldStateViewLogic } from '../../utils/hooks/useWorldStateViewLogic';
 import { WorldStateItemRow } from '../components/WorldStateItemRow';
 
-interface WorldStateScreenProps {
-  onNavToggle: () => void;
-}
-
-const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
+const WorldStateScreen: React.FC = () => {
   const worldStatePinnedKeys = useGameStateStore(selectWorldStatePinnedKeys); // Use selector
   const { gameError } = useGameStateStore(); // Top-level state is fine
 
@@ -59,12 +54,9 @@ const WorldStateScreen: React.FC<WorldStateScreenProps> = ({ onNavToggle }) => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
-      <AppBar position="static" elevation={1}>
-        <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>World State</Typography>
-          <IconButton edge="end" color="inherit" aria-label="menu" onClick={onNavToggle}><MenuIcon /></IconButton>
-        </Toolbar>
-      </AppBar>
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h5" component="h1">World State</Typography>
+      </Box>
 
       {gameError && (<Alert severity="error" sx={{ m: 2 }}>Error: {gameError}</Alert>)}
 
