@@ -29,10 +29,9 @@ export interface ISnapshotUpdater {
    * @returns A new, updated GameSnapshot.
    */
   applyEntityRename(snapshot: GameSnapshot, category: string, oldName: string, newName: string): GameSnapshot;
-  
-  // ... other direct edit methods
   applyCategoryDelete(snapshot: GameSnapshot, category: string): GameSnapshot;
   applyEntityDelete(snapshot: GameSnapshot, category: string, entity: string): GameSnapshot;
   applyKeyValueEdit(snapshot: GameSnapshot, key: string, value: any): GameSnapshot;
   applyKeyDelete(snapshot: GameSnapshot, key: string): GameSnapshot;
+  applyPinToggle(snapshot: GameSnapshot, keyPath: string, type: 'variable' | 'entity' | 'category'): GameSnapshot;
 }

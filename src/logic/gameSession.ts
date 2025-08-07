@@ -7,7 +7,7 @@ import { generateUuid } from '../utils/uuid';
 import type { ITurnProcessor } from './ITurnProcessor';
 import type { ISnapshotUpdater } from './ISnapshotUpdater';
 
-// NOTE: The IGameSession interface remains UNCHANGED, so it won't break the store.
+// NOTE: The IGameSession interface is defined within this file.
 export interface IGameSession {
   initializeGame(userId: string, cardId: string, existingSnapshotId?: string): Promise<void>;
   processPlayerAction(action: string, useDummyNarrator: boolean): Promise<GameSnapshot>;
@@ -26,6 +26,9 @@ export interface IGameSession {
   deleteWorldEntity(category: string, entity: string): Promise<GameSnapshot | null>;
   editWorldKeyValue(key: string, value: any): Promise<GameSnapshot | null>;
   deleteWorldKey(key: string): Promise<GameSnapshot | null>;
+  
+  // NEW: Method for toggling world state pins, correctly implemented.
+  toggleWorldStatePin(keyPath: string, type: 'variable' | 'entity' | 'category'): Promise<GameSnapshot | null>;
 }
 
 export class GameSession implements IGameSession {
@@ -34,10 +37,10 @@ export class GameSession implements IGameSession {
   private currentPromptCard: PromptCard | null = null;
 
   constructor(
-    public gameRepo: IGameRepository, // Keep public for settings screen
+    public gameRepo: IGameRepository, // Keep public for settings screen access
     private cardRepo: IPromptCardRepository,
     private turnProcessor: ITurnProcessor,
-    private snapshotUpdater: ISnapshotUpdater
+    private snapshotUpdater: ISnapshotUpdater // The updater is injected here
   ) {}
 
   public async initializeGame(userId: string, cardId: string, existingSnapshotId?: string): Promise<void> {
@@ -78,7 +81,7 @@ export class GameSession implements IGameSession {
       },
       conversationHistory: [{ role: 'assistant', content: firstTurnProse }],
       logs: [],
-      worldStatePinnedKeys: [],
+      worldStatePinnedKeys: [], // Initialize pinned keys as empty
     };
 
     this.currentSnapshot = initialSnapshot;
@@ -99,10 +102,11 @@ export class GameSession implements IGameSession {
       aiConnections
     );
 
+    // Use the snapshot updater to apply the turn result
     const newSnapshot = this.snapshotUpdater.applyTurnResultToSnapshot(this.currentSnapshot, turnResult);
     
     this.currentSnapshot = newSnapshot;
-    await this.saveGame(newSnapshot);
+    await this.saveGame(newSnapshot); // Save after processing
     return newSnapshot;
   }
 
@@ -124,21 +128,25 @@ export class GameSession implements IGameSession {
       aiConnections
     );
     
+    // Use the snapshot updater to apply the turn result, including player action
     const newSnapshot = this.snapshotUpdater.applyTurnResultToSnapshot(this.currentSnapshot, { ...turnResult, playerAction: action });
     
     this.currentSnapshot = newSnapshot;
-    await this.saveGame(newSnapshot);
+    await this.saveGame(newSnapshot); // Save after processing
     return newSnapshot;
   }
 
+  // Helper to apply an update via the snapshot updater and then save.
   private async updateAndSave(updater: (snapshot: GameSnapshot) => GameSnapshot): Promise<GameSnapshot | null> {
     if (!this.currentSnapshot) return null;
+    
     const newSnapshot = updater(this.currentSnapshot);
-    this.currentSnapshot = newSnapshot;
-    await this.saveGame(newSnapshot);
+    this.currentSnapshot = newSnapshot; // Update local state first
+    await this.saveGame(newSnapshot); // Then persist
     return newSnapshot;
   }
 
+  // --- World State Modification Methods ---
   public async renameWorldCategory(oldName: string, newName: string): Promise<GameSnapshot | null> {
     return this.updateAndSave(snap => this.snapshotUpdater.applyCategoryRename(snap, oldName, newName));
   }
@@ -163,7 +171,12 @@ export class GameSession implements IGameSession {
     return this.updateAndSave(snap => this.snapshotUpdater.applyKeyDelete(snap, key));
   }
 
-  // --- Loading, Saving, and Getters (Largely Unchanged) ---
+  // NEW: Public method to call the pin toggle logic via the snapshot updater.
+  public async toggleWorldStatePin(keyPath: string, type: 'variable' | 'entity' | 'category'): Promise<GameSnapshot | null> {
+    return this.updateAndSave(snap => this.snapshotUpdater.applyPinToggle(snap, keyPath, type));
+  }
+
+  // --- Loading, Saving, and Getters ---
 
   public async loadGame(userId: string, snapshotId: string): Promise<void> {
     const snapshot = await this.gameRepo.getGameSnapshot(userId, snapshotId);
@@ -179,6 +192,7 @@ export class GameSession implements IGameSession {
   public async loadLastActiveGame(userId: string): Promise<boolean> {
     const allSnapshots = await this.gameRepo.getAllGameSnapshots(userId);
     if (allSnapshots.length > 0) {
+      // Load the most recent one
       await this.loadGame(userId, allSnapshots[0].id);
       return true;
     }

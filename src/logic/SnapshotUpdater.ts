@@ -3,6 +3,7 @@ import { produce } from 'immer';
 import type { GameSnapshot } from '../models';
 import type { IGameStateManager } from './IGameStateManager';
 import type { ISnapshotUpdater, ITurnResult } from './ISnapshotUpdater';
+import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
 
 export class SnapshotUpdater implements ISnapshotUpdater {
   constructor(private gameStateManager: IGameStateManager) {}
@@ -110,6 +111,40 @@ export class SnapshotUpdater implements ISnapshotUpdater {
       );
       draft.gameState.worldState = updatedWorldState;
       draft.worldStatePinnedKeys = updatedPinnedKeys;
+      draft.updatedAt = new Date().toISOString();
+    });
+  }
+
+  public applyPinToggle(snapshot: GameSnapshot, keyPath: string, type: 'variable' | 'entity' | 'category'): GameSnapshot {
+    return produce(snapshot, draft => {
+      const currentWorldState = draft.gameState.worldState || {};
+      const currentPinnedKeys = draft.worldStatePinnedKeys || [];
+      const newPinnedKeys = new Set(currentPinnedKeys);
+
+      const getAllChildVariableKeys = (basePath: string): string[] => {
+        const nestedData = getNestedValue(currentWorldState, basePath.split('.'));
+        if (typeof nestedData !== 'object' || nestedData === null) return [];
+        return Object.keys(flattenJsonObject(nestedData, basePath));
+      };
+
+      let relevantKeysToToggle: string[] = [];
+      if (type === 'variable') {
+        relevantKeysToToggle = [keyPath];
+      } else { // 'entity' or 'category'
+        relevantKeysToToggle = getAllChildVariableKeys(keyPath);
+      }
+
+      const shouldPin = relevantKeysToToggle.length > 0 && !relevantKeysToToggle.every(key => newPinnedKeys.has(key));
+
+      relevantKeysToToggle.forEach(key => {
+        if (shouldPin) {
+          newPinnedKeys.add(key);
+        } else {
+          newPinnedKeys.delete(key);
+        }
+      });
+
+      draft.worldStatePinnedKeys = Array.from(newPinnedKeys).sort(); // Sort for consistency
       draft.updatedAt = new Date().toISOString();
     });
   }
