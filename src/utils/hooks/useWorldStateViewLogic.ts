@@ -7,6 +7,7 @@ import {
     selectCurrentGameState,
   } from '../../state/useGameStateStore';
 import { flattenJsonObject, getNestedValue } from '../../utils/jsonUtils';
+import { debugLog, errorLog } from '../../utils/debug';
 
 interface GroupedWorldState {
     [category: string]: {
@@ -39,18 +40,18 @@ export const useWorldStateViewLogic = () => {
     const [newEntityName, setNewEntityName] = useState('');
 
     // --- KEEP EXISTING DEBUG LINES ---
-    console.log('%c[useWorldStateViewLogic.ts] Hook re-executed.', 'color: #B8860B; font-weight: bold;');
-    console.log('[useWorldStateViewLogic.ts] Received gameState prop from WorldStateScreen:', JSON.stringify(gameState, null, 2));
-    console.log('[useWorldStateViewLogic.ts] Extracted worldState from prop (gameState?.worldState):', JSON.stringify(gameState?.worldState, null, 2));
-    console.log('[useWorldStateViewLogic.ts] Extracted worldState keys length (gameState?.worldState):', Object.keys(gameState?.worldState || {}).length);
-    console.log('[useWorldStateViewLogic.ts] Pinned keys directly from store (in logic):', worldStatePinnedKeys);
+    debugLog('%c[useWorldStateViewLogic.ts] Hook re-executed.', 'color: #B8860B; font-weight: bold;');
+    debugLog('[useWorldStateViewLogic.ts] Received gameState prop from WorldStateScreen:', JSON.stringify(gameState, null, 2));
+    debugLog('[useWorldStateViewLogic.ts] Extracted worldState from prop (gameState?.worldState):', JSON.stringify(gameState?.worldState, null, 2));
+    debugLog('[useWorldStateViewLogic.ts] Extracted worldState keys length (gameState?.worldState):', Object.keys(gameState?.worldState || {}).length);
+    debugLog('[useWorldStateViewLogic.ts] Pinned keys directly from store (in logic):', worldStatePinnedKeys);
     // --- END DEBUG LINES ---
 
     const worldState = gameState?.worldState || {};
     const flattenedWorld = useMemo(() => {
         const flat = flattenJsonObject(worldState);
-        console.log('[useWorldStateViewLogic.ts] Calculated flattenedWorld (inside useMemo):', JSON.stringify(flat, null, 2));
-        console.log('[useWorldStateViewLogic.ts] Flattened World keys length (inside useMemo):', Object.keys(flat).length);
+        debugLog('[useWorldStateViewLogic.ts] Calculated flattenedWorld (inside useMemo):', JSON.stringify(flat, null, 2));
+        debugLog('[useWorldStateViewLogic.ts] Flattened World keys length (inside useMemo):', Object.keys(flat).length);
         return flat;
     }, [worldState]);
 
@@ -75,8 +76,8 @@ export const useWorldStateViewLogic = () => {
                 delete grouped[category]['@@_direct'];
             }
         }
-        console.log('[useWorldStateViewLogic.ts] Grouped by Category (inside useMemo):', JSON.stringify(grouped, null, 2));
-        console.log('[useWorldStateViewLogic.ts] Grouped by Category keys length (inside useMemo):', Object.keys(grouped).length);
+        debugLog('[useWorldStateViewLogic.ts] Grouped by Category (inside useMemo):', JSON.stringify(grouped, null, 2));
+        debugLog('[useWorldStateViewLogic.ts] Grouped by Category keys length (inside useMemo):', Object.keys(grouped).length);
         return grouped;
     }, [flattenedWorld]);
 

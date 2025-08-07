@@ -3,6 +3,8 @@ import type { PromptCard, GameState, LogEntry, Message } from '../models';
 
 import type { IContextStackAssembler } from './IContextStackAssembler'; // <-- ADD THIS LINE
 import { ContextStackAssembler } from './ContextStackAssembler';   // <-- AND THIS LINE
+import { debugLog, errorLog } from '../utils/debug';
+import { useSettingsStore } from '../state/useSettingsStore'; // if using hooks in React files
 
 
 export interface IPromptBuilder {

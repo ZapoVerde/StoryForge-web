@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import type { PromptCard, NewPromptCardData, AiConnection } from '../models'; // Assuming index.ts exports these
 import { promptCardManager } from '../logic/cardManager';
 import { gameRepository } from '../data/repositories/gameRepository'; // For AI Connections
+import { debugLog, errorLog } from '../utils/debug';
 
 const initialState = {
   promptCards: [],
@@ -47,7 +48,7 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       set({ promptCards: cards, isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error fetching prompt cards:", error);
+      errorLog("Error fetching prompt cards:", error);
     }
   },
 
@@ -66,7 +67,7 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       return newCard;
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error adding prompt card:", error);
+      errorLog("Error adding prompt card:", error);
       return null;
     }
   },
@@ -85,7 +86,7 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       return updatedCard;
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error updating prompt card:", error);
+      errorLog("Error updating prompt card:", error);
       return null;
     }
   },
@@ -103,7 +104,7 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       return duplicatedCard;
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error duplicating prompt card:", error);
+      errorLog("Error duplicating prompt card:", error);
       return null;
     }
   },
@@ -119,7 +120,7 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       }));
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error deleting prompt card:", error);
+      errorLog("Error deleting prompt card:", error);
     }
   },
 
@@ -130,7 +131,7 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       set({ aiConnections: connections, isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error fetching AI connections:", error);
+      errorLog("Error fetching AI connections:", error);
     }
   },
 
@@ -145,7 +146,7 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       return imported;
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error importing prompt cards:", error);
+      errorLog("Error importing prompt cards:", error);
       return [];
     }
   },
@@ -158,13 +159,13 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       return exported;
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error exporting prompt card:", error);
+      errorLog("Error exporting prompt card:", error);
       return null;
     }
   },
 
   reset: () => {
-    console.log("Resetting PromptCardStore.");
+    debugLog("Resetting PromptCardStore.");
     set(initialState);
   },
 }));

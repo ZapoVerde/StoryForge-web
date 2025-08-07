@@ -11,6 +11,8 @@ import type {
 } from '../models';
 import type { IContextStackAssembler } from './IContextStackAssembler';
 import { getNestedValue } from '../utils/jsonUtils'; // Assuming you have this utility function
+import { debugLog, errorLog } from '../utils/debug';
+
 
 export class ContextStackAssembler implements IContextStackAssembler {
   public assembleContext(card: PromptCard, gameState: GameState, logEntries: LogEntry[]): Message[] {

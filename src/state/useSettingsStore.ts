@@ -5,6 +5,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { AiConnection } from '../models';
 import { gameRepository } from '../data/repositories/gameRepository';
 import { generateUuid } from '../utils/uuid';
+import { debugLog } from '../utils/debug'; // <-- NEW
 
 interface SettingsState {
   aiConnections: AiConnection[];
@@ -13,13 +14,25 @@ interface SettingsState {
   connectionsError: string | null;
   useDummyNarrator: boolean;
   themeMode: 'light' | 'dark';
+  enableDebugLogging: boolean;              // <-- NEW
+  textGenerationSpeedMs: number;            // <-- NEW
+
   fetchAiConnections: (userId: string) => Promise<void>;
-  addAiConnection: (userId: string, connection: Omit<AiConnection, 'id' | 'createdAt' | 'lastUpdated'>) => Promise<AiConnection | null>;
-  updateAiConnection: (userId: string, connection: AiConnection) => Promise<AiConnection | null>;
+  addAiConnection: (
+    userId: string,
+    connection: Omit<AiConnection, 'id' | 'createdAt' | 'lastUpdated'>
+  ) => Promise<AiConnection | null>;
+  updateAiConnection: (
+    userId: string,
+    connection: AiConnection
+  ) => Promise<AiConnection | null>;
   deleteAiConnection: (userId: string, connectionId: string) => Promise<void>;
+
   setSelectedConnectionId: (id: string | null) => void;
   setUseDummyNarrator: (enabled: boolean) => void;
   setThemeMode: (mode: 'light' | 'dark') => void;
+  setEnableDebugLogging: (enabled: boolean) => void;     // <-- NEW
+  setTextGenerationSpeedMs: (speed: number) => void;     // <-- NEW
   reset: () => void;
 }
 
@@ -33,6 +46,8 @@ export const useSettingsStore = create<SettingsState>()(
       connectionsError: null,
       useDummyNarrator: false,
       themeMode: 'light',
+      enableDebugLogging: false,             // <-- NEW
+      textGenerationSpeedMs: 20,             // <-- NEW
 
       // --- Actions ---
       fetchAiConnections: async (userId) => {
@@ -42,7 +57,8 @@ export const useSettingsStore = create<SettingsState>()(
           set({
             aiConnections: connections,
             isLoadingConnections: false,
-            selectedConnectionId: get().selectedConnectionId && connections.some(c => c.id === get().selectedConnectionId)
+            selectedConnectionId: get().selectedConnectionId &&
+              connections.some(c => c.id === get().selectedConnectionId)
               ? get().selectedConnectionId
               : (connections.length > 0 ? connections[0].id : null)
           });
@@ -50,8 +66,8 @@ export const useSettingsStore = create<SettingsState>()(
           set({ connectionsError: error.message, isLoadingConnections: false });
         }
       },
+
       addAiConnection: async (userId, newConnectionData) => {
-        // ... (rest of the function is correct)
         set({ isLoadingConnections: true, connectionsError: null });
         try {
           const newId = generateUuid();
@@ -64,11 +80,13 @@ export const useSettingsStore = create<SettingsState>()(
           };
           await gameRepository.saveAiConnection(userId, connection);
           set(state => {
-            const updatedConnections = [...state.aiConnections, connection].sort((a, b) => a.displayName.localeCompare(b.displayName));
+            const updatedConnections = [...state.aiConnections, connection].sort((a, b) =>
+              a.displayName.localeCompare(b.displayName)
+            );
             return {
               aiConnections: updatedConnections,
               isLoadingConnections: false,
-              selectedConnectionId: state.selectedConnectionId || newId
+              selectedConnectionId: state.selectedConnectionId || newId,
             };
           });
           return connection;
@@ -77,8 +95,8 @@ export const useSettingsStore = create<SettingsState>()(
           return null;
         }
       },
+
       updateAiConnection: async (userId, updatedConnection) => {
-        // ... (rest of the function is correct)
         set({ isLoadingConnections: true, connectionsError: null });
         try {
           const now = new Date().toISOString();
@@ -99,8 +117,8 @@ export const useSettingsStore = create<SettingsState>()(
           return null;
         }
       },
+
       deleteAiConnection: async (userId, connectionId) => {
-        // ... (rest of the function is correct)
         set({ isLoadingConnections: true, connectionsError: null });
         try {
           await gameRepository.deleteAiConnection(userId, connectionId);
@@ -108,10 +126,12 @@ export const useSettingsStore = create<SettingsState>()(
             const updatedConnections = state.aiConnections.filter(conn => conn.id !== connectionId);
             let newSelectedId = state.selectedConnectionId;
             if (newSelectedId === connectionId) {
-                newSelectedId = updatedConnections.length > 0 ? updatedConnections[0].id : null;
+              newSelectedId = updatedConnections.length > 0 ? updatedConnections[0].id : null;
             }
             return {
-              aiConnections: updatedConnections.sort((a, b) => a.displayName.localeCompare(b.displayName)),
+              aiConnections: updatedConnections.sort((a, b) =>
+                a.displayName.localeCompare(b.displayName)
+              ),
               selectedConnectionId: newSelectedId,
               isLoadingConnections: false,
             };
@@ -120,21 +140,19 @@ export const useSettingsStore = create<SettingsState>()(
           set({ connectionsError: error.message, isLoadingConnections: false });
         }
       },
+
       setSelectedConnectionId: (id) => set({ selectedConnectionId: id }),
       setUseDummyNarrator: (enabled) => set({ useDummyNarrator: enabled }),
       setThemeMode: (mode) => set({ themeMode: mode }),
-      
-      // --- CORRECTED RESET ACTION ---
+      setEnableDebugLogging: (enabled) => set({ enableDebugLogging: enabled }), // <-- NEW
+      setTextGenerationSpeedMs: (speed) => set({ textGenerationSpeedMs: speed }), // <-- NEW
+
       reset: () => {
-        console.log("Resetting SettingsStore.");
-        // Set the non-persisted state back to initial values.
-        // Persisted values will be handled by the middleware on next login/page load.
+        debugLog("Resetting SettingsStore."); // ⬅️ Replaces console.log
         set({
           aiConnections: [],
           isLoadingConnections: false,
           connectionsError: null,
-          // We don't need to reset the persisted parts (selectedConnectionId, themeMode, etc.)
-          // as they will be rehydrated or re-fetched on the next session.
         });
       },
     }),
@@ -145,6 +163,8 @@ export const useSettingsStore = create<SettingsState>()(
         selectedConnectionId: state.selectedConnectionId,
         useDummyNarrator: state.useDummyNarrator,
         themeMode: state.themeMode,
+        enableDebugLogging: state.enableDebugLogging,         // <-- NEW
+        textGenerationSpeedMs: state.textGenerationSpeedMs,   // <-- NEW
       }),
     }
   )

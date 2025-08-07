@@ -1,158 +1,217 @@
 // src/utils/hooks/useGameScreenLogic.ts
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../state/useAuthStore';
-import { useGameStateStore, selectCurrentGameState, selectConversationHistory } from '../../state/useGameStateStore'; // Import selectors
+import { useGameStateStore, selectCurrentGameState, selectConversationHistory } from '../../state/useGameStateStore';
 import { DiceRoller } from '../../utils/diceRoller';
 import type { GameState } from '../../models';
+import { usePromptCardStore } from '../../state/usePromptCardStore';
+import { useSettingsStore } from '../../state/useSettingsStore'; // <-- NEW
+import { debugLog, errorLog } from '../../utils/debug'; // <-- NEW
 
 export const useGameScreenLogic = () => {
-  console.log('[useGameScreenLogic.ts] Hook execution started.');
-
   const navigate = useNavigate();
   const { user } = useAuthStore();
 
-  // 1. Consume the global state stores using selectors for stability
+  const enableDebugLogging = useSettingsStore(state => state.enableDebugLogging); // <-- NEW
+  const typingSpeedMs = useSettingsStore(state => state.textGenerationSpeedMs);   // <-- NEW
+
   const currentSnapshot = useGameStateStore(state => state.currentSnapshot);
-  const currentGameState = useGameStateStore(selectCurrentGameState); // Use selector
-  const conversationHistory = useGameStateStore(selectConversationHistory); // Use selector
+  const currentGameState = useGameStateStore(selectCurrentGameState);
+  const conversationHistory = useGameStateStore(selectConversationHistory);
   const narratorInputText = useGameStateStore(state => state.narratorInputText);
   const gameLoading = useGameStateStore(state => state.gameLoading);
   const isProcessingTurn = useGameStateStore(state => state.isProcessingTurn);
   const gameError = useGameStateStore(state => state.gameError);
+  const activePromptCard = usePromptCardStore(state => state.activePromptCard);
 
-  // Get actions directly from the store's current state (stable references)
   const processPlayerAction = useGameStateStore(state => state.processPlayerAction);
   const updateNarratorInputText = useGameStateStore(state => state.updateNarratorInputText);
   const processFirstNarratorTurn = useGameStateStore(state => state.processFirstNarratorTurn);
 
-
-  // 2. All local UI state is moved here
   const [showRollDialog, setShowRollDialog] = useState(false);
   const [rollFormula, setRollFormula] = useState("2d6");
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({ open: false, message: '', severity: 'info' });
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error' | 'info' | 'warning';
+  }>({
+    open: false,
+    message: '',
+    severity: 'info',
+  });
+  
+  const [displayedCurrentNarration, setDisplayedCurrentNarration] = useState('');
 
-  // 3. All refs are moved here
   const logContainerRef = useRef<HTMLDivElement>(null);
-  // This ref ensures processFirstNarratorTurn is only called once per snapshot ID
   const initialTurnTriggeredForSnapshot = useRef<string | null>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 4. All useEffects are moved here
   useEffect(() => {
-    console.log(`[useGameScreenLogic.ts] useEffect (auto-scroll): conversationHistory changed. Count: ${conversationHistory.length}`);
-    // Auto-scroll to the bottom of the log on new messages
+    if (enableDebugLogging) {
+      debugLog(`[useGameScreenLogic.ts] useEffect (auto-scroll): conversationHistory changed. Count: ${conversationHistory.length}`);
+    }
     if (logContainerRef.current) {
       logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
     }
-  }, [conversationHistory]);
+  }, [conversationHistory, enableDebugLogging]);
 
   useEffect(() => {
-    console.log(`%c[useGameScreenLogic.ts] useEffect (first turn check) triggered. Snapshot ID: ${currentSnapshot?.id || 'null'}, gameLoading: ${gameLoading}, currentTurn: ${currentSnapshot?.currentTurn}.`, 'color: grey;');
+    if (enableDebugLogging) {
+      debugLog(`[useGameScreenLogic.ts] useEffect (first turn check). Snapshot ID: ${currentSnapshot?.id}, gameLoading: ${gameLoading}, currentTurn: ${currentSnapshot?.currentTurn}`);
+    }
 
     if (!currentSnapshot || gameLoading) {
-      console.log('[useGameScreenLogic.ts] First turn check: Skipping (no snapshot or still loading).');
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Skipping first turn (no snapshot or loading).');
       return;
     }
 
     const needsFirstTurn =
       currentSnapshot.currentTurn === 0 &&
-      currentSnapshot.conversationHistory?.length === 1 && // Only the initial narrator prose
-      initialTurnTriggeredForSnapshot.current !== currentSnapshot.id; // Not yet triggered for THIS snapshot
+      currentSnapshot.conversationHistory?.length === 1 &&
+      initialTurnTriggeredForSnapshot.current !== currentSnapshot.id;
 
     if (needsFirstTurn) {
       initialTurnTriggeredForSnapshot.current = currentSnapshot.id;
-      console.log(`%c[useGameScreenLogic.ts] First turn check: Detected start of Turn 0. Triggering narrator's first response for snapshot ${currentSnapshot.id}.`, 'color: #8B008B; font-weight: bold;');
+      if (enableDebugLogging) debugLog(`[useGameScreenLogic.ts] Triggering first narrator turn for snapshot ${currentSnapshot.id}`);
       processFirstNarratorTurn();
     } else {
-        console.log('[useGameScreenLogic.ts] First turn check: No first turn needed or already triggered.');
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] First turn not needed or already triggered.');
     }
-  }, [currentSnapshot, gameLoading, processFirstNarratorTurn]);
+  }, [currentSnapshot, gameLoading, processFirstNarratorTurn, enableDebugLogging]);
 
-  // 5. All handler functions are moved here and wrapped in useCallback
+  useEffect(() => {
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    const fullNarration = currentGameState?.narration || '';
+    const enableStreaming = activePromptCard?.aiSettings?.streaming ?? true;
+
+    if (enableStreaming && fullNarration.length > 0 && !isProcessingTurn) {
+      setDisplayedCurrentNarration('');
+      let i = 0;
+      const typeCharacter = () => {
+        if (i < fullNarration.length) {
+          setDisplayedCurrentNarration((prev) => prev + fullNarration.charAt(i));
+          i++;
+          typingTimeoutRef.current = setTimeout(typeCharacter, typingSpeedMs);
+        } else {
+          typingTimeoutRef.current = null;
+        }
+      };
+      typingTimeoutRef.current = setTimeout(typeCharacter, typingSpeedMs);
+    } else if (!enableStreaming) {
+      setDisplayedCurrentNarration(fullNarration);
+    }
+
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, [currentGameState?.narration, activePromptCard?.aiSettings?.streaming, isProcessingTurn, typingSpeedMs]);
+
   const showSnackbar = useCallback((message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
-    console.log(`[useGameScreenLogic.ts] showSnackbar: Message: "${message}", Severity: ${severity}`);
-    setSnackbar({ open: true, message, severity });
-  }, []);
+    if (enableDebugLogging) debugLog(`[useGameScreenLogic.ts] Snackbar: "${message}" (${severity})`);
+    setSnackbar({
+      open: true,
+      message,
+      severity: severity as 'success' | 'error' | 'info' | 'warning',
+    });
+    
+  }, [enableDebugLogging]);
 
   const handleSendAction = useCallback(async () => {
-    console.log(`[useGameScreenLogic.ts] handleSendAction: Input: "${narratorInputText.substring(0, 50)}...". IsProcessing: ${isProcessingTurn}`);
+    if (enableDebugLogging) debugLog(`[useGameScreenLogic.ts] handleSendAction: Input: "${narratorInputText}"`);
     if (narratorInputText.trim() === '' || isProcessingTurn) {
-        console.warn('[useGameScreenLogic.ts] handleSendAction: Skipping due to empty input or already processing.');
-        return;
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Skipping send — empty or already processing.');
+      return;
     }
     try {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      setDisplayedCurrentNarration(currentGameState?.narration || '');
       await processPlayerAction(narratorInputText);
-      console.log('[useGameScreenLogic.ts] handleSendAction: processPlayerAction completed.');
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] processPlayerAction completed.');
     } catch (e) {
-      console.error('[useGameScreenLogic.ts] handleSendAction: Error processing action:', e);
+      errorLog('[useGameScreenLogic.ts] Error in handleSendAction:', e);
       showSnackbar(`Failed to process action: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
     }
-  }, [narratorInputText, isProcessingTurn, processPlayerAction, showSnackbar]);
+  }, [narratorInputText, isProcessingTurn, processPlayerAction, showSnackbar, currentGameState?.narration, enableDebugLogging]);
 
   const handleRollDice = useCallback(async () => {
-    console.log(`[useGameScreenLogic.ts] handleRollDice: Rolling with formula: ${rollFormula}`);
+    if (enableDebugLogging) debugLog(`[useGameScreenLogic.ts] Rolling formula: ${rollFormula}`);
     try {
       const result = DiceRoller.roll(rollFormula);
       const summary = DiceRoller.format(result);
-      console.log(`[useGameScreenLogic.ts] handleRollDice: Roll result: ${summary}`);
+      if (enableDebugLogging) debugLog(`[useGameScreenLogic.ts] Dice result: ${summary}`);
+
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      setDisplayedCurrentNarration(currentGameState?.narration || '');
+
       await processPlayerAction(`I roll the dice (${rollFormula}) and get the following result:\n${summary}`);
       showSnackbar(`Rolled ${rollFormula}: ${summary}`, 'success');
       setShowRollDialog(false);
     } catch (e) {
-      console.error('[useGameScreenLogic.ts] handleRollDice: Error rolling dice:', e);
+      errorLog('[useGameScreenLogic.ts] Error in handleRollDice:', e);
       showSnackbar(`Failed to roll dice: ${e instanceof Error ? e.message : 'Invalid formula'}`, 'error');
     }
-  }, [rollFormula, processPlayerAction, showSnackbar]);
+  }, [rollFormula, processPlayerAction, showSnackbar, currentGameState?.narration, enableDebugLogging]);
 
   const handleOpenRollDialog = useCallback(() => {
-      console.log('[useGameScreenLogic.ts] handleOpenRollDialog: Opening roll dialog.');
-      setShowRollDialog(true);
-  }, []);
+    if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Opening roll dialog.');
+    setShowRollDialog(true);
+  }, [enableDebugLogging]);
 
   const handleKeyPress = useCallback((event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && !event.shiftKey) {
-      console.log('[useGameScreenLogic.ts] handleKeyPress: Enter pressed, calling handleSendAction.');
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Enter pressed — sending action.');
       event.preventDefault();
       handleSendAction();
     }
-  }, [handleSendAction]);
+  }, [handleSendAction, enableDebugLogging]);
 
   const closeSnackbar = useCallback(() => {
-    console.log('[useGameScreenLogic.ts] closeSnackbar: Closing snackbar.');
+    if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Closing snackbar.');
     setSnackbar(prev => ({ ...prev, open: false }));
-  }, []);
+  }, [enableDebugLogging]);
 
-  // 6. Return a clean API for the component
   return {
-    // State and Data for Rendering
-    isReady: !!user && !!currentSnapshot && !!currentGameState, // Ensure currentGameState is actually an object
-    isLoading: gameLoading, // Use gameLoading from store
+    isReady: !!user && !!currentSnapshot && !!currentGameState,
+    isLoading: gameLoading,
     isProcessingTurn,
     gameError,
-    gameState: currentGameState as GameState, // Assert non-null for the component's direct use
     conversationHistory,
     narratorInputText,
     logContainerRef,
     snackbar,
+    displayedCurrentNarration,
+    fullLatestNarration: currentGameState?.narration || '',
+    enableStreaming: activePromptCard?.aiSettings?.streaming ?? true,
 
-    // Dialog State
     rollDialog: {
       open: showRollDialog,
       formula: rollFormula,
     },
 
-    // Handlers for UI Events
     handleGoToLogin: () => {
-      console.log('[useGameScreenLogic.ts] handleGoToLogin: Navigating to /login.');
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Navigating to /login');
       navigate('/login');
     },
     handleSendAction,
-    handleInputChange: updateNarratorInputText, // Direct use of store action
+    handleInputChange: updateNarratorInputText,
     handleKeyPress,
     handleRollDice,
     handleOpenRollDialog,
     handleCloseRollDialog: () => {
-      console.log('[useGameScreenLogic.ts] handleCloseRollDialog: Closing roll dialog.');
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Closing roll dialog.');
       setShowRollDialog(false);
     },
     handleRollFormulaChange: setRollFormula,

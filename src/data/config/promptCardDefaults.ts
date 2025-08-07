@@ -3,6 +3,7 @@
 // In src/data/config/promptCardDefaults.ts
 import type { AiSettings, StackInstructions} from '../../models';
 import  { StackMode, FilterMode} from '../../models';
+import { debugLog, errorLog } from '../../utils/debug';
 
 /**
  * Default AI settings to be used for PromptCards if not specified.
@@ -16,7 +17,7 @@ export const defaultAiSettingsInCard: AiSettings = {
   presencePenalty: 0.0,
   frequencyPenalty: 0.0,
   functionCallingEnabled: false,
-  enableTypingEffect: true, 
+  streaming: true, 
 };
 
 /**

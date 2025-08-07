@@ -1,3 +1,4 @@
+// src/ui/components/AiSettingsEditor.tsx
 
 import React from 'react';
 import {
@@ -151,19 +152,19 @@ export const AiSettingsEditor: React.FC<AiSettingsEditorProps> = ({
         prompt).
       </Typography>
 
-      <FormControlLabel // NEW: Typing Effect Setting
+      <FormControlLabel
         control={
           <Switch
-            checked={settings.enableTypingEffect}
+            checked={settings.streaming} // RENAMED
             onChange={(e) =>
-              handleSwitchChange('enableTypingEffect', e.target.checked)
+              handleSwitchChange('streaming', e.target.checked) // RENAMED
             }
           />
         }
-        label="Enable Typing Effect for AI Output"
+        label="Enable Streaming Output" // UPDATED LABEL
       />
       <Typography variant="body2" color="text.secondary">
-        Displays AI-generated narrative text one character at a time, like it's being typed.
+        Displays AI-generated narrative text as it's generated (typing effect).
       </Typography>
     </CollapsibleSection>
   );

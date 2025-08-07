@@ -1,5 +1,6 @@
 // src/logic/deltaParser.ts
 import type { DeltaInstruction, DeltaMap,DigestLine, ParsedNarrationOutput} from '../models';
+import { debugLog, errorLog } from '../utils/debug';
 
 // Exported Marker constants
 export const DELTA_MARKER = "@delta";
@@ -19,7 +20,7 @@ function extractJsonObject(jsonString: string): Record<string, unknown> {
     const parsed = JSON.parse(text);
     return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : {};
   } catch (e: unknown) {
-    console.error("Failed to parse JSON object:", e, "\nText:", text);
+    errorLog("Failed to parse JSON object:", e, "\nText:", text);
     return {};
   }
 }
@@ -37,7 +38,7 @@ function extractJsonArray(jsonString: string): unknown[] {
     const parsed = JSON.parse(text);
     return Array.isArray(parsed) ? parsed : [];
   } catch (e: unknown) {
-    console.error("Failed to parse JSON array:", e, "\nText:", text);
+    errorLog("Failed to parse JSON array:", e, "\nText:", text);
     return [];
   }
 }

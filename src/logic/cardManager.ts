@@ -5,6 +5,8 @@ import { generateUuid } from '../utils/uuid';
 import { generateContentHash, getPromptCardContentForHash } from '../utils/hash';
 import { promptCardRepository } from '../data/repositories/promptCardRepository';
 import type { IPromptCardRepository } from '../data/repositories/promptCardRepository';
+
+import { debugLog, errorLog } from '../utils/debug';
 import {
   defaultAiSettingsInCard,
   defaultStackInstructions,
@@ -121,7 +123,7 @@ export class PromptCardManager implements ICardManager {
       try {
         parsedStackInstructions = JSON.parse(data.stackInstructions);
       } catch (e) {
-        console.error("Error parsing stackInstructions string for new card, falling back to default:", e);
+        errorLog("Error parsing stackInstructions string for new card, falling back to default:", e);
         parsedStackInstructions = defaultStackInstructions;
       }
     } else if (data.stackInstructions) {
@@ -189,7 +191,7 @@ export class PromptCardManager implements ICardManager {
   async duplicatePromptCard(userId: string, sourceCardId: string): Promise<PromptCard | null> {
     const sourceCard = await this.repo.getPromptCard(userId, sourceCardId);
     if (!sourceCard) {
-      console.warn(`Source card with ID ${sourceCardId} not found for duplication.`);
+      debugLog(`Source card with ID ${sourceCardId} not found for duplication.`);
       return null;
     }
 
@@ -215,7 +217,7 @@ export class PromptCardManager implements ICardManager {
     duplicatedCard.contentHash = generateContentHash(getPromptCardContentForHash(duplicatedCard));
 
     await this.repo.savePromptCard(userId, duplicatedCard);
-    console.log(`Card ${sourceCardId} duplicated to ${newId}`);
+    debugLog(`Card ${sourceCardId} duplicated to ${newId}`);
     return duplicatedCard;
   }
 
@@ -256,7 +258,7 @@ export class PromptCardManager implements ICardManager {
       importedAndProcessedCards.push(newCard);
     }
     await this.repo.importPromptCards(userId, importedAndProcessedCards);
-    console.log(`Imported ${importedAndProcessedCards.length} cards.`);
+   debugLog(`Imported ${importedAndProcessedCards.length} cards.`);
     return importedAndProcessedCards;
   }
 }

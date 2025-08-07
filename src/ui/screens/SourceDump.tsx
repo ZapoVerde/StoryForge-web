@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { debugLog, errorLog } from '../../utils/debug';
 
 // Small reusable copy button
 function CopyButton({ text }: { text: string }) {
@@ -9,7 +10,7 @@ function CopyButton({ text }: { text: string }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch (err) {
-      console.error('Copy failed', err);
+      errorLog('Copy failed', err);
     }
   };
   return (

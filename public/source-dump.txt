@@ -55,10 +55,12 @@ import { useAuthStore } from './state/useAuthStore';
 import { useGameStateStore } from './state/useGameStateStore';
 import { usePromptCardStore } from './state/usePromptCardStore';
 import { useLogStore } from './state/useLogStore';
+import { debugLog } from './utils/debug';
 
 const App: React.FC = () => {
   // DEBUG: Log App component renders
-  console.log('%c[App.tsx] App component rendering', 'color: purple; font-weight: bold;');
+  debugLog('%c[App.tsx] App component rendering', 'color: purple; font-weight: bold;');
+
 
   const { themeMode } = useSettingsStore();
   const theme = React.useMemo(() => getAppTheme(themeMode), [themeMode]);
@@ -68,12 +70,12 @@ const App: React.FC = () => {
 
   useEffect(() => {
     // DEBUG: Log App component useEffect execution
-    console.log('[App.tsx] App component useEffect fired. User:', user ? user.uid : 'null');
+    debugLog('[App.tsx] App component useEffect fired. User:', user ? user.uid : 'null');
 
     const isLoggingOut = wasUserLoggedIn.current && !user;
 
     if (isLoggingOut) {
-      console.log("[App.tsx] User is logging out. Resetting all data stores.");
+      debugLog("[App.tsx] User is logging out. Resetting all data stores.");
       useGameStateStore.getState().reset();
       usePromptCardStore.getState().reset();
       useSettingsStore.getState().reset();
@@ -340,6 +342,7 @@ export const aiConnectionTemplates: Record<string, AiConnectionTemplate> = {
 // In src/data/config/promptCardDefaults.ts
 import type { AiSettings, StackInstructions} from '../../models';
 import  { StackMode, FilterMode} from '../../models';
+import { debugLog, errorLog } from '../../utils/debug';
 
 /**
  * Default AI settings to be used for PromptCards if not specified.
@@ -353,7 +356,7 @@ export const defaultAiSettingsInCard: AiSettings = {
   presencePenalty: 0.0,
   frequencyPenalty: 0.0,
   functionCallingEnabled: false,
-  enableTypingEffect: true, 
+  streaming: true, 
 };
 
 /**
@@ -993,6 +996,8 @@ import type {
 } from '../models';
 import type { IContextStackAssembler } from './IContextStackAssembler';
 import { getNestedValue } from '../utils/jsonUtils'; // Assuming you have this utility function
+import { debugLog, errorLog } from '../utils/debug';
+
 
 export class ContextStackAssembler implements IContextStackAssembler {
   public assembleContext(card: PromptCard, gameState: GameState, logEntries: LogEntry[]): Message[] {
@@ -1808,6 +1813,8 @@ export class TurnProcessor implements ITurnProcessor {
 
 import type { ModelInfo } from '../data/config/aiConnectionTemplates';
 import type { Message, AiSettings, AiConnection } from '../models';
+import { debugLog, errorLog } from '../utils/debug';
+
 /**
  * Interface defining the contract for an AI client.
  */
@@ -1957,7 +1964,7 @@ class AiClient implements IAiClient {
         .sort((a: ModelInfo, b: ModelInfo) => a.name.localeCompare(b.name));
 
     } catch (error) {
-      console.error("Failed to list models:", error);
+      errorLog("Failed to list models:", error);
       throw error;
     }
   }
@@ -1973,6 +1980,8 @@ import { generateUuid } from '../utils/uuid';
 import { generateContentHash, getPromptCardContentForHash } from '../utils/hash';
 import { promptCardRepository } from '../data/repositories/promptCardRepository';
 import type { IPromptCardRepository } from '../data/repositories/promptCardRepository';
+
+import { debugLog, errorLog } from '../utils/debug';
 import {
   defaultAiSettingsInCard,
   defaultStackInstructions,
@@ -2089,7 +2098,7 @@ export class PromptCardManager implements ICardManager {
       try {
         parsedStackInstructions = JSON.parse(data.stackInstructions);
       } catch (e) {
-        console.error("Error parsing stackInstructions string for new card, falling back to default:", e);
+        errorLog("Error parsing stackInstructions string for new card, falling back to default:", e);
         parsedStackInstructions = defaultStackInstructions;
       }
     } else if (data.stackInstructions) {
@@ -2157,7 +2166,7 @@ export class PromptCardManager implements ICardManager {
   async duplicatePromptCard(userId: string, sourceCardId: string): Promise<PromptCard | null> {
     const sourceCard = await this.repo.getPromptCard(userId, sourceCardId);
     if (!sourceCard) {
-      console.warn(`Source card with ID ${sourceCardId} not found for duplication.`);
+      debugLog(`Source card with ID ${sourceCardId} not found for duplication.`);
       return null;
     }
 
@@ -2183,7 +2192,7 @@ export class PromptCardManager implements ICardManager {
     duplicatedCard.contentHash = generateContentHash(getPromptCardContentForHash(duplicatedCard));
 
     await this.repo.savePromptCard(userId, duplicatedCard);
-    console.log(`Card ${sourceCardId} duplicated to ${newId}`);
+    debugLog(`Card ${sourceCardId} duplicated to ${newId}`);
     return duplicatedCard;
   }
 
@@ -2224,7 +2233,7 @@ export class PromptCardManager implements ICardManager {
       importedAndProcessedCards.push(newCard);
     }
     await this.repo.importPromptCards(userId, importedAndProcessedCards);
-    console.log(`Imported ${importedAndProcessedCards.length} cards.`);
+   debugLog(`Imported ${importedAndProcessedCards.length} cards.`);
     return importedAndProcessedCards;
   }
 }
@@ -2234,6 +2243,7 @@ export const promptCardManager = new PromptCardManager(promptCardRepository);
 @@FILE: src/logic/deltaParser.ts
 // src/logic/deltaParser.ts
 import type { DeltaInstruction, DeltaMap,DigestLine, ParsedNarrationOutput} from '../models';
+import { debugLog, errorLog } from '../utils/debug';
 
 // Exported Marker constants
 export const DELTA_MARKER = "@delta";
@@ -2253,7 +2263,7 @@ function extractJsonObject(jsonString: string): Record<string, unknown> {
     const parsed = JSON.parse(text);
     return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : {};
   } catch (e: unknown) {
-    console.error("Failed to parse JSON object:", e, "\nText:", text);
+    errorLog("Failed to parse JSON object:", e, "\nText:", text);
     return {};
   }
 }
@@ -2271,7 +2281,7 @@ function extractJsonArray(jsonString: string): unknown[] {
     const parsed = JSON.parse(text);
     return Array.isArray(parsed) ? parsed : [];
   } catch (e: unknown) {
-    console.error("Failed to parse JSON array:", e, "\nText:", text);
+    errorLog("Failed to parse JSON array:", e, "\nText:", text);
     return [];
   }
 }
@@ -2413,7 +2423,6 @@ export function parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput 
   };
 }
 @@FILE: src/logic/gameSession.ts
-// src/logic/gameSession.ts
 import type { IGameRepository } from '../data/repositories/gameRepository';
 import type { IPromptCardRepository } from '../data/repositories/promptCardRepository';
 import type { GameSnapshot, GameState, LogEntry, Message, PromptCard } from '../models';
@@ -2421,6 +2430,7 @@ import { formatIsoDateForDisplay } from '../utils/formatDate';
 import { generateUuid } from '../utils/uuid';
 import type { ITurnProcessor } from './ITurnProcessor';
 import type { ISnapshotUpdater } from './ISnapshotUpdater';
+import { debugLog, errorLog } from '../utils/debug'; // ✅ Injected centralized logger
 
 export interface IGameSession {
   initializeGame(userId: string, cardId: string, existingSnapshotId?: string): Promise<void>;
@@ -2454,40 +2464,38 @@ export class GameSession implements IGameSession {
     private turnProcessor: ITurnProcessor,
     private snapshotUpdater: ISnapshotUpdater
   ) {
-    console.log('[gameSession.ts] GameSession constructor called.');
+    debugLog('[gameSession.ts] GameSession constructor called.');
   }
 
   public async initializeGame(userId: string, cardId: string, existingSnapshotId?: string): Promise<void> {
-    console.log(`[gameSession.ts] initializeGame: Starting for User=${userId}, Card=${cardId}, Snapshot=${existingSnapshotId || 'new'}`);
+    debugLog(`[gameSession.ts] initializeGame: Starting for User=${userId}, Card=${cardId}, Snapshot=${existingSnapshotId || 'new'}`);
     this.currentUserId = userId;
 
     if (existingSnapshotId) {
       await this.loadGame(userId, existingSnapshotId);
-      console.log(`[gameSession.ts] initializeGame: Loaded existing game ${existingSnapshotId}.`);
+      debugLog(`[gameSession.ts] initializeGame: Loaded existing game ${existingSnapshotId}.`);
       return;
     }
 
     const card = await this.cardRepo.getPromptCard(userId, cardId);
     if (!card) {
-      console.error(`[gameSession.ts] initializeGame: PromptCard with ID ${cardId} not found.`);
+      errorLog(`[gameSession.ts] initializeGame: PromptCard with ID ${cardId} not found.`);
       throw new Error(`PromptCard with ID ${cardId} not found.`);
     }
     this.currentPromptCard = card;
 
     let initialWorldState = {};
     try {
-      // Fix: Ensure that if card.worldStateInit is an empty string, it defaults to an empty object
       if (card.worldStateInit) {
         initialWorldState = JSON.parse(card.worldStateInit);
       } else {
-        initialWorldState = {}; // Explicitly set to empty object if string is empty
+        initialWorldState = {};
       }
     } catch (e) {
-      console.error("[gameSession.ts] initializeGame: Failed to parse worldStateInit JSON:", e);
-      // Fallback to empty object if parsing fails
+      errorLog("[gameSession.ts] initializeGame: Failed to parse worldStateInit JSON:", e);
       initialWorldState = {};
     }
-    
+
     const now = new Date().toISOString();
     const firstTurnProse = card.firstTurnOnlyBlock || "The story begins...";
 
@@ -2510,18 +2518,18 @@ export class GameSession implements IGameSession {
     };
 
     this.currentSnapshot = initialSnapshot;
-    console.log(`%c[gameSession.ts] initializeGame: NEW game initialized with ID ${initialSnapshot.id}. currentSnapshot set.`, 'color: green;');
+    debugLog(`[gameSession.ts] initializeGame: NEW game initialized with ID ${initialSnapshot.id}. currentSnapshot set.`);
   }
 
   public async processFirstNarratorTurn(useDummyNarrator: boolean): Promise<GameSnapshot> {
-    console.log('[gameSession.ts] processFirstNarratorTurn: Starting.');
+    debugLog('[gameSession.ts] processFirstNarratorTurn: Starting.');
     if (!this.currentSnapshot || !this.currentUserId || !this.currentPromptCard) {
-      console.error('[gameSession.ts] processFirstNarratorTurn: Prerequisites missing.');
+      errorLog('[gameSession.ts] processFirstNarratorTurn: Prerequisites missing.');
       throw new Error("Cannot process first turn: Game not initialized correctly.");
     }
-    
+
     const aiConnections = await this.gameRepo.getAiConnections(this.currentUserId);
-    console.log(`[gameSession.ts] processFirstNarratorTurn: Calling turnProcessor.useDummyNarrator=${useDummyNarrator}.`);
+    debugLog(`[gameSession.ts] processFirstNarratorTurn: Calling turnProcessor.useDummyNarrator=${useDummyNarrator}.`);
     const turnResult = await this.turnProcessor.processFirstTurnNarratorResponse(
       this.currentUserId,
       this.currentPromptCard,
@@ -2530,25 +2538,25 @@ export class GameSession implements IGameSession {
       aiConnections
     );
 
-    console.log('[gameSession.ts] processFirstNarratorTurn: Calling snapshotUpdater.applyTurnResultToSnapshot.');
+    debugLog('[gameSession.ts] processFirstNarratorTurn: Calling snapshotUpdater.applyTurnResultToSnapshot.');
     const newSnapshot = this.snapshotUpdater.applyTurnResultToSnapshot(this.currentSnapshot, turnResult);
-    
+
     this.currentSnapshot = newSnapshot;
-    console.log(`[gameSession.ts] processFirstNarratorTurn: newSnapshot ${newSnapshot.id} applied. Saving game...`);
+    debugLog(`[gameSession.ts] processFirstNarratorTurn: newSnapshot ${newSnapshot.id} applied. Saving game...`);
     await this.saveGame(newSnapshot);
-    console.log('[gameSession.ts] processFirstNarratorTurn: Finished and saved.');
+    debugLog('[gameSession.ts] processFirstNarratorTurn: Finished and saved.');
     return newSnapshot;
   }
 
   public async processPlayerAction(action: string, useDummyNarrator: boolean): Promise<GameSnapshot> {
-    console.log(`[gameSession.ts] processPlayerAction: Starting for action: "${action.substring(0, 50)}..."`);
+    debugLog(`[gameSession.ts] processPlayerAction: Starting for action: "${action.substring(0, 50)}..."`);
     if (!this.currentSnapshot || !this.currentUserId || !this.currentPromptCard) {
-      console.error('[gameSession.ts] processPlayerAction: Prerequisites missing.');
+      errorLog('[gameSession.ts] processPlayerAction: Prerequisites missing.');
       throw new Error("Cannot process player action: Game not initialized correctly.");
     }
 
     const aiConnections = await this.gameRepo.getAiConnections(this.currentUserId);
-    console.log(`[gameSession.ts] processPlayerAction: Calling turnProcessor.useDummyNarrator=${useDummyNarrator}.`);
+    debugLog(`[gameSession.ts] processPlayerAction: Calling turnProcessor.useDummyNarrator=${useDummyNarrator}.`);
     const turnResult = await this.turnProcessor.processPlayerTurn(
       this.currentUserId,
       this.currentPromptCard,
@@ -2560,29 +2568,29 @@ export class GameSession implements IGameSession {
       useDummyNarrator,
       aiConnections
     );
-    
-    console.log('[gameSession.ts] processPlayerAction: Calling snapshotUpdater.applyTurnResultToSnapshot.');
+
+    debugLog('[gameSession.ts] processPlayerAction: Calling snapshotUpdater.applyTurnResultToSnapshot.');
     const newSnapshot = this.snapshotUpdater.applyTurnResultToSnapshot(this.currentSnapshot, { ...turnResult, playerAction: action });
-    
+
     this.currentSnapshot = newSnapshot;
-    console.log(`[gameSession.ts] processPlayerAction: newSnapshot ${newSnapshot.id} applied. Saving game...`);
+    debugLog(`[gameSession.ts] processPlayerAction: newSnapshot ${newSnapshot.id} applied. Saving game...`);
     await this.saveGame(newSnapshot);
-    console.log('[gameSession.ts] processPlayerAction: Finished and saved.');
+    debugLog('[gameSession.ts] processPlayerAction: Finished and saved.');
     return newSnapshot;
   }
 
   private async updateAndSave(updater: (snapshot: GameSnapshot) => GameSnapshot): Promise<GameSnapshot | null> {
-    console.log(`[gameSession.ts] updateAndSave: Applying update and saving. currentSnapshot before update: ${this.currentSnapshot?.id || 'null'}`);
+    debugLog(`[gameSession.ts] updateAndSave: Applying update and saving. currentSnapshot before update: ${this.currentSnapshot?.id || 'null'}`);
     if (!this.currentSnapshot) {
-      console.warn('[gameSession.ts] updateAndSave: No currentSnapshot to update. Returning null.');
+      debugLog('[gameSession.ts] updateAndSave: No currentSnapshot to update. Returning null.');
       return null;
     }
-    
+
     const newSnapshot = updater(this.currentSnapshot);
     this.currentSnapshot = newSnapshot;
-    console.log(`[gameSession.ts] updateAndSave: currentSnapshot updated to ${this.currentSnapshot.id}. Persisting...`);
+    debugLog(`[gameSession.ts] updateAndSave: currentSnapshot updated to ${this.currentSnapshot.id}. Persisting...`);
     await this.saveGame(newSnapshot);
-    console.log('[gameSession.ts] updateAndSave: Persisted successfully.');
+    debugLog('[gameSession.ts] updateAndSave: Persisted successfully.');
     return newSnapshot;
   }
 
@@ -2611,61 +2619,58 @@ export class GameSession implements IGameSession {
   }
 
   public async toggleWorldStatePin(keyPath: string, type: 'variable' | 'entity' | 'category'): Promise<GameSnapshot | null> {
-    console.log(`[gameSession.ts] toggleWorldStatePin: Toggling pin for ${type} at path "${keyPath}".`);
+    debugLog(`[gameSession.ts] toggleWorldStatePin: Toggling pin for ${type} at path "${keyPath}".`);
     return this.updateAndSave(snap => this.snapshotUpdater.applyPinToggle(snap, keyPath, type));
   }
 
   public async loadGame(userId: string, snapshotId: string): Promise<void> {
-    console.log(`[gameSession.ts] loadGame: Attempting to load snapshot ${snapshotId} for user ${userId}.`);
+    debugLog(`[gameSession.ts] loadGame: Attempting to load snapshot ${snapshotId} for user ${userId}.`);
     const snapshot = await this.gameRepo.getGameSnapshot(userId, snapshotId);
     if (!snapshot) {
-      console.error(`[gameSession.ts] loadGame: Snapshot ${snapshotId} not found.`);
+      errorLog(`[gameSession.ts] loadGame: Snapshot ${snapshotId} not found.`);
       throw new Error(`Game snapshot ${snapshotId} not found.`);
     }
     const card = await this.cardRepo.getPromptCard(userId, snapshot.promptCardId);
     if (!card) {
-      console.error(`[gameSession.ts] loadGame: PromptCard ${snapshot.promptCardId} not found for loaded game.`);
+      errorLog(`[gameSession.ts] loadGame: PromptCard ${snapshot.promptCardId} not found for loaded game.`);
       throw new Error(`PromptCard ${snapshot.promptCardId} not found.`);
     }
-    
+
     this.currentUserId = userId;
     this.currentSnapshot = snapshot;
     this.currentPromptCard = card;
-    console.log(`%c[gameSession.ts] loadGame: Successfully loaded snapshot ${snapshot.id} and card ${card.id}. currentSnapshot set.`, 'color: green;');
+    debugLog(`[gameSession.ts] loadGame: Successfully loaded snapshot ${snapshot.id} and card ${card.id}. currentSnapshot set.`);
   }
 
   public async loadLastActiveGame(userId: string): Promise<boolean> {
-    console.log(`[gameSession.ts] loadLastActiveGame: Checking for last active game for user ${userId}.`);
+    debugLog(`[gameSession.ts] loadLastActiveGame: Checking for last active game for user ${userId}.`);
     const allSnapshots = await this.gameRepo.getAllGameSnapshots(userId);
     if (allSnapshots.length > 0) {
-      console.log(`[gameSession.ts] loadLastActiveGame: Found ${allSnapshots.length} snapshots. Loading most recent: ${allSnapshots[0].id}.`);
+      debugLog(`[gameSession.ts] loadLastActiveGame: Found ${allSnapshots.length} snapshots. Loading most recent: ${allSnapshots[0].id}.`);
       await this.loadGame(userId, allSnapshots[0].id);
-      console.log('[gameSession.ts] loadLastActiveGame: Finished loading last active game. Returning true.');
+      debugLog('[gameSession.ts] loadLastActiveGame: Finished loading last active game. Returning true.');
       return true;
     }
-    console.log('[gameSession.ts] loadLastActiveGame: No last active game found. Returning false.');
+    debugLog('[gameSession.ts] loadLastActiveGame: No last active game found. Returning false.');
     return false;
   }
 
   public async saveGame(snapshot: GameSnapshot): Promise<void> {
-    console.log(`[gameSession.ts] saveGame: Attempting to save snapshot ${snapshot.id}.`);
+    debugLog(`[gameSession.ts] saveGame: Attempting to save snapshot ${snapshot.id}.`);
     if (!this.currentUserId) {
-      console.error('[gameSession.ts] saveGame: User not initialized during save. Throwing error.');
+      errorLog('[gameSession.ts] saveGame: User not initialized during save. Throwing error.');
       throw new Error("User not initialized.");
     }
     await this.gameRepo.saveGameSnapshot(this.currentUserId, snapshot);
-    console.log(`[gameSession.ts] saveGame: Snapshot ${snapshot.id} saved successfully.`);
+    debugLog(`[gameSession.ts] saveGame: Snapshot ${snapshot.id} saved successfully.`);
   }
 
-  public getCurrentGameSnapshot = () => {
-    // DEBUG: Log currentSnapshot getter access
-    // console.log(`[gameSession.ts] getCurrentGameSnapshot: returning ${this.currentSnapshot?.id || 'null'}.`);
-    return this.currentSnapshot;
-  };
+  public getCurrentGameSnapshot = () => this.currentSnapshot;
   public getCurrentPromptCard = () => this.currentPromptCard;
   public getCurrentGameState = () => this.currentSnapshot?.gameState || null;
   public getGameLogs = () => this.currentSnapshot?.logs || [];
 }
+
 @@FILE: src/logic/gameSessionServices.ts
 // src/logic/gameSessionServices.ts
 import { GameStateManager } from './GameStateManager.ts';
@@ -2881,6 +2886,8 @@ import type { PromptCard, GameState, LogEntry, Message } from '../models';
 
 import type { IContextStackAssembler } from './IContextStackAssembler'; // <-- ADD THIS LINE
 import { ContextStackAssembler } from './ContextStackAssembler';   // <-- AND THIS LINE
+import { debugLog, errorLog } from '../utils/debug';
+import { useSettingsStore } from '../state/useSettingsStore'; // if using hooks in React files
 
 
 export interface IPromptBuilder {
@@ -3190,7 +3197,7 @@ export interface AiSettings {
   presencePenalty: number;
   frequencyPenalty: number;
   functionCallingEnabled: boolean;
-  enableTypingEffect: boolean; // NEW: Controls the typing animation
+  streaming: boolean; 
 }
 
 /**
@@ -3432,6 +3439,7 @@ export const GameSessionAndStoreProvider: React.FC<GameSessionAndStoreProviderPr
 import { create } from 'zustand';
 import { type User } from 'firebase/auth'; // Import Firebase User type
 import { subscribeToAuthChanges, signInWithGoogle, signOutUser } from '../data/repositories/authRepository'; // Import auth functions
+import { debugLog, errorLog } from '../utils/debug';
 
 // Define the shape of our authentication state
 interface AuthState {
@@ -3453,7 +3461,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // Action to handle sign-in
   signIn: async () => {
-    console.log('[useAuthStore.ts] signIn action called.');
+    debugLog('[useAuthStore.ts] signIn action called.');
     set({ error: null }); // Clear previous errors
     try {
       await signInWithGoogle();
@@ -3467,7 +3475,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // Action to handle sign-out
   signOut: async () => {
-    console.log('[useAuthStore.ts] signOut action called.');
+    debugLog('[useAuthStore.ts] signOut action called.');
     set({ error: null }); // Clear previous errors
     try {
       await signOutUser();
@@ -3484,7 +3492,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 const unsubscribe = subscribeToAuthChanges((user) => {
   // DEBUG: Log exact auth state updates
   useAuthStore.setState({ user: user, isLoading: false });
-  console.log(`%c[useAuthStore.ts] Auth State Updated: ${user ? user.uid : "No user"}, IsLoading: false`, 'color: brown;');
+  debugLog(`%c[useAuthStore.ts] Auth State Updated: ${user ? user.uid : "No user"}, IsLoading: false`, 'color: brown;');
 });
 
 // Optional: You might want to handle unsubscription if your app could unmount this module,
@@ -3499,6 +3507,7 @@ import type {  StoreApi } from 'zustand';
 import { useSettingsStore } from './useSettingsStore';
 import type { GameSnapshot, GameState, LogEntry, Message } from '../models';
 import type { IGameSession } from '../logic/gameSession';
+import { debugLog, errorLog } from '../utils/debug';
 
 // Module-level variable to hold the injected GameSession instance
 let _gameSessionInstance: IGameSession | null = null;
@@ -3506,9 +3515,9 @@ let _gameSessionInstance: IGameSession | null = null;
 export const initializeGameStateStore = (gameSession: IGameSession) => {
   if (_gameSessionInstance === null) {
     _gameSessionInstance = gameSession;
-    console.log('%c[useGameStateStore.ts] GameSession instance injected successfully.', 'color: green;');
+    debugLog('%c[useGameStateStore.ts] GameSession instance injected successfully.', 'color: green;');
   } else {
-    console.warn('[useGameStateStore.ts] Attempted to re-inject GameSession instance. This should only happen once.');
+    debugLog('[useGameStateStore.ts] Attempted to re-inject GameSession instance. This should only happen once.');
   }
 };
 
@@ -3558,7 +3567,7 @@ const initialState: GameStateState = {
 export const useGameStateStore = create<GameStateStore>((set, get) => {
   const getGameSession = (): IGameSession => {
     if (!_gameSessionInstance) {
-      console.error('%c[useGameStateStore.ts] CRITICAL ERROR: GameSession instance is NULL when getGameSession() called!', 'color: red; font-weight: bold;');
+      errorLog('%c[useGameStateStore.ts] CRITICAL ERROR: GameSession instance is NULL when getGameSession() called!', 'color: red; font-weight: bold;');
       throw new Error("Game session instance not initialized.");
     }
     return _gameSessionInstance;
@@ -3568,16 +3577,16 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
     const syncStateWithSnapshot = (snapshot: GameSnapshot | null) => {
       // DEBUG: Log every time currentSnapshot is updated
       // Removed gameLoading from this log as it's being de-coupled for minor updates
-      console.log(`%c[useGameStateStore.ts] syncStateWithSnapshot: Updating currentSnapshot to ${snapshot ? snapshot.id : 'null'}. isProcessingTurn: ${get().isProcessingTurn}`, 'color: dodgerblue;');
+      debugLog(`%c[useGameStateStore.ts] syncStateWithSnapshot: Updating currentSnapshot to ${snapshot ? snapshot.id : 'null'}. isProcessingTurn: ${get().isProcessingTurn}`, 'color: dodgerblue;');
       set({ currentSnapshot: snapshot });
       // After setting the snapshot, let's verify immediately
       const verifySnapshot = get().currentSnapshot;
-      console.log(`%c[useGameStateStore.ts] syncStateWithSnapshot: currentSnapshot is now ${verifySnapshot ? verifySnapshot.id : 'null'}.`, 'color: dodgerblue;');
+      debugLog(`%c[useGameStateStore.ts] syncStateWithSnapshot: currentSnapshot is now ${verifySnapshot ? verifySnapshot.id : 'null'}.`, 'color: dodgerblue;');
   };
 
   const performWorldStateUpdate = async (updateFn: (session: IGameSession) => Promise<GameSnapshot | null>) => {
     // DEBUG: Log start of any world state modification action
-    console.log('%c[useGameStateStore.ts] performWorldStateUpdate: Starting a world state modification.', 'color: purple;');
+    debugLog('%c[useGameStateStore.ts] performWorldStateUpdate: Starting a world state modification.', 'color: purple;');
     // It's crucial NOT to set gameLoading: true here, as this is for minor UI updates.
     // AuthOrchestrator relies on gameLoading only for major app-level loads.
     set({ gameError: null });
@@ -3586,14 +3595,14 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
         const updatedSnapshot = await updateFn(session);
         syncStateWithSnapshot(updatedSnapshot);
     } catch (error: any) {
-        console.error("[useGameStateStore.ts] performWorldStateUpdate: Error during update:", error);
+        errorLog("[useGameStateStore.ts] performWorldStateUpdate: Error during update:", error);
         set({ gameError: error.message });
     } finally {
         // This is a crucial safety measure. Even if `gameLoading` wasn't explicitly set to `true`
         // by this function, ensuring it's `false` here guarantees the global loading screen
         // is dismissed after any world state modification.
         set({ gameLoading: false });
-        console.log('[useGameStateStore.ts] performWorldStateUpdate: Finished a world state modification.');
+        debugLog('[useGameStateStore.ts] performWorldStateUpdate: Finished a world state modification.');
     }
   };
 
@@ -3603,14 +3612,14 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
         ...initialState,
 
         initializeGame: async (userId, cardId, existingSnapshotId) => {
-          console.log(`[useGameStateStore.ts] initializeGame action: userId=${userId}, cardId=${cardId}, existingSnapshotId=${existingSnapshotId}`);
+          debugLog(`[useGameStateStore.ts] initializeGame action: userId=${userId}, cardId=${cardId}, existingSnapshotId=${existingSnapshotId}`);
           set({ gameLoading: true, gameError: null }); // Set gameLoading for this major operation
           try {
             const gameSession = getGameSession();
             await gameSession.initializeGame(userId, cardId, existingSnapshotId);
             syncStateWithSnapshot(gameSession.getCurrentGameSnapshot());
           } catch (error: any) {
-            console.error("[useGameStateStore.ts] initializeGame action ERROR:", error);
+            errorLog("[useGameStateStore.ts] initializeGame action ERROR:", error);
             set({ gameError: error.message });
           } finally {
             set({ gameLoading: false }); // Reset gameLoading regardless of success/failure
@@ -3618,7 +3627,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
         },
 
         processFirstNarratorTurn: async () => {
-          console.log('[useGameStateStore.ts] processFirstNarratorTurn action started.');
+          debugLog('[useGameStateStore.ts] processFirstNarratorTurn action started.');
           set({ isProcessingTurn: true, gameError: null });
           const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
           try {
@@ -3626,16 +3635,16 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
             const updatedSnapshot = await gameSession.processFirstNarratorTurn(useDummyNarrator);
             syncStateWithSnapshot(updatedSnapshot);
           } catch (error: any) {
-             console.error("[useGameStateStore.ts] processFirstNarratorTurn action ERROR:", error);
+             errorLog("[useGameStateStore.ts] processFirstNarratorTurn action ERROR:", error);
              set({ gameError: error.message });
           } finally {
             set({ isProcessingTurn: false });
-            console.log('[useGameStateStore.ts] processFirstNarratorTurn action finished.');
+            debugLog('[useGameStateStore.ts] processFirstNarratorTurn action finished.');
           }
         },
 
         processPlayerAction: async (action) => {
-          console.log(`[useGameStateStore.ts] processPlayerAction action started. Action: "${action}"`);
+          debugLog(`[useGameStateStore.ts] processPlayerAction action started. Action: "${action}"`);
           set({ isProcessingTurn: true, gameError: null, narratorInputText: '' });
           const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
           try {
@@ -3643,61 +3652,61 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
             const updatedSnapshot = await gameSession.processPlayerAction(action, useDummyNarrator);
             syncStateWithSnapshot(updatedSnapshot);
           } catch (error: any) {
-            console.error("[useGameStateStore.ts] processPlayerAction action ERROR:", error);
+            errorLog("[useGameStateStore.ts] processPlayerAction action ERROR:", error);
             set({ gameError: error.message });
           } finally {
              set({ isProcessingTurn: false });
-             console.log('[useGameStateStore.ts] processPlayerAction action finished.');
+             debugLog('[useGameStateStore.ts] processPlayerAction action finished.');
           }
         },
 
         saveGame: async () => {
-          console.log('[useGameStateStore.ts] saveGame action called.');
+          debugLog('[useGameStateStore.ts] saveGame action called.');
           const { currentSnapshot } = get();
           if (!currentSnapshot) {
-            console.warn('[useGameStateStore.ts] saveGame action: No currentSnapshot to save.');
+            debugLog('[useGameStateStore.ts] saveGame action: No currentSnapshot to save.');
             return;
           }
           try {
             await getGameSession().saveGame(currentSnapshot);
-            console.log(`[useGameStateStore.ts] saveGame action: Snapshot ${currentSnapshot.id} saved.`);
+            debugLog(`[useGameStateStore.ts] saveGame action: Snapshot ${currentSnapshot.id} saved.`);
           } catch (error: any) {
-            console.error("[useGameStateStore.ts] saveGame action ERROR:", error);
+            errorLog("[useGameStateStore.ts] saveGame action ERROR:", error);
             set({ gameError: error.message });
           }
         },
         
         loadGame: async (userId, snapshotId) => {
-            console.log(`[useGameStateStore.ts] loadGame action: userId=${userId}, snapshotId=${snapshotId}`);
+            debugLog(`[useGameStateStore.ts] loadGame action: userId=${userId}, snapshotId=${snapshotId}`);
             set({ gameLoading: true, gameError: null }); // Set gameLoading for this major operation
             try {
                 const gameSession = getGameSession();
                 await gameSession.loadGame(userId, snapshotId);
                 syncStateWithSnapshot(gameSession.getCurrentGameSnapshot());
             } catch (error: any) {
-                console.error("[useGameStateStore.ts] loadGame action ERROR:", error);
+                errorLog("[useGameStateStore.ts] loadGame action ERROR:", error);
                 set({ gameError: error.message });
             } finally {
                 set({ gameLoading: false }); // Reset gameLoading regardless of success/failure
-                console.log('[useGameStateStore.ts] loadGame action finished.');
+                debugLog('[useGameStateStore.ts] loadGame action finished.');
             }
         },
 
         loadLastActiveGame: async (userId: string): Promise<boolean> => {
-            console.log('%c[useGameStateStore.ts] loadLastActiveGame action called.', 'color: blue; font-weight: bold;');
+            debugLog('%c[useGameStateStore.ts] loadLastActiveGame action called.', 'color: blue; font-weight: bold;');
             set({ gameLoading: true, gameError: null }); // Set gameLoading for this major operation
             try {
                 const gameSession = getGameSession();
                 const gameLoaded = await gameSession.loadLastActiveGame(userId);
                 // DEBUG: Check what gameSession.getCurrentGameSnapshot() returns immediately after load
                 const snapshotAfterLoad = gameSession.getCurrentGameSnapshot();
-                console.log(`%c[useGameStateStore.ts] gameSession.getCurrentGameSnapshot() after loadLastActiveGame: ${snapshotAfterLoad ? snapshotAfterLoad.id : 'null'}`, 'color: blue;');
+                debugLog(`%c[useGameStateStore.ts] gameSession.getCurrentGameSnapshot() after loadLastActiveGame: ${snapshotAfterLoad ? snapshotAfterLoad.id : 'null'}`, 'color: blue;');
                 
                 syncStateWithSnapshot(snapshotAfterLoad); // Use the snapshot directly from session
-                console.log(`%c[useGameStateStore.ts] loadLastActiveGame action finished. Game loaded: ${gameLoaded}`, 'color: blue; font-weight: bold;');
+                debugLog(`%c[useGameStateStore.ts] loadLastActiveGame action finished. Game loaded: ${gameLoaded}`, 'color: blue; font-weight: bold;');
                 return gameLoaded;
             } catch (error: any) {
-                console.error("%c[useGameStateStore.ts] loadLastActiveGame action FAILED with error:", 'color: red; font-weight: bold;', error);
+                errorLog("%c[useGameStateStore.ts] loadLastActiveGame action FAILED with error:", 'color: red; font-weight: bold;', error);
                 set({ gameError: error.message });
                 return false;
             } finally {
@@ -3707,12 +3716,12 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
 
         updateNarratorInputText: (text) => {
           // DEBUG: Log input text changes if not too frequent
-          // console.log(`[useGameStateStore.ts] updateNarratorInputText: "${text.substring(0, 30)}..."`);
+          // debugLog(`[useGameStateStore.ts] updateNarratorInputText: "${text.substring(0, 30)}..."`);
           set({ narratorInputText: text });
         },
         updateNarratorScrollPosition: (position) => {
           // DEBUG: Log scroll position changes
-          // console.log(`[useGameStateStore.ts] updateNarratorScrollPosition: ${position}`);
+          // debugLog(`[useGameStateStore.ts] updateNarratorScrollPosition: ${position}`);
           set({ narratorScrollPosition: position });
         },
 
@@ -3725,7 +3734,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
         toggleWorldStatePin: (key, type) => performWorldStateUpdate(session => session.toggleWorldStatePin(key, type)),
 
         reset: () => {
-          console.log('%c[useGameStateStore.ts] RESETTING GameStateStore to initialState.', 'color: red; font-weight: bold;');
+          debugLog('%c[useGameStateStore.ts] RESETTING GameStateStore to initialState.', 'color: red; font-weight: bold;');
           set(initialState);
         },
     };
@@ -3736,22 +3745,22 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
 // DEBUG: Log when selectors are accessed. Be careful, this can be noisy.
 export const selectCurrentGameState = (state: GameStateStore): GameState | null => {
   const gameState = state.currentSnapshot?.gameState ?? null;
-  // console.log(`[useGameStateStore.ts] Selector: selectCurrentGameState. State ID: ${state.currentSnapshot?.id || 'null'}. GameState: ${gameState ? 'present' : 'null'}`);
+  // debugLog(`[useGameStateStore.ts] Selector: selectCurrentGameState. State ID: ${state.currentSnapshot?.id || 'null'}. GameState: ${gameState ? 'present' : 'null'}`);
   return gameState;
 };
 export const selectGameLogs = (state: GameStateStore): LogEntry[] => {
   const logs = state.currentSnapshot?.logs ?? [];
-  // console.log(`[useGameStateStore.ts] Selector: selectGameLogs. State ID: ${state.currentSnapshot?.id || 'null'}. Logs Count: ${logs.length}`);
+  // debugLog(`[useGameStateStore.ts] Selector: selectGameLogs. State ID: ${state.currentSnapshot?.id || 'null'}. Logs Count: ${logs.length}`);
   return logs;
 };
 export const selectConversationHistory = (state: GameStateStore): Message[] => {
   const history = state.currentSnapshot?.conversationHistory ?? [];
-  // console.log(`[useGameStateStore.ts] Selector: selectConversationHistory. State ID: ${state.currentSnapshot?.id || 'null'}. History Count: ${history.length}`);
+  // debugLog(`[useGameStateStore.ts] Selector: selectConversationHistory. State ID: ${state.currentSnapshot?.id || 'null'}. History Count: ${history.length}`);
   return history;
 };
 export const selectWorldStatePinnedKeys = (state: GameStateStore): string[] => {
   const pinnedKeys = state.currentSnapshot?.worldStatePinnedKeys ?? [];
-  // console.log(`[useGameStateStore.ts] Selector: selectWorldStatePinnedKeys. State ID: ${state.currentSnapshot?.id || 'null'}. Pinned Keys Count: ${pinnedKeys.length}`);
+  // debugLog(`[useGameStateStore.ts] Selector: selectWorldStatePinnedKeys. State ID: ${state.currentSnapshot?.id || 'null'}. Pinned Keys Count: ${pinnedKeys.length}`);
   return pinnedKeys;
 };
 @@FILE: src/state/useLogStore.ts
@@ -3760,6 +3769,7 @@ export const selectWorldStatePinnedKeys = (state: GameStateStore): string[] => {
 import { create } from 'zustand';
 import { LogViewMode } from '../utils/types'; // We'll define LogViewMode here
 import type { LogEntry } from '../models';
+import { debugLog, errorLog } from '../utils/debug';
 
 const initialState = {
   logEntries: [],
@@ -3801,11 +3811,11 @@ export const useLogStore = create<LogState>((set, get) => ({
       set({ isLoading: false }); // Placeholder
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error fetching logs:", error);
+      errorLog("Error fetching logs:", error);
     }
   },
   reset: () => {
-    console.log("Resetting LogStore.");
+    debugLog("Resetting LogStore.");
     set(initialState);
   },
 }));
@@ -3816,6 +3826,7 @@ import { create } from 'zustand';
 import type { PromptCard, NewPromptCardData, AiConnection } from '../models'; // Assuming index.ts exports these
 import { promptCardManager } from '../logic/cardManager';
 import { gameRepository } from '../data/repositories/gameRepository'; // For AI Connections
+import { debugLog, errorLog } from '../utils/debug';
 
 const initialState = {
   promptCards: [],
@@ -3859,7 +3870,7 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       set({ promptCards: cards, isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error fetching prompt cards:", error);
+      errorLog("Error fetching prompt cards:", error);
     }
   },
 
@@ -3878,7 +3889,7 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       return newCard;
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error adding prompt card:", error);
+      errorLog("Error adding prompt card:", error);
       return null;
     }
   },
@@ -3897,7 +3908,7 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       return updatedCard;
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error updating prompt card:", error);
+      errorLog("Error updating prompt card:", error);
       return null;
     }
   },
@@ -3915,7 +3926,7 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       return duplicatedCard;
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error duplicating prompt card:", error);
+      errorLog("Error duplicating prompt card:", error);
       return null;
     }
   },
@@ -3931,7 +3942,7 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       }));
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error deleting prompt card:", error);
+      errorLog("Error deleting prompt card:", error);
     }
   },
 
@@ -3942,7 +3953,7 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       set({ aiConnections: connections, isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error fetching AI connections:", error);
+      errorLog("Error fetching AI connections:", error);
     }
   },
 
@@ -3957,7 +3968,7 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       return imported;
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error importing prompt cards:", error);
+      errorLog("Error importing prompt cards:", error);
       return [];
     }
   },
@@ -3970,13 +3981,13 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
       return exported;
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error exporting prompt card:", error);
+      errorLog("Error exporting prompt card:", error);
       return null;
     }
   },
 
   reset: () => {
-    console.log("Resetting PromptCardStore.");
+    debugLog("Resetting PromptCardStore.");
     set(initialState);
   },
 }));
@@ -3988,6 +3999,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { AiConnection } from '../models';
 import { gameRepository } from '../data/repositories/gameRepository';
 import { generateUuid } from '../utils/uuid';
+import { debugLog } from '../utils/debug'; // <-- NEW
 
 interface SettingsState {
   aiConnections: AiConnection[];
@@ -3996,13 +4008,25 @@ interface SettingsState {
   connectionsError: string | null;
   useDummyNarrator: boolean;
   themeMode: 'light' | 'dark';
+  enableDebugLogging: boolean;              // <-- NEW
+  textGenerationSpeedMs: number;            // <-- NEW
+
   fetchAiConnections: (userId: string) => Promise<void>;
-  addAiConnection: (userId: string, connection: Omit<AiConnection, 'id' | 'createdAt' | 'lastUpdated'>) => Promise<AiConnection | null>;
-  updateAiConnection: (userId: string, connection: AiConnection) => Promise<AiConnection | null>;
+  addAiConnection: (
+    userId: string,
+    connection: Omit<AiConnection, 'id' | 'createdAt' | 'lastUpdated'>
+  ) => Promise<AiConnection | null>;
+  updateAiConnection: (
+    userId: string,
+    connection: AiConnection
+  ) => Promise<AiConnection | null>;
   deleteAiConnection: (userId: string, connectionId: string) => Promise<void>;
+
   setSelectedConnectionId: (id: string | null) => void;
   setUseDummyNarrator: (enabled: boolean) => void;
   setThemeMode: (mode: 'light' | 'dark') => void;
+  setEnableDebugLogging: (enabled: boolean) => void;     // <-- NEW
+  setTextGenerationSpeedMs: (speed: number) => void;     // <-- NEW
   reset: () => void;
 }
 
@@ -4016,6 +4040,8 @@ export const useSettingsStore = create<SettingsState>()(
       connectionsError: null,
       useDummyNarrator: false,
       themeMode: 'light',
+      enableDebugLogging: false,             // <-- NEW
+      textGenerationSpeedMs: 20,             // <-- NEW
 
       // --- Actions ---
       fetchAiConnections: async (userId) => {
@@ -4025,7 +4051,8 @@ export const useSettingsStore = create<SettingsState>()(
           set({
             aiConnections: connections,
             isLoadingConnections: false,
-            selectedConnectionId: get().selectedConnectionId && connections.some(c => c.id === get().selectedConnectionId)
+            selectedConnectionId: get().selectedConnectionId &&
+              connections.some(c => c.id === get().selectedConnectionId)
               ? get().selectedConnectionId
               : (connections.length > 0 ? connections[0].id : null)
           });
@@ -4033,8 +4060,8 @@ export const useSettingsStore = create<SettingsState>()(
           set({ connectionsError: error.message, isLoadingConnections: false });
         }
       },
+
       addAiConnection: async (userId, newConnectionData) => {
-        // ... (rest of the function is correct)
         set({ isLoadingConnections: true, connectionsError: null });
         try {
           const newId = generateUuid();
@@ -4047,11 +4074,13 @@ export const useSettingsStore = create<SettingsState>()(
           };
           await gameRepository.saveAiConnection(userId, connection);
           set(state => {
-            const updatedConnections = [...state.aiConnections, connection].sort((a, b) => a.displayName.localeCompare(b.displayName));
+            const updatedConnections = [...state.aiConnections, connection].sort((a, b) =>
+              a.displayName.localeCompare(b.displayName)
+            );
             return {
               aiConnections: updatedConnections,
               isLoadingConnections: false,
-              selectedConnectionId: state.selectedConnectionId || newId
+              selectedConnectionId: state.selectedConnectionId || newId,
             };
           });
           return connection;
@@ -4060,8 +4089,8 @@ export const useSettingsStore = create<SettingsState>()(
           return null;
         }
       },
+
       updateAiConnection: async (userId, updatedConnection) => {
-        // ... (rest of the function is correct)
         set({ isLoadingConnections: true, connectionsError: null });
         try {
           const now = new Date().toISOString();
@@ -4082,8 +4111,8 @@ export const useSettingsStore = create<SettingsState>()(
           return null;
         }
       },
+
       deleteAiConnection: async (userId, connectionId) => {
-        // ... (rest of the function is correct)
         set({ isLoadingConnections: true, connectionsError: null });
         try {
           await gameRepository.deleteAiConnection(userId, connectionId);
@@ -4091,10 +4120,12 @@ export const useSettingsStore = create<SettingsState>()(
             const updatedConnections = state.aiConnections.filter(conn => conn.id !== connectionId);
             let newSelectedId = state.selectedConnectionId;
             if (newSelectedId === connectionId) {
-                newSelectedId = updatedConnections.length > 0 ? updatedConnections[0].id : null;
+              newSelectedId = updatedConnections.length > 0 ? updatedConnections[0].id : null;
             }
             return {
-              aiConnections: updatedConnections.sort((a, b) => a.displayName.localeCompare(b.displayName)),
+              aiConnections: updatedConnections.sort((a, b) =>
+                a.displayName.localeCompare(b.displayName)
+              ),
               selectedConnectionId: newSelectedId,
               isLoadingConnections: false,
             };
@@ -4103,21 +4134,19 @@ export const useSettingsStore = create<SettingsState>()(
           set({ connectionsError: error.message, isLoadingConnections: false });
         }
       },
+
       setSelectedConnectionId: (id) => set({ selectedConnectionId: id }),
       setUseDummyNarrator: (enabled) => set({ useDummyNarrator: enabled }),
       setThemeMode: (mode) => set({ themeMode: mode }),
-      
-      // --- CORRECTED RESET ACTION ---
+      setEnableDebugLogging: (enabled) => set({ enableDebugLogging: enabled }), // <-- NEW
+      setTextGenerationSpeedMs: (speed) => set({ textGenerationSpeedMs: speed }), // <-- NEW
+
       reset: () => {
-        console.log("Resetting SettingsStore.");
-        // Set the non-persisted state back to initial values.
-        // Persisted values will be handled by the middleware on next login/page load.
+        debugLog("Resetting SettingsStore."); // ⬅️ Replaces console.log
         set({
           aiConnections: [],
           isLoadingConnections: false,
           connectionsError: null,
-          // We don't need to reset the persisted parts (selectedConnectionId, themeMode, etc.)
-          // as they will be rehydrated or re-fetched on the next session.
         });
       },
     }),
@@ -4128,10 +4157,13 @@ export const useSettingsStore = create<SettingsState>()(
         selectedConnectionId: state.selectedConnectionId,
         useDummyNarrator: state.useDummyNarrator,
         themeMode: state.themeMode,
+        enableDebugLogging: state.enableDebugLogging,         // <-- NEW
+        textGenerationSpeedMs: state.textGenerationSpeedMs,   // <-- NEW
       }),
     }
   )
 );
+
 @@FOLDER: src/theme
 @@FILE: src/theme/index.ts
 // src/theme/index.ts
@@ -4293,6 +4325,7 @@ export const getAppTheme = (mode: 'light' | 'dark') => {
 @@FOLDER: src/ui
 @@FOLDER: src/ui/components
 @@FILE: src/ui/components/AiSettingsEditor.tsx
+// src/ui/components/AiSettingsEditor.tsx
 
 import React from 'react';
 import {
@@ -4446,19 +4479,19 @@ export const AiSettingsEditor: React.FC<AiSettingsEditorProps> = ({
         prompt).
       </Typography>
 
-      <FormControlLabel // NEW: Typing Effect Setting
+      <FormControlLabel
         control={
           <Switch
-            checked={settings.enableTypingEffect}
+            checked={settings.streaming} // RENAMED
             onChange={(e) =>
-              handleSwitchChange('enableTypingEffect', e.target.checked)
+              handleSwitchChange('streaming', e.target.checked) // RENAMED
             }
           />
         }
-        label="Enable Typing Effect for AI Output"
+        label="Enable Streaming Output" // UPDATED LABEL
       />
       <Typography variant="body2" color="text.secondary">
-        Displays AI-generated narrative text one character at a time, like it's being typed.
+        Displays AI-generated narrative text as it's generated (typing effect).
       </Typography>
     </CollapsibleSection>
   );
@@ -4803,49 +4836,87 @@ export const LogEntryDisplay: React.FC<LogEntryDisplayProps> = ({ mode, entry, h
 
 import React from 'react';
 import { Box, Typography, Paper } from '@mui/material';
-// MODIFIED: Import Message model instead of LogEntry
 import type { Message } from '../../models';
 
 interface LogViewProps {
- // MODIFIED: Expect conversationHistory of type Message[]
- conversationHistory: Message[];
+  conversationHistory: Message[];
+  currentStreamingNarration: string; // The partially typed/streamed narration
+  isProcessingTurn: boolean; // Flag if AI is still generating a response
+  fullLatestNarration: string; // The complete narration text for the current turn
+  enableStreaming: boolean; // Is streaming enabled for the active prompt card?
 }
 
-export const LogView: React.FC<LogViewProps> = ({ conversationHistory }) => {
- return (
-  <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
-   {conversationHistory.length === 0 ? (
-    <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 4 }}>
-     The story begins...
-    </Typography>
-   ) : (
-    // MODIFIED: Map over conversationHistory
-    conversationHistory.map((message, index) => (
-     <Paper key={index} elevation={0} sx={{ p: 1.5, mb: 1.5, backgroundColor: 'transparent' }}>
-      {message.role === 'user' ? (
-       <>
-        <Typography variant="body2" sx={{ fontWeight: 'bold', color: (theme) => theme.palette.primary.dark }}>
-         You:
+export const LogView: React.FC<LogViewProps> = ({
+  conversationHistory,
+  currentStreamingNarration,
+  isProcessingTurn,
+  fullLatestNarration,
+  enableStreaming
+}) => {
+  // Determine if the last message in conversationHistory *is* the one we're currently processing/typing.
+  // This is true if conversationHistory's last message content matches the fullLatestNarration.
+  const lastMessageInHistoryIsLatest = 
+    conversationHistory.length > 0 &&
+    conversationHistory[conversationHistory.length - 1].role === 'assistant' &&
+    conversationHistory[conversationHistory.length - 1].content === fullLatestNarration;
+
+  // Decide which messages from history to render.
+  // If the last message in history is the *same* as the full latest narration (and we are streaming/processing),
+  // we effectively "replace" that history entry with our live streaming output.
+  const messagesToRenderFromHistory = (enableStreaming && isProcessingTurn) || (enableStreaming && !lastMessageInHistoryIsLatest && fullLatestNarration.length > 0 && currentStreamingNarration !== fullLatestNarration)
+    ? conversationHistory.slice(0, -1) // Exclude the very last message from history, as we will render it live
+    : conversationHistory; // Render all messages from history
+
+  return (
+    <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
+      {/* Render all previous complete messages */}
+      {messagesToRenderFromHistory.map((message, index) => (
+        <Paper key={index} elevation={0} sx={{ p: 1.5, mb: 1.5, backgroundColor: 'transparent' }}>
+          {message.role === 'user' ? (
+            <>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', color: (theme) => theme.palette.primary.dark }}>
+                You:
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 1 }}>
+                {message.content}
+              </Typography>
+            </>
+          ) : message.role === 'assistant' ? (
+            <>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', color: (theme) => theme.palette.secondary.dark }}>
+                AI Narrator:
+              </Typography>
+              <Typography variant="body1">
+                {message.content}
+              </Typography>
+            </>
+          ) : null}
+        </Paper>
+      ))}
+
+      {/* Conditionally render the latest assistant narration, potentially streaming */}
+      {/* This block renders the current AI response, whether it's loading, streaming, or fully displayed */}
+      {fullLatestNarration && ( // Only render if there's *any* latest narration content
+        <Paper elevation={0} sx={{ p: 1.5, mb: 1.5, backgroundColor: 'transparent' }}>
+          <Typography variant="body2" sx={{ fontWeight: 'bold', color: (theme) => theme.palette.secondary.dark }}>
+            AI Narrator:
+          </Typography>
+          <Typography variant="body1">
+            {isProcessingTurn || (enableStreaming && currentStreamingNarration !== fullLatestNarration)
+              ? currentStreamingNarration // Show streaming text if processing or still typing
+              : fullLatestNarration}      {/* Show full text if not streaming or streaming is complete */}
+          </Typography>
+        </Paper>
+      )}
+
+      {/* Display initial message if no content */}
+      {conversationHistory.length === 0 && !fullLatestNarration && (
+        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 4 }}>
+          The story begins...
         </Typography>
-        <Typography variant="body1" sx={{ mb: 1 }}>
-         {message.content}
-        </Typography>
-       </>
-      ) : message.role === 'assistant' ? (
-       <>
-        <Typography variant="body2" sx={{ fontWeight: 'bold', color: (theme) => theme.palette.secondary.dark }}>
-         AI Narrator:
-        </Typography>
-        <Typography variant="body1">
-         {message.content}
-        </Typography>
-       </>
-        ) : null}
-     </Paper>
-    ))
-   )}
-  </Box>
- );
+      )}
+    </Box>
+  );
 };
 @@FILE: src/ui/components/MainLayout.tsx
 // src/ui/components/MainLayout.tsx
@@ -6515,9 +6586,10 @@ const GameLibraryScreen: React.FC = () => {
 export default GameLibraryScreen;
 
 @@FILE: src/ui/screens/GameScreen.tsx
+// src/ui/screens/GameScreen.tsx
 import React from 'react';
 import {
-  Box, Typography, Button, TextField, IconButton, CircularProgress,
+  Box, Typography, Button, TextField, Paper, IconButton, CircularProgress,
   Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert, Tooltip,
   useTheme, useMediaQuery, InputAdornment,
 } from '@mui/material';
@@ -6533,7 +6605,7 @@ const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
     isLoading,
     isProcessingTurn,
     gameError,
-    gameState,
+    // gameState, // REMOVED: No longer directly used in JSX, handled in hook
     conversationHistory,
     narratorInputText,
     logContainerRef,
@@ -6548,11 +6620,14 @@ const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
     handleCloseRollDialog,
     handleRollFormulaChange,
     closeSnackbar,
+    displayedCurrentNarration,
+    fullLatestNarration, // Renamed from latestNarrationFromHook in the hook's return
+    enableStreaming,
   } = useGameScreenLogic();
 
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
-  const pinnedHeight = isSmallScreen ? theme.spacing(14) : theme.spacing(16);
+  const pinnedHeight = isSmallScreen ? theme.spacing(14) : theme.spacing(16); // USED: Now it's used below
 
   if (isLoading) {
     return (
@@ -6585,7 +6660,7 @@ const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
         position: 'relative',
         overflow: 'hidden',
         px: isSmallScreen ? 1 : 2,
-        pt: 0,
+        pt: pinnedHeight, // FIXED: Now using pinnedHeight
       }}
     >
       {/* Floating pinned items */}
@@ -6596,28 +6671,40 @@ const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
           left: 0,
           right: 0,
           zIndex: 10,
+          backdropFilter: 'blur(8px)',
+          backgroundColor: 'rgba(255,255,255,0.1)',
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
           px: isSmallScreen ? 1 : 2,
-          py: 1,
-          //pointerEvents: 'none',
+          py: isSmallScreen ? 1 : 2,
+          pointerEvents: 'none',
         }}
       >
         <PinnedItemsView />
       </Box>
 
-      {/* Scrollable log view, fully flush to background */}
-      <Box
+      {/* Scrollable narration area */}
+      <Paper
         ref={logContainerRef}
+        elevation={1}
         sx={{
           flexGrow: 1,
           overflowY: 'auto',
-          px: isSmallScreen ? 1 : 2,
+          p: isSmallScreen ? 1 : 2,
           typography: isSmallScreen ? 'body2' : 'body1',
+          backgroundColor: theme.palette.background.paper,
         }}
       >
-        <LogView conversationHistory={conversationHistory} />
-      </Box>
+        <LogView
+          conversationHistory={conversationHistory}
+          currentStreamingNarration={displayedCurrentNarration}
+          isProcessingTurn={isProcessingTurn}
+          fullLatestNarration={fullLatestNarration}
+          enableStreaming={enableStreaming}
+        />
+      </Paper>
 
-      {/* Input area with floating dice icon */}
+      {/* Input area */}
       <Box sx={{ position: 'relative', mt: 1 }}>
         <TextField
           fullWidth
@@ -6657,17 +6744,16 @@ const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
             sx={{
               position: 'absolute',
               right: 60,
-              top: -36,
+              top: -30,
               zIndex: 20,
-              backgroundColor: theme.palette.frostedSurface[theme.palette.mode],
+              backgroundColor: theme.palette.background.paper,
               border: '1px solid',
-              borderColor: theme.palette.divider,
+              borderColor: 'divider',
               boxShadow: 2,
-              p: 0.5,
               '&:hover': { backgroundColor: theme.palette.action.hover },
             }}
           >
-            <CasinoIcon fontSize="small" />
+            <CasinoIcon />
           </IconButton>
         </Tooltip>
       </Box>
@@ -6705,7 +6791,6 @@ const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
 };
 
 export default GameScreen;
-
 @@FILE: src/ui/screens/LogViewerScreen.tsx
 // src/ui/screens/LogViewerScreen.tsx
 import React from 'react';
@@ -7328,6 +7413,7 @@ const SettingsScreen: React.FC = () => {
 export default SettingsScreen;
 @@FILE: src/ui/screens/SourceDump.tsx
 import React, { useEffect, useState } from 'react';
+import { debugLog, errorLog } from '../../utils/debug';
 
 // Small reusable copy button
 function CopyButton({ text }: { text: string }) {
@@ -7338,7 +7424,7 @@ function CopyButton({ text }: { text: string }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch (err) {
-      console.error('Copy failed', err);
+      errorLog('Copy failed', err);
     }
   };
   return (
@@ -7510,14 +7596,15 @@ import EditIcon from '@mui/icons-material/Edit';
 import { useGameStateStore, selectWorldStatePinnedKeys } from '../../state/useGameStateStore'; // Selectors imported
 import { useWorldStateViewLogic } from '../../utils/hooks/useWorldStateViewLogic';
 import { WorldStateItemRow } from '../components/WorldStateItemRow';
+import { debugLog, errorLog } from '../../utils/debug';
 
 const WorldStateScreen: React.FC = () => {
   const worldStatePinnedKeys = useGameStateStore(selectWorldStatePinnedKeys); // Use selector
   const { gameError } = useGameStateStore(); // Top-level state is fine
 
   // --- Keep your existing DEBUG LINES here for verification ---
-  console.log('%c[WorldStateScreen.tsx] Component re-rendered.', 'color: #008080; font-weight: bold;');
-  console.log('[WorldStateScreen.tsx] Pinned Keys (from store selector):', worldStatePinnedKeys);
+  debugLog('%c[WorldStateScreen.tsx] Component re-rendered.', 'color: #008080; font-weight: bold;');
+  debugLog('[WorldStateScreen.tsx] Pinned Keys (from store selector):', worldStatePinnedKeys);
   // --- END DEBUG LINES ---
 
   const {
@@ -7629,6 +7716,31 @@ const WorldStateScreen: React.FC = () => {
 
 export default WorldStateScreen;
 @@FOLDER: src/utils
+@@FILE: src/utils/debug.ts
+// src/utils/debug.ts
+import { useSettingsStore } from '../state/useSettingsStore';
+
+/**
+ * A centralized logging utility that conditionally logs messages based on a debug setting.
+ * This function should be used in place of direct `console.log` for debug messages.
+ * @param message The message to log.
+ * @param optionalParams Any additional data to log.
+ */
+export const debugLog = (message?: any, ...optionalParams: any[]) => {
+  const { enableDebugLogging } = useSettingsStore.getState();
+  if (enableDebugLogging) {
+    console.log(message, ...optionalParams);
+  }
+};
+
+/**
+ * A centralized error logging utility that always logs errors, regardless of debug setting.
+ * @param message The error message to log.
+ * @param optionalParams Any additional error data to log.
+ */
+export const errorLog = (message?: any, ...optionalParams: any[]) => {
+  console.error(message, ...optionalParams);
+};
 @@FILE: src/utils/diceRoller.ts
 // src/utils/diceRoller.ts
 
@@ -7813,166 +7925,226 @@ export function getPromptCardContentForHash(card: {
 @@FOLDER: src/utils/hooks
 @@FILE: src/utils/hooks/useGameScreenLogic.ts
 // src/utils/hooks/useGameScreenLogic.ts
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../state/useAuthStore';
-import { useGameStateStore, selectCurrentGameState, selectConversationHistory } from '../../state/useGameStateStore'; // Import selectors
+import { useGameStateStore, selectCurrentGameState, selectConversationHistory } from '../../state/useGameStateStore';
 import { DiceRoller } from '../../utils/diceRoller';
 import type { GameState } from '../../models';
+import { usePromptCardStore } from '../../state/usePromptCardStore';
+import { useSettingsStore } from '../../state/useSettingsStore'; // <-- NEW
+import { debugLog, errorLog } from '../../utils/debug'; // <-- NEW
 
 export const useGameScreenLogic = () => {
-  console.log('[useGameScreenLogic.ts] Hook execution started.');
-
   const navigate = useNavigate();
   const { user } = useAuthStore();
 
-  // 1. Consume the global state stores using selectors for stability
+  const enableDebugLogging = useSettingsStore(state => state.enableDebugLogging); // <-- NEW
+  const typingSpeedMs = useSettingsStore(state => state.textGenerationSpeedMs);   // <-- NEW
+
   const currentSnapshot = useGameStateStore(state => state.currentSnapshot);
-  const currentGameState = useGameStateStore(selectCurrentGameState); // Use selector
-  const conversationHistory = useGameStateStore(selectConversationHistory); // Use selector
+  const currentGameState = useGameStateStore(selectCurrentGameState);
+  const conversationHistory = useGameStateStore(selectConversationHistory);
   const narratorInputText = useGameStateStore(state => state.narratorInputText);
   const gameLoading = useGameStateStore(state => state.gameLoading);
   const isProcessingTurn = useGameStateStore(state => state.isProcessingTurn);
   const gameError = useGameStateStore(state => state.gameError);
+  const activePromptCard = usePromptCardStore(state => state.activePromptCard);
 
-  // Get actions directly from the store's current state (stable references)
   const processPlayerAction = useGameStateStore(state => state.processPlayerAction);
   const updateNarratorInputText = useGameStateStore(state => state.updateNarratorInputText);
   const processFirstNarratorTurn = useGameStateStore(state => state.processFirstNarratorTurn);
 
-
-  // 2. All local UI state is moved here
   const [showRollDialog, setShowRollDialog] = useState(false);
   const [rollFormula, setRollFormula] = useState("2d6");
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({ open: false, message: '', severity: 'info' });
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error' | 'info' | 'warning';
+  }>({
+    open: false,
+    message: '',
+    severity: 'info',
+  });
+  
+  const [displayedCurrentNarration, setDisplayedCurrentNarration] = useState('');
 
-  // 3. All refs are moved here
   const logContainerRef = useRef<HTMLDivElement>(null);
-  // This ref ensures processFirstNarratorTurn is only called once per snapshot ID
   const initialTurnTriggeredForSnapshot = useRef<string | null>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 4. All useEffects are moved here
   useEffect(() => {
-    console.log(`[useGameScreenLogic.ts] useEffect (auto-scroll): conversationHistory changed. Count: ${conversationHistory.length}`);
-    // Auto-scroll to the bottom of the log on new messages
+    if (enableDebugLogging) {
+      debugLog(`[useGameScreenLogic.ts] useEffect (auto-scroll): conversationHistory changed. Count: ${conversationHistory.length}`);
+    }
     if (logContainerRef.current) {
       logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
     }
-  }, [conversationHistory]);
+  }, [conversationHistory, enableDebugLogging]);
 
   useEffect(() => {
-    console.log(`%c[useGameScreenLogic.ts] useEffect (first turn check) triggered. Snapshot ID: ${currentSnapshot?.id || 'null'}, gameLoading: ${gameLoading}, currentTurn: ${currentSnapshot?.currentTurn}.`, 'color: grey;');
+    if (enableDebugLogging) {
+      debugLog(`[useGameScreenLogic.ts] useEffect (first turn check). Snapshot ID: ${currentSnapshot?.id}, gameLoading: ${gameLoading}, currentTurn: ${currentSnapshot?.currentTurn}`);
+    }
 
     if (!currentSnapshot || gameLoading) {
-      console.log('[useGameScreenLogic.ts] First turn check: Skipping (no snapshot or still loading).');
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Skipping first turn (no snapshot or loading).');
       return;
     }
 
     const needsFirstTurn =
       currentSnapshot.currentTurn === 0 &&
-      currentSnapshot.conversationHistory?.length === 1 && // Only the initial narrator prose
-      initialTurnTriggeredForSnapshot.current !== currentSnapshot.id; // Not yet triggered for THIS snapshot
+      currentSnapshot.conversationHistory?.length === 1 &&
+      initialTurnTriggeredForSnapshot.current !== currentSnapshot.id;
 
     if (needsFirstTurn) {
       initialTurnTriggeredForSnapshot.current = currentSnapshot.id;
-      console.log(`%c[useGameScreenLogic.ts] First turn check: Detected start of Turn 0. Triggering narrator's first response for snapshot ${currentSnapshot.id}.`, 'color: #8B008B; font-weight: bold;');
+      if (enableDebugLogging) debugLog(`[useGameScreenLogic.ts] Triggering first narrator turn for snapshot ${currentSnapshot.id}`);
       processFirstNarratorTurn();
     } else {
-        console.log('[useGameScreenLogic.ts] First turn check: No first turn needed or already triggered.');
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] First turn not needed or already triggered.');
     }
-  }, [currentSnapshot, gameLoading, processFirstNarratorTurn]);
+  }, [currentSnapshot, gameLoading, processFirstNarratorTurn, enableDebugLogging]);
 
-  // 5. All handler functions are moved here and wrapped in useCallback
+  useEffect(() => {
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    const fullNarration = currentGameState?.narration || '';
+    const enableStreaming = activePromptCard?.aiSettings?.streaming ?? true;
+
+    if (enableStreaming && fullNarration.length > 0 && !isProcessingTurn) {
+      setDisplayedCurrentNarration('');
+      let i = 0;
+      const typeCharacter = () => {
+        if (i < fullNarration.length) {
+          setDisplayedCurrentNarration((prev) => prev + fullNarration.charAt(i));
+          i++;
+          typingTimeoutRef.current = setTimeout(typeCharacter, typingSpeedMs);
+        } else {
+          typingTimeoutRef.current = null;
+        }
+      };
+      typingTimeoutRef.current = setTimeout(typeCharacter, typingSpeedMs);
+    } else if (!enableStreaming) {
+      setDisplayedCurrentNarration(fullNarration);
+    }
+
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, [currentGameState?.narration, activePromptCard?.aiSettings?.streaming, isProcessingTurn, typingSpeedMs]);
+
   const showSnackbar = useCallback((message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
-    console.log(`[useGameScreenLogic.ts] showSnackbar: Message: "${message}", Severity: ${severity}`);
-    setSnackbar({ open: true, message, severity });
-  }, []);
+    if (enableDebugLogging) debugLog(`[useGameScreenLogic.ts] Snackbar: "${message}" (${severity})`);
+    setSnackbar({
+      open: true,
+      message,
+      severity: severity as 'success' | 'error' | 'info' | 'warning',
+    });
+    
+  }, [enableDebugLogging]);
 
   const handleSendAction = useCallback(async () => {
-    console.log(`[useGameScreenLogic.ts] handleSendAction: Input: "${narratorInputText.substring(0, 50)}...". IsProcessing: ${isProcessingTurn}`);
+    if (enableDebugLogging) debugLog(`[useGameScreenLogic.ts] handleSendAction: Input: "${narratorInputText}"`);
     if (narratorInputText.trim() === '' || isProcessingTurn) {
-        console.warn('[useGameScreenLogic.ts] handleSendAction: Skipping due to empty input or already processing.');
-        return;
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Skipping send — empty or already processing.');
+      return;
     }
     try {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      setDisplayedCurrentNarration(currentGameState?.narration || '');
       await processPlayerAction(narratorInputText);
-      console.log('[useGameScreenLogic.ts] handleSendAction: processPlayerAction completed.');
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] processPlayerAction completed.');
     } catch (e) {
-      console.error('[useGameScreenLogic.ts] handleSendAction: Error processing action:', e);
+      errorLog('[useGameScreenLogic.ts] Error in handleSendAction:', e);
       showSnackbar(`Failed to process action: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
     }
-  }, [narratorInputText, isProcessingTurn, processPlayerAction, showSnackbar]);
+  }, [narratorInputText, isProcessingTurn, processPlayerAction, showSnackbar, currentGameState?.narration, enableDebugLogging]);
 
   const handleRollDice = useCallback(async () => {
-    console.log(`[useGameScreenLogic.ts] handleRollDice: Rolling with formula: ${rollFormula}`);
+    if (enableDebugLogging) debugLog(`[useGameScreenLogic.ts] Rolling formula: ${rollFormula}`);
     try {
       const result = DiceRoller.roll(rollFormula);
       const summary = DiceRoller.format(result);
-      console.log(`[useGameScreenLogic.ts] handleRollDice: Roll result: ${summary}`);
+      if (enableDebugLogging) debugLog(`[useGameScreenLogic.ts] Dice result: ${summary}`);
+
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      setDisplayedCurrentNarration(currentGameState?.narration || '');
+
       await processPlayerAction(`I roll the dice (${rollFormula}) and get the following result:\n${summary}`);
       showSnackbar(`Rolled ${rollFormula}: ${summary}`, 'success');
       setShowRollDialog(false);
     } catch (e) {
-      console.error('[useGameScreenLogic.ts] handleRollDice: Error rolling dice:', e);
+      errorLog('[useGameScreenLogic.ts] Error in handleRollDice:', e);
       showSnackbar(`Failed to roll dice: ${e instanceof Error ? e.message : 'Invalid formula'}`, 'error');
     }
-  }, [rollFormula, processPlayerAction, showSnackbar]);
+  }, [rollFormula, processPlayerAction, showSnackbar, currentGameState?.narration, enableDebugLogging]);
 
   const handleOpenRollDialog = useCallback(() => {
-      console.log('[useGameScreenLogic.ts] handleOpenRollDialog: Opening roll dialog.');
-      setShowRollDialog(true);
-  }, []);
+    if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Opening roll dialog.');
+    setShowRollDialog(true);
+  }, [enableDebugLogging]);
 
   const handleKeyPress = useCallback((event: React.KeyboardEvent) => {
     if (event.key === 'Enter' && !event.shiftKey) {
-      console.log('[useGameScreenLogic.ts] handleKeyPress: Enter pressed, calling handleSendAction.');
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Enter pressed — sending action.');
       event.preventDefault();
       handleSendAction();
     }
-  }, [handleSendAction]);
+  }, [handleSendAction, enableDebugLogging]);
 
   const closeSnackbar = useCallback(() => {
-    console.log('[useGameScreenLogic.ts] closeSnackbar: Closing snackbar.');
+    if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Closing snackbar.');
     setSnackbar(prev => ({ ...prev, open: false }));
-  }, []);
+  }, [enableDebugLogging]);
 
-  // 6. Return a clean API for the component
   return {
-    // State and Data for Rendering
-    isReady: !!user && !!currentSnapshot && !!currentGameState, // Ensure currentGameState is actually an object
-    isLoading: gameLoading, // Use gameLoading from store
+    isReady: !!user && !!currentSnapshot && !!currentGameState,
+    isLoading: gameLoading,
     isProcessingTurn,
     gameError,
-    gameState: currentGameState as GameState, // Assert non-null for the component's direct use
     conversationHistory,
     narratorInputText,
     logContainerRef,
     snackbar,
+    displayedCurrentNarration,
+    fullLatestNarration: currentGameState?.narration || '',
+    enableStreaming: activePromptCard?.aiSettings?.streaming ?? true,
 
-    // Dialog State
     rollDialog: {
       open: showRollDialog,
       formula: rollFormula,
     },
 
-    // Handlers for UI Events
     handleGoToLogin: () => {
-      console.log('[useGameScreenLogic.ts] handleGoToLogin: Navigating to /login.');
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Navigating to /login');
       navigate('/login');
     },
     handleSendAction,
-    handleInputChange: updateNarratorInputText, // Direct use of store action
+    handleInputChange: updateNarratorInputText,
     handleKeyPress,
     handleRollDice,
     handleOpenRollDialog,
     handleCloseRollDialog: () => {
-      console.log('[useGameScreenLogic.ts] handleCloseRollDialog: Closing roll dialog.');
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Closing roll dialog.');
       setShowRollDialog(false);
     },
     handleRollFormulaChange: setRollFormula,
     closeSnackbar,
   };
 };
+
 @@FILE: src/utils/hooks/useLogViewerLogic.ts
 // src/utils/hooks/useLogViewerLogic.ts
 import { useState, useEffect, useCallback } from 'react';
@@ -8524,6 +8696,7 @@ import {
     selectCurrentGameState,
   } from '../../state/useGameStateStore';
 import { flattenJsonObject, getNestedValue } from '../../utils/jsonUtils';
+import { debugLog, errorLog } from '../../utils/debug';
 
 interface GroupedWorldState {
     [category: string]: {
@@ -8556,18 +8729,18 @@ export const useWorldStateViewLogic = () => {
     const [newEntityName, setNewEntityName] = useState('');
 
     // --- KEEP EXISTING DEBUG LINES ---
-    console.log('%c[useWorldStateViewLogic.ts] Hook re-executed.', 'color: #B8860B; font-weight: bold;');
-    console.log('[useWorldStateViewLogic.ts] Received gameState prop from WorldStateScreen:', JSON.stringify(gameState, null, 2));
-    console.log('[useWorldStateViewLogic.ts] Extracted worldState from prop (gameState?.worldState):', JSON.stringify(gameState?.worldState, null, 2));
-    console.log('[useWorldStateViewLogic.ts] Extracted worldState keys length (gameState?.worldState):', Object.keys(gameState?.worldState || {}).length);
-    console.log('[useWorldStateViewLogic.ts] Pinned keys directly from store (in logic):', worldStatePinnedKeys);
+    debugLog('%c[useWorldStateViewLogic.ts] Hook re-executed.', 'color: #B8860B; font-weight: bold;');
+    debugLog('[useWorldStateViewLogic.ts] Received gameState prop from WorldStateScreen:', JSON.stringify(gameState, null, 2));
+    debugLog('[useWorldStateViewLogic.ts] Extracted worldState from prop (gameState?.worldState):', JSON.stringify(gameState?.worldState, null, 2));
+    debugLog('[useWorldStateViewLogic.ts] Extracted worldState keys length (gameState?.worldState):', Object.keys(gameState?.worldState || {}).length);
+    debugLog('[useWorldStateViewLogic.ts] Pinned keys directly from store (in logic):', worldStatePinnedKeys);
     // --- END DEBUG LINES ---
 
     const worldState = gameState?.worldState || {};
     const flattenedWorld = useMemo(() => {
         const flat = flattenJsonObject(worldState);
-        console.log('[useWorldStateViewLogic.ts] Calculated flattenedWorld (inside useMemo):', JSON.stringify(flat, null, 2));
-        console.log('[useWorldStateViewLogic.ts] Flattened World keys length (inside useMemo):', Object.keys(flat).length);
+        debugLog('[useWorldStateViewLogic.ts] Calculated flattenedWorld (inside useMemo):', JSON.stringify(flat, null, 2));
+        debugLog('[useWorldStateViewLogic.ts] Flattened World keys length (inside useMemo):', Object.keys(flat).length);
         return flat;
     }, [worldState]);
 
@@ -8592,8 +8765,8 @@ export const useWorldStateViewLogic = () => {
                 delete grouped[category]['@@_direct'];
             }
         }
-        console.log('[useWorldStateViewLogic.ts] Grouped by Category (inside useMemo):', JSON.stringify(grouped, null, 2));
-        console.log('[useWorldStateViewLogic.ts] Grouped by Category keys length (inside useMemo):', Object.keys(grouped).length);
+        debugLog('[useWorldStateViewLogic.ts] Grouped by Category (inside useMemo):', JSON.stringify(grouped, null, 2));
+        debugLog('[useWorldStateViewLogic.ts] Grouped by Category keys length (inside useMemo):', Object.keys(grouped).length);
         return grouped;
     }, [flattenedWorld]);
 

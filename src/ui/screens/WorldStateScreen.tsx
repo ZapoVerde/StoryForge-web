@@ -12,14 +12,15 @@ import EditIcon from '@mui/icons-material/Edit';
 import { useGameStateStore, selectWorldStatePinnedKeys } from '../../state/useGameStateStore'; // Selectors imported
 import { useWorldStateViewLogic } from '../../utils/hooks/useWorldStateViewLogic';
 import { WorldStateItemRow } from '../components/WorldStateItemRow';
+import { debugLog, errorLog } from '../../utils/debug';
 
 const WorldStateScreen: React.FC = () => {
   const worldStatePinnedKeys = useGameStateStore(selectWorldStatePinnedKeys); // Use selector
   const { gameError } = useGameStateStore(); // Top-level state is fine
 
   // --- Keep your existing DEBUG LINES here for verification ---
-  console.log('%c[WorldStateScreen.tsx] Component re-rendered.', 'color: #008080; font-weight: bold;');
-  console.log('[WorldStateScreen.tsx] Pinned Keys (from store selector):', worldStatePinnedKeys);
+  debugLog('%c[WorldStateScreen.tsx] Component re-rendered.', 'color: #008080; font-weight: bold;');
+  debugLog('[WorldStateScreen.tsx] Pinned Keys (from store selector):', worldStatePinnedKeys);
   // --- END DEBUG LINES ---
 
   const {

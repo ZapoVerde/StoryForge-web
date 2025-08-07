@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { type User } from 'firebase/auth'; // Import Firebase User type
 import { subscribeToAuthChanges, signInWithGoogle, signOutUser } from '../data/repositories/authRepository'; // Import auth functions
+import { debugLog, errorLog } from '../utils/debug';
 
 // Define the shape of our authentication state
 interface AuthState {
@@ -24,7 +25,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // Action to handle sign-in
   signIn: async () => {
-    console.log('[useAuthStore.ts] signIn action called.');
+    debugLog('[useAuthStore.ts] signIn action called.');
     set({ error: null }); // Clear previous errors
     try {
       await signInWithGoogle();
@@ -38,7 +39,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   // Action to handle sign-out
   signOut: async () => {
-    console.log('[useAuthStore.ts] signOut action called.');
+    debugLog('[useAuthStore.ts] signOut action called.');
     set({ error: null }); // Clear previous errors
     try {
       await signOutUser();
@@ -55,7 +56,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 const unsubscribe = subscribeToAuthChanges((user) => {
   // DEBUG: Log exact auth state updates
   useAuthStore.setState({ user: user, isLoading: false });
-  console.log(`%c[useAuthStore.ts] Auth State Updated: ${user ? user.uid : "No user"}, IsLoading: false`, 'color: brown;');
+  debugLog(`%c[useAuthStore.ts] Auth State Updated: ${user ? user.uid : "No user"}, IsLoading: false`, 'color: brown;');
 });
 
 // Optional: You might want to handle unsubscription if your app could unmount this module,

@@ -14,7 +14,7 @@ export interface AiSettings {
   presencePenalty: number;
   frequencyPenalty: number;
   functionCallingEnabled: boolean;
-  enableTypingEffect: boolean; // NEW: Controls the typing animation
+  streaming: boolean; 
 }
 
 /**

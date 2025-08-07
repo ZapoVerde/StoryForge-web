@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { LogViewMode } from '../utils/types'; // We'll define LogViewMode here
 import type { LogEntry } from '../models';
+import { debugLog, errorLog } from '../utils/debug';
 
 const initialState = {
   logEntries: [],
@@ -44,11 +45,11 @@ export const useLogStore = create<LogState>((set, get) => ({
       set({ isLoading: false }); // Placeholder
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
-      console.error("Error fetching logs:", error);
+      errorLog("Error fetching logs:", error);
     }
   },
   reset: () => {
-    console.log("Resetting LogStore.");
+    debugLog("Resetting LogStore.");
     set(initialState);
   },
 }));

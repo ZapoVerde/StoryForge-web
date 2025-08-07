@@ -1,6 +1,7 @@
+// src/ui/screens/GameScreen.tsx
 import React from 'react';
 import {
-  Box, Typography, Button, TextField, IconButton, CircularProgress,
+  Box, Typography, Button, TextField, Paper, IconButton, CircularProgress,
   Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert, Tooltip,
   useTheme, useMediaQuery, InputAdornment,
 } from '@mui/material';
@@ -16,7 +17,7 @@ const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
     isLoading,
     isProcessingTurn,
     gameError,
-    gameState,
+    // gameState, // REMOVED: No longer directly used in JSX, handled in hook
     conversationHistory,
     narratorInputText,
     logContainerRef,
@@ -31,11 +32,14 @@ const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
     handleCloseRollDialog,
     handleRollFormulaChange,
     closeSnackbar,
+    displayedCurrentNarration,
+    fullLatestNarration, // Renamed from latestNarrationFromHook in the hook's return
+    enableStreaming,
   } = useGameScreenLogic();
 
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
-  const pinnedHeight = isSmallScreen ? theme.spacing(14) : theme.spacing(16);
+  const pinnedHeight = isSmallScreen ? theme.spacing(14) : theme.spacing(16); // USED: Now it's used below
 
   if (isLoading) {
     return (
@@ -68,7 +72,7 @@ const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
         position: 'relative',
         overflow: 'hidden',
         px: isSmallScreen ? 1 : 2,
-        pt: 0,
+        pt: pinnedHeight, // FIXED: Now using pinnedHeight
       }}
     >
       {/* Floating pinned items */}
@@ -79,28 +83,40 @@ const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
           left: 0,
           right: 0,
           zIndex: 10,
+          backdropFilter: 'blur(8px)',
+          backgroundColor: 'rgba(255,255,255,0.1)',
+          borderBottom: `1px solid ${theme.palette.divider}`,
+          boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
           px: isSmallScreen ? 1 : 2,
-          py: 1,
-          //pointerEvents: 'none',
+          py: isSmallScreen ? 1 : 2,
+          pointerEvents: 'none',
         }}
       >
         <PinnedItemsView />
       </Box>
 
-      {/* Scrollable log view, fully flush to background */}
-      <Box
+      {/* Scrollable narration area */}
+      <Paper
         ref={logContainerRef}
+        elevation={1}
         sx={{
           flexGrow: 1,
           overflowY: 'auto',
-          px: isSmallScreen ? 1 : 2,
+          p: isSmallScreen ? 1 : 2,
           typography: isSmallScreen ? 'body2' : 'body1',
+          backgroundColor: theme.palette.background.paper,
         }}
       >
-        <LogView conversationHistory={conversationHistory} />
-      </Box>
+        <LogView
+          conversationHistory={conversationHistory}
+          currentStreamingNarration={displayedCurrentNarration}
+          isProcessingTurn={isProcessingTurn}
+          fullLatestNarration={fullLatestNarration}
+          enableStreaming={enableStreaming}
+        />
+      </Paper>
 
-      {/* Input area with floating dice icon */}
+      {/* Input area */}
       <Box sx={{ position: 'relative', mt: 1 }}>
         <TextField
           fullWidth
@@ -140,17 +156,16 @@ const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
             sx={{
               position: 'absolute',
               right: 60,
-              top: -36,
+              top: -30,
               zIndex: 20,
-              backgroundColor: theme.palette.frostedSurface[theme.palette.mode],
+              backgroundColor: theme.palette.background.paper,
               border: '1px solid',
-              borderColor: theme.palette.divider,
+              borderColor: 'divider',
               boxShadow: 2,
-              p: 0.5,
               '&:hover': { backgroundColor: theme.palette.action.hover },
             }}
           >
-            <CasinoIcon fontSize="small" />
+            <CasinoIcon />
           </IconButton>
         </Tooltip>
       </Box>

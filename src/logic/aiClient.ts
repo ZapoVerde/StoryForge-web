@@ -2,6 +2,8 @@
 
 import type { ModelInfo } from '../data/config/aiConnectionTemplates';
 import type { Message, AiSettings, AiConnection } from '../models';
+import { debugLog, errorLog } from '../utils/debug';
+
 /**
  * Interface defining the contract for an AI client.
  */
@@ -151,7 +153,7 @@ class AiClient implements IAiClient {
         .sort((a: ModelInfo, b: ModelInfo) => a.name.localeCompare(b.name));
 
     } catch (error) {
-      console.error("Failed to list models:", error);
+      errorLog("Failed to list models:", error);
       throw error;
     }
   }
