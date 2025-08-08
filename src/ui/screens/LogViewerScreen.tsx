@@ -83,21 +83,14 @@ export const LogViewerScreen: React.FC = () => {
       >
         <Paper sx={{ width: 320 }}>
           <List dense>
-            {Object.values(LogViewMode).map((mode) => (
-              <ListItem key={mode} disablePadding>
-                <ListItem button onClick={() => handleCheckboxChange(mode)}>
-                  <ListItemIcon>
-                    <Checkbox
-                      edge="start"
-                      checked={selectedLogViewModes.includes(mode)}
-                      tabIndex={-1}
-                      disableRipple
-                    />
-                  </ListItemIcon>
-                  <ListItemText primary={mode} />
-                </ListItem>
-              </ListItem>
-            ))}
+          {logEntries.map((entry) => (
+            <Box key={entry.turnNumber} sx={{ p: 1 }}>
+              <DetailedLogTurnView // <-- This is the main component to use
+                entry={entry}
+                selectedLogViewModes={selectedLogViewModes}
+              />
+            </Box>
+          ))}
           </List>
         </Paper>
       </Popover>

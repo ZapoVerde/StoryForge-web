@@ -3,16 +3,21 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box, Paper, Typography, TextField, IconButton, Stack, Divider,
-  CircularProgress, Button,
+  CircularProgress, Button, Fab,
+  Dialog, DialogActions, DialogContent, DialogTitle,
+  Snackbar, Alert
 } from '@mui/material';
-import SendIcon from '@mui/icons-material/Send'; // Using SendIcon for clarity
-import RestartAltIcon from '@mui/icons-material/RestartAlt';
-import CasinoIcon from '@mui/icons-material/Casino'; // For dice rolls if you have them
 
-// Import the store AND the specific selector you need
+import type {AlertColor} from '@mui/material';
+import SendIcon from '@mui/icons-material/Send';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import CasinoIcon from '@mui/icons-material/Casino';
+
 import { useGameStateStore, selectConversationHistory } from '../../state/useGameStateStore';
 import { usePromptCardStore } from '../../state/usePromptCardStore';
 import { PinnedItemsView } from '../components/PinnedItemsView';
+import { DiceRoller } from '../../utils/diceRoller';
+import { useLongPress } from '../../utils/hooks/useLongPress';
 
 export const GameScreen: React.FC = () => {
   const {
@@ -24,14 +29,48 @@ export const GameScreen: React.FC = () => {
     rerollLastNarration,
   } = useGameStateStore();
 
-  // FIX: Use the selector to get the conversation history
   const conversationHistory = useGameStateStore(selectConversationHistory);
   const activePromptCard = usePromptCardStore((state) => state.activePromptCard);
 
   const [userInput, setUserInput] = useState('');
-  const logEndRef = useRef<HTMLDivElement>(null); // For auto-scrolling
+  const logEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to the bottom of the conversation
+  const [isRollDialogOpen, setIsRollDialogOpen] = useState(false);
+  const [rollFormula, setRollFormula] = useState('1d20');
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' as AlertColor });
+
+  const showSnackbar = (message: string, severity: AlertColor = 'info') => {
+    setSnackbar({ open: true, message, severity });
+  };
+  const closeSnackbar = () => setSnackbar(prev => ({ ...prev, open: false }));
+
+  const handleQuickRoll = useCallback(async () => {
+    if (isProcessingTurn) return;
+    try {
+      const result = DiceRoller.roll(rollFormula);
+      const summary = DiceRoller.format(result);
+      const actionString = `(The player quickly rolls ${rollFormula}. Result: ${summary})`;
+      await processTurn(actionString);
+      showSnackbar(`Rolled ${rollFormula}: ${summary}`, 'success');
+    } catch (e) {
+      showSnackbar("Invalid dice formula. Long-press the dice icon to fix it.", 'error');
+    }
+  }, [rollFormula, isProcessingTurn, processTurn]);
+
+  const handleOpenRollDialog = () => setIsRollDialogOpen(true);
+  const handleCloseRollDialog = () => setIsRollDialogOpen(false);
+  
+  const handleRollFromDialog = useCallback(async () => {
+    await handleQuickRoll();
+    handleCloseRollDialog();
+  }, [handleQuickRoll]);
+  
+  const longPressProps = useLongPress(
+    handleOpenRollDialog,
+    handleQuickRoll,
+    { delay: 400 }
+  );
+
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversationHistory]);
@@ -50,13 +89,13 @@ export const GameScreen: React.FC = () => {
   }, [handleSubmit]);
 
   const handleReset = useCallback(() => {
-    if (currentSnapshot && window.confirm("Are you sure you want to restart this turn? This will revert any changes made in the last narration.")) {
+    if (currentSnapshot && window.confirm("Are you sure you want to reset to the beginning of this turn? All changes from the last narration will be lost.")) {
       resetGameFromSnapshot(currentSnapshot);
     }
   }, [currentSnapshot, resetGameFromSnapshot]);
 
   const handleReroll = useCallback(() => {
-    if (window.confirm("Are you sure you want to reroll the last narration? The AI will try again with the same input.")) {
+    if (window.confirm("Are you sure you want to reroll the last narration? The AI will try again with your previous input.")) {
         rerollLastNarration();
     }
   }, [rerollLastNarration]);
@@ -71,13 +110,13 @@ export const GameScreen: React.FC = () => {
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', p: 2 }}>
+    <Box sx={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', p: 2 }}>
       <PinnedItemsView />
       <Divider sx={{ my: 1 }} />
-
-      <Box sx={{ flex: 1, overflowY: 'auto', px: 1 }}>
+      <Box sx={{ flex: 1, overflowY: 'auto', px: 1, pb: 8 }}>
         {conversationHistory.map((msg, index) => (
           <Paper key={index} elevation={0} sx={{ p: 1.5, mb: 1.5, backgroundColor: 'transparent' }}>
+            {/* THEME USAGE: Using 'primary.main' and 'secondary.main' from your theme for text colors */}
             <Typography variant="body2" sx={{ fontWeight: 'bold', color: msg.role === 'user' ? 'primary.main' : 'secondary.main' }}>
               {msg.role === 'user' ? 'You' : 'Narrator'}
             </Typography>
@@ -94,6 +133,50 @@ export const GameScreen: React.FC = () => {
         <div ref={logEndRef} />
       </Box>
 
+      <Fab
+        // THEME USAGE: 'color="secondary"' pulls BRAND_PRIMARY_DARK/LIGHT from your theme
+        color="secondary"
+        aria-label="roll dice"
+        {...longPressProps}
+        sx={{
+          position: 'absolute',
+          bottom: 120, 
+          right: 32,
+        }}
+      >
+        <CasinoIcon />
+      </Fab>
+
+      <Dialog open={isRollDialogOpen} onClose={handleCloseRollDialog}>
+        {/* ... Dialog content is generally styled by the global theme ... */}
+        <DialogTitle>Set Dice Formula</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Dice Formula"
+            type="text"
+            fullWidth
+            variant="standard"
+            value={rollFormula}
+            onChange={(e) => setRollFormula(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleRollFromDialog()}
+            placeholder="e.g., 2d6+3"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseRollDialog}>Cancel</Button>
+          <Button onClick={handleRollFromDialog} variant="contained">Roll</Button>
+        </DialogActions>
+      </Dialog>
+      
+      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={closeSnackbar}>
+        {/* THEME USAGE: The `severity` prop on Alert automatically uses the theme's success, error, etc. colors */}
+        <Alert onClose={closeSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+
       <Paper elevation={3} sx={{ p: 1, mt: 1 }}>
         <Stack direction="row" spacing={1} alignItems="center">
           <TextField
@@ -107,6 +190,7 @@ export const GameScreen: React.FC = () => {
             onKeyPress={handleKeyPress}
             disabled={isProcessingTurn}
           />
+          {/* THEME USAGE: 'color="primary"' pulls BRAND_PRIMARY_DARK/LIGHT from your theme */}
           <IconButton onClick={handleSubmit} color="primary" disabled={isProcessingTurn || !userInput.trim()}>
             <SendIcon />
           </IconButton>
@@ -115,6 +199,7 @@ export const GameScreen: React.FC = () => {
           <Button size="small" variant="outlined" onClick={handleReroll} disabled={isProcessingTurn || conversationHistory.length < 2}>
             Reroll Last
           </Button>
+          {/* THEME USAGE: 'color="warning"' will use the theme's warning color palette if defined, or a default. */}
           <Button size="small" variant="outlined" color="warning" onClick={handleReset} disabled={isProcessingTurn}>
             Restart Turn
           </Button>
