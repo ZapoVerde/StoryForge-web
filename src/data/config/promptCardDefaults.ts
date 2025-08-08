@@ -124,3 +124,4 @@ The mist curls like spectral fingers around the ancient oaks. #Lyrielle stands r
 *   **Tagging Rules:** Use \`#\` for characters, \`@\` for locations, \`$\` for items. Use tags consistently in narration and emits.
 
 `.trim();
+

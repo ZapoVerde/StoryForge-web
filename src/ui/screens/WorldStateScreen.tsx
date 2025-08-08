@@ -1,57 +1,121 @@
 // src/ui/screens/WorldStateScreen.tsx
-import React from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
-  Box, Typography, Button, IconButton, Paper, 
-  Alert, List, Collapse, Checkbox, TextField, Dialog, DialogTitle, DialogContent,
-  DialogActions, Divider,
+  Box, Typography, Button, Paper, 
+  Alert, Dialog, DialogTitle, DialogContent,
+  DialogActions, TextField,
 } from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
-import { useGameStateStore, selectWorldStatePinnedKeys } from '../../state/useGameStateStore'; // Selectors imported
-import { useWorldStateViewLogic } from '../../utils/hooks/useWorldStateViewLogic';
-import { WorldStateItemRow } from '../components/WorldStateItemRow';
-import { debugLog, errorLog } from '../../utils/debug';
+import {
+  useGameStateStore,
+  selectWorldStatePinnedKeys,
+  selectCurrentGameState,
+} from '../../state/useGameStateStore';
+import { flattenJsonObject, getNestedValue } from '../../utils/jsonUtils';
+import { WorldStateCategory } from '../components/WorldStateCategory';
 
 const WorldStateScreen: React.FC = () => {
-  const worldStatePinnedKeys = useGameStateStore(selectWorldStatePinnedKeys); // Use selector
-  const { gameError } = useGameStateStore(); // Top-level state is fine
+  // --- Start of Co-located Logic (from the old useWorldStateViewLogic hook) ---
 
-  // --- Keep your existing DEBUG LINES here for verification ---
-  debugLog('%c[WorldStateScreen.tsx] Component re-rendered.', 'color: #008080; font-weight: bold;');
-  debugLog('[WorldStateScreen.tsx] Pinned Keys (from store selector):', worldStatePinnedKeys);
-  // --- END DEBUG LINES ---
-
+  const gameState = useGameStateStore(selectCurrentGameState);
+  const worldStatePinnedKeys = useGameStateStore(selectWorldStatePinnedKeys);
   const {
-    groupedByCategory,
-    // All other state variables (expandedCategories, editingCategory, etc.) are now correctly sourced from the hook:
-    expandedCategories,
-    expandedEntities,
-    editingCategory,
-    newCategoryName,
-    editingEntity,
-    newEntityName,
-    isAnyChildPinned, // These methods come from the hook
-    areAllChildrenPinned, // These methods come from the hook
-    handleToggleCategoryExpand, // Local handlers returned by hook
-    handleToggleEntityExpand,   // Local handlers returned by hook
-    handleToggleCategoryPin,    // Local handlers returned by hook
-    handleToggleEntityPin,      // Local handlers returned by hook
-    handleStartRenameCategory,
-    handleConfirmRenameCategory,
-    setNewCategoryName,
-    handleStartRenameEntity,
-    handleConfirmRenameEntity,
-    setNewEntityName,
-    cancelEdit,
-    // Actions passed directly from store (for clarity)
-    deleteWorldCategory,
-    deleteWorldEntity,
-    editWorldKeyValue,
-    deleteWorldKey,
-    toggleWorldStatePin, // Ensure actions from store are correctly accessible
-  } = useWorldStateViewLogic(); 
+    toggleWorldStatePin, renameWorldCategory, renameWorldEntity,
+    deleteWorldCategory, deleteWorldEntity, editWorldKeyValue, deleteWorldKey,
+  } = useGameStateStore();
+
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [editingEntity, setEditingEntity] = useState<[string, string] | null>(null);
+  const [newEntityName, setNewEntityName] = useState('');
+
+  const worldState = gameState?.worldState || {};
+
+  const flattenedWorld = useMemo(() => flattenJsonObject(worldState), [worldState]);
+
+  const groupedByCategory = useMemo(() => {
+    const grouped: Record<string, Record<string, Record<string, any>>> = {};
+    Object.keys(flattenedWorld).forEach(fullKey => {
+      const value = flattenedWorld[fullKey];
+      const parts = fullKey.split(".");
+      if (parts.length < 1) return;
+
+      const category = parts[0];
+      const entity = (parts.length > 1 && /^[#@$]/.test(parts[1])) ? parts[1] : '@@_direct';
+      const variable = (entity === '@@_direct') ? parts.slice(1).join('.') : parts.slice(2).join('.');
+      if (!variable && entity !== '@@_direct') return; // Skip if entity has no variables
+
+      grouped[category] = grouped[category] || {};
+      grouped[category][entity] = grouped[category][entity] || {};
+      grouped[category][entity][variable] = value;
+    });
+    // Clean up empty direct keys
+    Object.keys(grouped).forEach(category => {
+      if (grouped[category]['@@_direct'] && Object.keys(grouped[category]['@@_direct']).length === 0) {
+        delete grouped[category]['@@_direct'];
+      }
+    });
+    return grouped;
+  }, [flattenedWorld]);
+
+  const getAllChildVariableKeys = useCallback((basePath: string): string[] => {
+    const nestedData = getNestedValue(worldState, basePath.split('.'));
+    if (typeof nestedData !== 'object' || nestedData === null) return [];
+    return Object.keys(flattenJsonObject(nestedData, basePath));
+  }, [worldState]);
+
+  const isAnyChildPinned = useCallback((parentPath: string) => {
+    return getAllChildVariableKeys(parentPath).some(key => worldStatePinnedKeys.includes(key));
+  }, [getAllChildVariableKeys, worldStatePinnedKeys]);
+
+  const areAllChildrenPinned = useCallback((parentPath: string) => {
+    const childKeys = getAllChildVariableKeys(parentPath);
+    return childKeys.length > 0 && childKeys.every(key => worldStatePinnedKeys.includes(key));
+  }, [getAllChildVariableKeys, worldStatePinnedKeys]);
+
+  const handleToggleCategoryExpand = useCallback((category: string) => {
+    setExpandedCategories(prev => {
+      const newSet = new Set(prev);
+      newSet.has(category) ? newSet.delete(category) : newSet.add(category);
+      return newSet;
+    });
+  }, []);
+
+  const handleToggleEntityExpand = useCallback((entityPath: string) => {
+    setExpandedEntities(prev => {
+      const newSet = new Set(prev);
+      newSet.has(entityPath) ? newSet.delete(entityPath) : newSet.add(entityPath);
+      return newSet;
+    });
+  }, []);
+  
+  const handleToggleCategoryPin = useCallback((category: string) => toggleWorldStatePin(category, 'category'), [toggleWorldStatePin]);
+  const handleToggleEntityPin = useCallback((entityPath: string) => toggleWorldStatePin(entityPath, 'entity'), [toggleWorldStatePin]);
+  const handleToggleVariablePin = useCallback((key: string) => toggleWorldStatePin(key, 'variable'), [toggleWorldStatePin]);
+
+  const handleStartRenameCategory = useCallback((category: string) => { setEditingCategory(category); setNewCategoryName(category); }, []);
+  const handleStartRenameEntity = useCallback((category: string, entity: string) => { setEditingEntity([category, entity]); setNewEntityName(entity); }, []);
+
+  const cancelEdit = useCallback(() => { setEditingCategory(null); setEditingEntity(null); }, []);
+
+  const handleConfirmRenameCategory = useCallback(async () => {
+    if (editingCategory && newCategoryName.trim() && newCategoryName !== editingCategory) {
+      await renameWorldCategory(editingCategory, newCategoryName.trim());
+    }
+    cancelEdit();
+  }, [editingCategory, newCategoryName, renameWorldCategory, cancelEdit]);
+
+  const handleConfirmRenameEntity = useCallback(async () => {
+    if (editingEntity && newEntityName.trim() && newEntityName !== editingEntity[1]) {
+      await renameWorldEntity(editingEntity[0], editingEntity[1], newEntityName.trim());
+    }
+    cancelEdit();
+  }, [editingEntity, newEntityName, renameWorldEntity, cancelEdit]);
+
+  // --- End of Co-located Logic ---
+
+  const { gameError } = useGameStateStore();
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
@@ -59,7 +123,7 @@ const WorldStateScreen: React.FC = () => {
         <Typography variant="h5" component="h1">World State</Typography>
       </Box>
 
-      {gameError && (<Alert severity="error" sx={{ m: 2 }}>Error: {gameError}</Alert>)}
+      {gameError && (<Alert severity="error" sx={{ m: 2 }}>{gameError}</Alert>)}
 
       {Object.keys(groupedByCategory).length === 0 ? (
         <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
@@ -67,64 +131,53 @@ const WorldStateScreen: React.FC = () => {
         </Box>
       ) : (
         <Paper elevation={1} sx={{ flexGrow: 1, m: 2, p: 2, overflowY: 'auto' }}>
-          {Object.entries(groupedByCategory).map(([category, entities]) => (
-            <Box key={category} sx={{ mb: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', p: 1.5, cursor: 'pointer', backgroundColor: 'action.hover' }} onClick={() => handleToggleCategoryExpand(category)}>
-                <IconButton size="small" sx={{ mr: 1 }}>{expandedCategories.has(category) ? <ExpandLessIcon /> : <ExpandMoreIcon />}</IconButton>
-                <Typography variant="h6" sx={{ flexGrow: 1 }}>{category}</Typography>
-                <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleStartRenameCategory(category); }}><EditIcon fontSize="small" /></IconButton>
-                {/* Use the hook's own methods correctly */}
-                <Checkbox checked={areAllChildrenPinned(category)} indeterminate={isAnyChildPinned(category) && !areAllChildrenPinned(category)} onClick={(e) => { e.stopPropagation(); handleToggleCategoryPin(category); }} />
-                <IconButton size="small" onClick={(e) => { e.stopPropagation(); deleteWorldCategory(category); }}><DeleteIcon fontSize="small" color="error" /></IconButton>
-              </Box>
-              <Collapse in={expandedCategories.has(category)}>
-                <Divider />
-                <List component="div" disablePadding sx={{ pl: 2 }}>
-                  {Object.entries(entities).map(([entity, variables]) => {
-                    const entityPath = `${category}.${entity}`;
-                    if (entity === '@@_direct') {
-                      return Object.entries(variables).map(([varName, value]) => (
-                        <WorldStateItemRow key={`${category}.${varName}`} itemKey={`${category}.${varName}`} value={value} onDelete={deleteWorldKey} onEdit={editWorldKeyValue} isPinned={worldStatePinnedKeys.includes(`${category}.${varName}`)} onTogglePin={(key) => toggleWorldStatePin(key, 'variable')} />
-                      ));
-                    }
-                    return (
-                      <Box key={entity} sx={{ mb: 1, border: '1px dashed', borderColor: 'divider', borderRadius: 1, mt: 1 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', p: 1, cursor: 'pointer' }} onClick={() => handleToggleEntityExpand(category, entity)}>
-                          <IconButton size="small" sx={{ mr: 1 }}>{expandedEntities.has(entityPath) ? <ExpandLessIcon /> : <ExpandMoreIcon />}</IconButton>
-                          <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>{entity}</Typography>
-                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleStartRenameEntity([category, entity]); }}><EditIcon fontSize="small" /></IconButton>
-                           {/* Use the hook's own methods correctly */}
-                          <Checkbox checked={areAllChildrenPinned(entityPath)} indeterminate={isAnyChildPinned(entityPath) && !areAllChildrenPinned(entityPath)} onClick={(e) => { e.stopPropagation(); handleToggleEntityPin(entityPath); }} />
-                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); deleteWorldEntity(category, entity); }}><DeleteIcon fontSize="small" color="error" /></IconButton>
-                        </Box>
-                        <Collapse in={expandedEntities.has(entityPath)}>
-                          <Divider />
-                          <Box sx={{ p: 1.5 }}>
-                            {Object.entries(variables).map(([varName, value]) => (
-                              <WorldStateItemRow key={varName} itemKey={`${entityPath}.${varName}`} value={value} onDelete={deleteWorldKey} onEdit={editWorldKeyValue} isPinned={worldStatePinnedKeys.includes(`${entityPath}.${varName}`)} onTogglePin={(key) => toggleWorldStatePin(key, 'variable')} />
-                            ))}
-                          </Box>
-                        </Collapse>
-                      </Box>
-                    );
-                  })}
-                </List>
-              </Collapse>
-            </Box>
+          {Object.entries(groupedByCategory).map(([categoryName, entities]) => (
+            <WorldStateCategory
+              key={categoryName}
+              categoryName={categoryName}
+              entities={entities}
+              isExpanded={expandedCategories.has(categoryName)}
+              areAllChildrenPinned={areAllChildrenPinned(categoryName)}
+              isAnyChildPinned={isAnyChildPinned(categoryName)}
+              expandedEntities={expandedEntities}
+              worldStatePinnedKeys={worldStatePinnedKeys}
+              onToggleExpand={() => handleToggleCategoryExpand(categoryName)}
+              onTogglePin={() => handleToggleCategoryPin(categoryName)}
+              onStartRename={() => handleStartRenameCategory(categoryName)}
+              onDelete={() => deleteWorldCategory(categoryName)}
+              onToggleEntityExpand={handleToggleEntityExpand}
+              onToggleEntityPin={handleToggleEntityPin}
+              onStartRenameEntity={handleStartRenameEntity}
+              onDeleteEntity={deleteWorldEntity}
+              onDeleteKey={deleteWorldKey}
+              onEditKey={editWorldKeyValue}
+              onToggleVariablePin={handleToggleVariablePin}
+            />
           ))}
         </Paper>
       )}
 
+      {/* Dialogs for renaming */}
       <Dialog open={!!editingCategory} onClose={cancelEdit}>
         <DialogTitle>Rename Category</DialogTitle>
-        <DialogContent><TextField autoFocus margin="dense" label="New Category Name" type="text" fullWidth variant="outlined" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} /></DialogContent>
-        <DialogActions><Button onClick={cancelEdit}>Cancel</Button><Button onClick={handleConfirmRenameCategory}>Rename</Button></DialogActions>
+        <DialogContent>
+          <TextField autoFocus margin="dense" label="New Category Name" fullWidth variant="outlined" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleConfirmRenameCategory()} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelEdit}>Cancel</Button>
+          <Button onClick={handleConfirmRenameCategory}>Rename</Button>
+        </DialogActions>
       </Dialog>
 
       <Dialog open={!!editingEntity} onClose={cancelEdit}>
         <DialogTitle>Rename Entity</DialogTitle>
-        <DialogContent><TextField autoFocus margin="dense" label="New Entity Name" type="text" fullWidth variant="outlined" value={newEntityName} onChange={(e) => setNewEntityName(e.target.value)} /></DialogContent>
-        <DialogActions><Button onClick={cancelEdit}>Cancel</Button><Button onClick={handleConfirmRenameEntity}>Rename</Button></DialogActions>
+        <DialogContent>
+          <TextField autoFocus margin="dense" label="New Entity Name" fullWidth variant="outlined" value={newEntityName} onChange={(e) => setNewEntityName(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleConfirmRenameEntity()} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelEdit}>Cancel</Button>
+          <Button onClick={handleConfirmRenameEntity}>Rename</Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );

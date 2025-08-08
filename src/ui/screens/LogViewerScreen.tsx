@@ -1,62 +1,31 @@
 // src/ui/screens/LogViewerScreen.tsx
+
 import React from 'react';
-import {
-  Box, Typography, Button, AppBar, Toolbar, IconButton, Menu, MenuItem,
-  Checkbox, FormControlLabel, Paper, CircularProgress, Alert,
-} from '@mui/material';
-import MenuIcon from '@mui/icons-material/Menu';
-import { useLogViewerLogic } from '../../utils/hooks/useLogViewerLogic';
-import { LogViewMode } from '../../utils/types';
-import { CollapsibleLogEntry } from '../components/CollapsibleLogEntry';
+import { Box, Typography, Paper } from '@mui/material';
+import { useGameStateStore } from '../../state/useGameStateStore';
+import type { Message, LogEntry } from '../../models';
 
-const LogViewerScreen: React.FC = () => {
-  const {
-    logEntries, selectedLogViewModes, isLoading, error,
-    menuAnchorEl, isMenuOpen, handleMenuClick, handleMenuClose, handleCheckboxChange,
-  } = useLogViewerLogic();
-
-  if (isLoading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress /> <Typography variant="h6" ml={2}>Loading Logs...</Typography>
-      </Box>
-    );
-  }
+export const LogViewerScreen: React.FC = () => {
+  const conversationHistory = useGameStateStore(state => state.conversationHistory);
+  const logEntries = useGameStateStore(state => state.logEntries);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="h5" component="h1">Logs</Typography>
-      </Box>
-      <Menu anchorEl={menuAnchorEl} open={isMenuOpen} onClose={handleMenuClose}>
-        {Object.values(LogViewMode).map((mode) => (
-          <MenuItem key={mode} onClick={() => handleCheckboxChange(mode)}>
-            <FormControlLabel
-              control={<Checkbox checked={selectedLogViewModes.includes(mode)} />}
-              label={mode}
-              sx={{ pointerEvents: 'none' }} // Let the MenuItem handle the click
-            />
-          </MenuItem>
-        ))}
-      </Menu>
+    <Box p={2}>
+      <Typography variant="h6">Conversation History</Typography>
+      {conversationHistory.map((msg: Message, index: number) => (
+        <Paper key={index} sx={{ p: 1, my: 1 }}>
+          <Typography variant="subtitle2">{msg.role}</Typography>
+          <Typography variant="body2">{msg.content}</Typography>
+        </Paper>
+      ))}
 
-      {error && <Alert severity="error" sx={{ m: 2 }}>Error: {error}</Alert>}
-
-      <Paper elevation={1} sx={{ flexGrow: 1, m: 2, overflowY: 'auto' }}>
-        {logEntries.length === 0 ? (
-          <Box sx={{ textAlign: 'center', p: 4 }}><Typography color="text.secondary">No log entries for this game yet.</Typography></Box>
-        ) : (
-          logEntries.map((entry) => (
-            <CollapsibleLogEntry
-              key={entry.turnNumber}
-              entry={entry}
-              selectedLogViewModes={selectedLogViewModes}
-            />
-          ))
-        )}
-      </Paper>
+      <Typography variant="h6" mt={4}>Log Entries</Typography>
+      {logEntries.map((entry: LogEntry, index: number) => (
+        <Paper key={index} sx={{ p: 1, my: 1 }}>
+          <Typography variant="subtitle2">Turn {entry.turnNumber}</Typography>
+          <Typography variant="body2">{entry.prose}</Typography>
+        </Paper>
+      ))}
     </Box>
   );
 };
-
-export default LogViewerScreen;

@@ -1,205 +1,114 @@
 // src/ui/screens/GameScreen.tsx
-import React from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Box, Typography, Button, TextField, Paper, IconButton, CircularProgress,
-  Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert, Tooltip,
-  useTheme, useMediaQuery, InputAdornment,
+  Box, Paper, Typography, TextField, IconButton, Stack, Divider,
+  CircularProgress, Button,
 } from '@mui/material';
-import SendIcon from '@mui/icons-material/Send';
 import CasinoIcon from '@mui/icons-material/Casino';
-import { useGameScreenLogic } from '../../utils/hooks/useGameScreenLogic';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { LogView } from '../components/LogView';
+import { useGameStateStore } from '../../state/useGameStateStore';
+import { usePromptCardStore } from '../../state/usePromptCardStore';
 import { PinnedItemsView } from '../components/PinnedItemsView';
 
-const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
+export const GameScreen: React.FC = () => {
   const {
-    isReady,
-    isLoading,
-    isProcessingTurn,
-    gameError,
-    // gameState, // REMOVED: No longer directly used in JSX, handled in hook
+    gameLoading,
+    currentSnapshot,
     conversationHistory,
-    narratorInputText,
-    logContainerRef,
-    snackbar,
-    rollDialog,
-    handleGoToLogin,
-    handleSendAction,
-    handleInputChange,
-    handleKeyPress,
-    handleRollDice,
-    handleOpenRollDialog,
-    handleCloseRollDialog,
-    handleRollFormulaChange,
-    closeSnackbar,
-    displayedCurrentNarration,
-    fullLatestNarration, // Renamed from latestNarrationFromHook in the hook's return
-    enableStreaming,
-  } = useGameScreenLogic();
+    processTurn,
+    resetGameFromSnapshot,
+    rerollLastNarration,
+  } = useGameStateStore();
 
-  const theme = useTheme();
-  const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
-  const pinnedHeight = isSmallScreen ? theme.spacing(14) : theme.spacing(16); // USED: Now it's used below
+  const activePromptCard = usePromptCardStore((state) => state.activePromptCard);
 
-  if (isLoading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress />
-        <Typography variant="h6" ml={2}>Loading Game...</Typography>
-      </Box>
-    );
-  }
+  const [userInput, setUserInput] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  if (!isReady) {
-    return (
-      <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
-        <Typography variant="h6" color="error">Game Not Initialized</Typography>
-        <Typography variant="body1" sx={{ my: 2 }}>
-          There is no active game session. Please start a new game from the library.
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [conversationHistory]);
+
+  const handleSubmit = async () => {
+    if (!userInput.trim()) return;
+    await processTurn(userInput);
+    setUserInput('');
+  };
+
+  const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  }, [userInput]);
+
+  const handleReset = () => {
+    if (currentSnapshot) {
+      resetGameFromSnapshot(currentSnapshot);
+    }
+  };
+
+  const handleReroll = () => {
+    rerollLastNarration();
+  };
+
+  const renderMessages = () => {
+    return conversationHistory.map((msg, index) => (
+      <Box key={index} sx={{ mb: 2 }}>
+        <Typography variant="subtitle2" color="text.secondary">
+          {msg.role === 'user' ? 'Player' : 'Narrator'}
         </Typography>
-        <Button variant="contained" onClick={handleGoToLogin}>Go to Game Library</Button>
-        {gameError && <Alert severity="error" sx={{ mt: 2 }}>{gameError}</Alert>}
+        <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+          {msg.content}
+        </Typography>
+        <Divider sx={{ my: 1 }} />
+      </Box>
+    ));
+  };
+
+  if (gameLoading || !activePromptCard) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography variant="h6">Loading game...</Typography>
+        <CircularProgress sx={{ mt: 2 }} />
       </Box>
     );
   }
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100vh',
-        position: 'relative',
-        overflow: 'hidden',
-        px: isSmallScreen ? 1 : 2,
-        pt: pinnedHeight, // FIXED: Now using pinnedHeight
-      }}
-    >
-      {/* Floating pinned items */}
-      <Box
-        sx={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 10,
-          backdropFilter: 'blur(8px)',
-          backgroundColor: 'rgba(255,255,255,0.1)',
-          borderBottom: `1px solid ${theme.palette.divider}`,
-          boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-          px: isSmallScreen ? 1 : 2,
-          py: isSmallScreen ? 1 : 2,
-          pointerEvents: 'none',
-        }}
-      >
-        <PinnedItemsView />
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <PinnedItemsView />
+      <Box sx={{ flex: 1, overflowY: 'auto', px: 3, pt: 1 }}>
+        {renderMessages()}
       </Box>
 
-      {/* Scrollable narration area */}
-      <Paper
-        ref={logContainerRef}
-        elevation={1}
-        sx={{
-          flexGrow: 1,
-          overflowY: 'auto',
-          p: isSmallScreen ? 1 : 2,
-          typography: isSmallScreen ? 'body2' : 'body1',
-          backgroundColor: theme.palette.background.paper,
-        }}
-      >
-        <LogView
-          conversationHistory={conversationHistory}
-          currentStreamingNarration={displayedCurrentNarration}
-          isProcessingTurn={isProcessingTurn}
-          fullLatestNarration={fullLatestNarration}
-          enableStreaming={enableStreaming}
-        />
-      </Paper>
-
-      {/* Input area */}
-      <Box sx={{ position: 'relative', mt: 1 }}>
+      <Box sx={{ p: 2, borderTop: '1px solid #ccc', display: 'flex', alignItems: 'center' }}>
         <TextField
           fullWidth
+          placeholder="Type your action..."
           multiline
-          maxRows={4}
-          variant="outlined"
-          placeholder="What do you do?"
-          value={narratorInputText}
-          onChange={(e) => handleInputChange(e.target.value)}
+          minRows={2}
+          value={userInput}
+          onChange={(e) => setUserInput(e.target.value)}
           onKeyPress={handleKeyPress}
-          disabled={isProcessingTurn}
-          size={isSmallScreen ? 'small' : 'medium'}
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end">
-                <IconButton
-                  color="primary"
-                  onClick={handleSendAction}
-                  disabled={isProcessingTurn || narratorInputText.trim() === ''}
-                >
-                  {isProcessingTurn ? <CircularProgress size={20} color="inherit" /> : <SendIcon />}
-                </IconButton>
-              </InputAdornment>
-            ),
-          }}
+          inputRef={inputRef}
         />
-
-        {/* Floating dice icon */}
-        <Tooltip title="Roll Dice (Right-click to change formula)">
-          <IconButton
-            color="secondary"
-            onClick={handleRollDice}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              handleOpenRollDialog();
-            }}
-            sx={{
-              position: 'absolute',
-              right: 60,
-              top: -30,
-              zIndex: 20,
-              backgroundColor: theme.palette.background.paper,
-              border: '1px solid',
-              borderColor: 'divider',
-              boxShadow: 2,
-              '&:hover': { backgroundColor: theme.palette.action.hover },
-            }}
-          >
-            <CasinoIcon />
-          </IconButton>
-        </Tooltip>
+        <IconButton onClick={handleSubmit} size="large" sx={{ ml: 1 }}>
+          <CasinoIcon />
+        </IconButton>
       </Box>
 
-      {/* Dice Roll Dialog */}
-      <Dialog open={rollDialog.open} onClose={handleCloseRollDialog}>
-        <DialogTitle>Dice Roll</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Dice Formula"
-            type="text"
-            fullWidth
-            variant="standard"
-            value={rollDialog.formula}
-            onChange={(e) => handleRollFormulaChange(e.target.value)}
-            helperText="e.g., 2d6, 1d20+5, 3d8-2"
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseRollDialog}>Cancel</Button>
-          <Button onClick={handleRollDice}>Roll & Send</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Snackbar */}
-      <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={closeSnackbar}>
-        <Alert onClose={closeSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      <Stack direction="row" spacing={2} sx={{ p: 2, justifyContent: 'flex-end' }}>
+        <Button variant="outlined" onClick={handleReset} startIcon={<RestartAltIcon />}>
+          Reset
+        </Button>
+        <Button variant="outlined" onClick={handleReroll}>
+          Reroll
+        </Button>
+      </Stack>
     </Box>
   );
 };
-
-export default GameScreen;

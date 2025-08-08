@@ -1,229 +1,150 @@
 import type { IGameRepository } from '../data/repositories/gameRepository';
 import type { IPromptCardRepository } from '../data/repositories/promptCardRepository';
-import type { GameSnapshot, GameState, LogEntry, Message, PromptCard } from '../models';
+import type { GameSnapshot, PromptCard, AiConnection } from '../models';
 import { formatIsoDateForDisplay } from '../utils/formatDate';
 import { generateUuid } from '../utils/uuid';
 import type { ITurnProcessor } from './ITurnProcessor';
 import type { ISnapshotUpdater } from './ISnapshotUpdater';
-import { debugLog, errorLog } from '../utils/debug'; // ✅ Injected centralized logger
+import { debugLog, errorLog } from '../utils/debug';
 
+/**
+ * Defines the contract for the stateless GameSession service.
+ * Its purpose is to calculate game state transitions, not to hold state itself.
+ */
 export interface IGameSession {
-  initializeGame(userId: string, cardId: string, existingSnapshotId?: string): Promise<void>;
-  processPlayerAction(action: string, useDummyNarrator: boolean): Promise<GameSnapshot>;
-  getCurrentGameSnapshot(): GameSnapshot | null;
-  saveGame(snapshot: GameSnapshot): Promise<void>;
-  loadGame(userId: string, snapshotId: string): Promise<void>;
-  loadLastActiveGame(userId: string): Promise<boolean>;
-  getCurrentPromptCard(): PromptCard | null;
-  getCurrentGameState(): GameState | null;
-  getGameLogs(): LogEntry[];
-  gameRepo: IGameRepository;
-  renameWorldCategory(oldName: string, newName: string): Promise<GameSnapshot | null>;
-  renameWorldEntity(category: string, oldName: string, newName: string): Promise<GameSnapshot | null>;
-  deleteWorldCategory(category: string): Promise<GameSnapshot | null>;
-  deleteWorldEntity(category: string, entity: string): Promise<GameSnapshot | null>;
-  editWorldKeyValue(key: string, value: any): Promise<GameSnapshot | null>;
-  deleteWorldKey(key: string): Promise<GameSnapshot | null>;
-  toggleWorldStatePin(keyPath: string, type: 'variable' | 'entity' | 'category'): Promise<GameSnapshot | null>;
+  initializeGame(userId: string, card: PromptCard): GameSnapshot;
+  processPlayerAction(
+    snapshot: GameSnapshot,
+    card: PromptCard,
+    action: string,
+    useDummyNarrator: boolean,
+    aiConnections: AiConnection[]
+  ): Promise<GameSnapshot>;
+
+  renameWorldCategory(snapshot: GameSnapshot, oldName: string, newName: string): GameSnapshot;
+  renameWorldEntity(snapshot: GameSnapshot, category: string, oldName: string, newName: string): GameSnapshot;
+  deleteWorldCategory(snapshot: GameSnapshot, category: string): GameSnapshot;
+  deleteWorldEntity(snapshot: GameSnapshot, category: string, entity: string): GameSnapshot;
+  editWorldKeyValue(snapshot: GameSnapshot, key: string, value: any): GameSnapshot;
+  deleteWorldKey(snapshot: GameSnapshot, key: string): GameSnapshot;
+  toggleWorldStatePin(snapshot: GameSnapshot, keyPath: string, type: 'variable' | 'entity' | 'category'): GameSnapshot;
 }
 
+/**
+ * A stateless service that calculates game state transitions.
+ * It does not hold any internal state like currentSnapshot.
+ */
 export class GameSession implements IGameSession {
-  private currentUserId: string | null = null;
-  private currentSnapshot: GameSnapshot | null = null;
-  private currentPromptCard: PromptCard | null = null;
-
   constructor(
-    public gameRepo: IGameRepository,
-    private cardRepo: IPromptCardRepository,
     private turnProcessor: ITurnProcessor,
     private snapshotUpdater: ISnapshotUpdater
   ) {
-    debugLog('[gameSession.ts] GameSession constructor called.');
+    debugLog('[gameSession.ts] Stateless GameSession service instantiated.');
   }
 
-  public async initializeGame(userId: string, cardId: string, existingSnapshotId?: string): Promise<void> {
-    debugLog(`[gameSession.ts] initializeGame: Starting for User=${userId}, Card=${cardId}, Snapshot=${existingSnapshotId || 'new'}`);
-    this.currentUserId = userId;
-  
-    if (existingSnapshotId) {
-      await this.loadGame(userId, existingSnapshotId);
-      debugLog(`[gameSession.ts] initializeGame: Loaded existing game ${existingSnapshotId}.`);
-      return;
-    }
-  
-    const card = await this.cardRepo.getPromptCard(userId, cardId);
-    if (!card) {
-      errorLog(`[gameSession.ts] initializeGame: PromptCard with ID ${cardId} not found.`);
-      throw new Error(`PromptCard with ID ${cardId} not found.`);
-    }
-    this.currentPromptCard = card;
-  
+  public initializeGame(userId: string, card: PromptCard): GameSnapshot {
+    debugLog(`[gameSession.ts] initializeGame: Creating new snapshot for User=${userId}, Card=${card.id}`);
+    
     let initialWorldState = {};
     try {
       if (card.worldStateInit) {
         initialWorldState = JSON.parse(card.worldStateInit);
-      } else {
-        initialWorldState = {};
       }
     } catch (e) {
       errorLog("[gameSession.ts] initializeGame: Failed to parse worldStateInit JSON:", e);
       initialWorldState = {};
     }
-  
+
     const now = new Date().toISOString();
-  
-    // Unconditionally create a new snapshot because an existingSnapshotId was not provided.
-    // This ensures that any previous game state in this session instance is wiped.
+
     const initialSnapshot: GameSnapshot = {
       id: generateUuid(),
       userId: userId,
-      promptCardId: cardId,
+      promptCardId: card.id,
       title: `Game with ${card.title} - ${formatIsoDateForDisplay(now)}`,
       createdAt: now,
       updatedAt: now,
       currentTurn: 0,
       gameState: {
-        narration: card.firstTurnOnlyBlock, // Initial scene description for the user
+        narration: card.firstTurnOnlyBlock,
         worldState: initialWorldState,
         scene: { location: null, present: [] },
       },
-      // Pre-populate history with the initial scene so it's not lost.
       conversationHistory: [
-        { role: 'assistant', content: card.firstTurnOnlyBlock }
+        { role: 'assistant', content: card.firstTurnOnlyBlock },
       ],
       logs: [],
       worldStatePinnedKeys: [],
     };
-  
-    this.currentSnapshot = initialSnapshot;
-    debugLog(`[gameSession.ts] initializeGame: NEW game initialized with ID ${initialSnapshot.id}. currentSnapshot set.`);
-  }
-  
 
-  public async processPlayerAction(action: string, useDummyNarrator: boolean): Promise<GameSnapshot> {
-    debugLog(`[gameSession.ts] processPlayerAction: Starting for action: "${action.substring(0, 50)}..."`);
-    if (!this.currentSnapshot || !this.currentUserId || !this.currentPromptCard) {
-      errorLog('[gameSession.ts] processPlayerAction: Prerequisites missing.');
-      throw new Error("Cannot process player action: Game not initialized correctly.");
+    debugLog(`[gameSession.ts] initializeGame: NEW game initialized with ID ${initialSnapshot.id}.`);
+    return initialSnapshot;
+  }
+
+  public async processPlayerAction(
+    snapshot: GameSnapshot,
+    card: PromptCard,
+    action: string,
+    useDummyNarrator: boolean,
+    aiConnections: AiConnection[]
+  ): Promise<GameSnapshot> {
+    debugLog(`[gameSession.ts] processPlayerAction: Starting for action: "${action.substring(0, 50)}..." on snapshot ${snapshot.id}`);
+
+    if (!snapshot || !card) {
+      errorLog('[gameSession.ts] processPlayerAction: Snapshot or Card is missing.');
+      throw new Error("Cannot process player action: Snapshot and Card are required.");
     }
 
-    const aiConnections = await this.gameRepo.getAiConnections(this.currentUserId);
-    debugLog(`[gameSession.ts] processPlayerAction: Calling turnProcessor.useDummyNarrator=${useDummyNarrator}.`);
-
-    // Determine if this is the very first player action (turn 0 with no logs yet)
-    const isFirstPlayerAction = this.currentSnapshot.currentTurn === 0 && this.currentSnapshot.logs.length === 0;
+    const isFirstPlayerAction = snapshot.currentTurn === 0 && snapshot.logs.length === 0;
 
     const turnResult = await this.turnProcessor.processPlayerTurn(
-      this.currentUserId,
-      this.currentPromptCard,
-      this.currentSnapshot.gameState,
-      this.currentSnapshot.logs,
-      this.currentSnapshot.conversationHistory,
+      snapshot.userId,
+      card,
+      snapshot.gameState,
+      snapshot.logs,
+      snapshot.conversationHistory,
       action,
-      this.currentSnapshot.currentTurn,
+      snapshot.currentTurn,
       useDummyNarrator,
       aiConnections,
       isFirstPlayerAction
     );
 
-    debugLog('[gameSession.ts] processPlayerAction: Calling snapshotUpdater.applyTurnResultToSnapshot.');
-    const newSnapshot = this.snapshotUpdater.applyTurnResultToSnapshot(this.currentSnapshot, { ...turnResult, playerAction: action });
+    debugLog('[gameSession.ts] processPlayerAction: Calling snapshotUpdater to apply turn result.');
+    const newSnapshot = this.snapshotUpdater.applyTurnResultToSnapshot(snapshot, {
+      ...turnResult,
+      playerAction: action,
+    });
 
-    this.currentSnapshot = newSnapshot;
-    debugLog(`[gameSession.ts] processPlayerAction: newSnapshot ${newSnapshot.id} applied. Saving game...`);
-    await this.saveGame(newSnapshot);
-    debugLog('[gameSession.ts] processPlayerAction: Finished and saved.');
+    debugLog(`[gameSession.ts] processPlayerAction: new snapshot ${newSnapshot.id} created.`);
     return newSnapshot;
   }
 
-  private async updateAndSave(updater: (snapshot: GameSnapshot) => GameSnapshot): Promise<GameSnapshot | null> {
-    debugLog(`[gameSession.ts] updateAndSave: Applying update and saving. currentSnapshot before update: ${this.currentSnapshot?.id || 'null'}`);
-    if (!this.currentSnapshot) {
-      debugLog('[gameSession.ts] updateAndSave: No currentSnapshot to update. Returning null.');
-      return null;
-    }
-
-    const newSnapshot = updater(this.currentSnapshot);
-    this.currentSnapshot = newSnapshot;
-    debugLog(`[gameSession.ts] updateAndSave: currentSnapshot updated to ${this.currentSnapshot.id}. Persisting...`);
-    await this.saveGame(newSnapshot);
-    debugLog('[gameSession.ts] updateAndSave: Persisted successfully.');
-    return newSnapshot;
+  public renameWorldCategory(snapshot: GameSnapshot, oldName: string, newName: string): GameSnapshot {
+    return this.snapshotUpdater.applyCategoryRename(snapshot, oldName, newName);
   }
 
-  public async renameWorldCategory(oldName: string, newName: string): Promise<GameSnapshot | null> {
-    return this.updateAndSave(snap => this.snapshotUpdater.applyCategoryRename(snap, oldName, newName));
+  public renameWorldEntity(snapshot: GameSnapshot, category: string, oldName: string, newName: string): GameSnapshot {
+    return this.snapshotUpdater.applyEntityRename(snapshot, category, oldName, newName);
   }
 
-  public async renameWorldEntity(category: string, oldName: string, newName: string): Promise<GameSnapshot | null> {
-    return this.updateAndSave(snap => this.snapshotUpdater.applyEntityRename(snap, category, oldName, newName));
+  public deleteWorldCategory(snapshot: GameSnapshot, category: string): GameSnapshot {
+    return this.snapshotUpdater.applyCategoryDelete(snapshot, category);
   }
 
-  public async deleteWorldCategory(category: string): Promise<GameSnapshot | null> {
-    return this.updateAndSave(snap => this.snapshotUpdater.applyCategoryDelete(snap, category));
+  public deleteWorldEntity(snapshot: GameSnapshot, category: string, entity: string): GameSnapshot {
+    return this.snapshotUpdater.applyEntityDelete(snapshot, category, entity);
   }
 
-  public async deleteWorldEntity(category: string, entity: string): Promise<GameSnapshot | null> {
-    return this.updateAndSave(snap => this.snapshotUpdater.applyEntityDelete(snap, category, entity));
+  public editWorldKeyValue(snapshot: GameSnapshot, key: string, value: any): GameSnapshot {
+    return this.snapshotUpdater.applyKeyValueEdit(snapshot, key, value);
   }
 
-  public async editWorldKeyValue(key: string, value: any): Promise<GameSnapshot | null> {
-    return this.updateAndSave(snap => this.snapshotUpdater.applyKeyValueEdit(snap, key, value));
+  public deleteWorldKey(snapshot: GameSnapshot, key: string): GameSnapshot {
+    return this.snapshotUpdater.applyKeyDelete(snapshot, key);
   }
 
-  public async deleteWorldKey(key: string): Promise<GameSnapshot | null> {
-    return this.updateAndSave(snap => this.snapshotUpdater.applyKeyDelete(snap, key));
+  public toggleWorldStatePin(snapshot: GameSnapshot, keyPath: string, type: 'variable' | 'entity' | 'category'): GameSnapshot {
+    return this.snapshotUpdater.applyPinToggle(snapshot, keyPath, type);
   }
-
-  public async toggleWorldStatePin(keyPath: string, type: 'variable' | 'entity' | 'category'): Promise<GameSnapshot | null> {
-    debugLog(`[gameSession.ts] toggleWorldStatePin: Toggling pin for ${type} at path "${keyPath}".`);
-    return this.updateAndSave(snap => this.snapshotUpdater.applyPinToggle(snap, keyPath, type));
-  }
-
-  public async loadGame(userId: string, snapshotId: string): Promise<void> {
-    debugLog(`[gameSession.ts] loadGame: Attempting to load snapshot ${snapshotId} for user ${userId}.`);
-    const snapshot = await this.gameRepo.getGameSnapshot(userId, snapshotId);
-    if (!snapshot) {
-      errorLog(`[gameSession.ts] loadGame: Snapshot ${snapshotId} not found.`);
-      throw new Error(`Game snapshot ${snapshotId} not found.`);
-    }
-    const card = await this.cardRepo.getPromptCard(userId, snapshot.promptCardId);
-    if (!card) {
-      errorLog(`[gameSession.ts] loadGame: PromptCard ${snapshot.promptCardId} not found for loaded game.`);
-      throw new Error(`PromptCard ${snapshot.promptCardId} not found.`);
-    }
-
-    this.currentUserId = userId;
-    this.currentSnapshot = snapshot;
-    this.currentPromptCard = card;
-    debugLog(`[gameSession.ts] loadGame: Successfully loaded snapshot ${snapshot.id} and card ${card.id}. currentSnapshot set.`);
-  }
-
-  public async loadLastActiveGame(userId: string): Promise<boolean> {
-    debugLog(`[gameSession.ts] loadLastActiveGame: Checking for last active game for user ${userId}.`);
-    const allSnapshots = await this.gameRepo.getAllGameSnapshots(userId);
-    if (allSnapshots.length > 0) {
-      debugLog(`[gameSession.ts] loadLastActiveGame: Found ${allSnapshots.length} snapshots. Loading most recent: ${allSnapshots[0].id}.`);
-      await this.loadGame(userId, allSnapshots[0].id);
-      debugLog('[gameSession.ts] loadLastActiveGame: Finished loading last active game. Returning true.');
-      return true;
-    }
-    debugLog('[gameSession.ts] loadLastActiveGame: No last active game found. Returning false.');
-    return false;
-  }
-
-  public async saveGame(snapshot: GameSnapshot): Promise<void> {
-    debugLog(`[gameSession.ts] saveGame: Attempting to save snapshot ${snapshot.id}.`);
-    if (!this.currentUserId) {
-      errorLog('[gameSession.ts] saveGame: User not initialized during save. Throwing error.');
-      throw new Error("User not initialized.");
-    }
-    await this.gameRepo.saveGameSnapshot(this.currentUserId, snapshot);
-    debugLog(`[gameSession.ts] saveGame: Snapshot ${snapshot.id} saved successfully.`);
-  }
-
-  public getCurrentGameSnapshot = () => this.currentSnapshot;
-  public getCurrentPromptCard = () => this.currentPromptCard;
-  public getCurrentGameState = () => this.currentSnapshot?.gameState || null;
-  public getGameLogs = () => this.currentSnapshot?.logs || [];
 }

@@ -107,23 +107,26 @@ import AuthOrchestrator from './ui/components/AuthOrchestrator';
 import LoginScreen from './ui/screens/LoginScreen';
 import GameLibraryScreen from './ui/screens/GameLibraryScreen';
 import PromptCardManager from './ui/screens/PromptCardManager';
-import GameScreen from './ui/screens/GameScreen';
+import  { GameScreen } from './ui/screens/GameScreen';
 import WorldStateScreen from './ui/screens/WorldStateScreen';
-import LogViewerScreen from './ui/screens/LogViewerScreen';
+import { LogViewerScreen } from './ui/screens/LogViewerScreen';
 import SettingsScreen from './ui/screens/SettingsScreen';
 import SourceDump from './ui/screens/SourceDump';
 import type { JSX } from 'react';
+
+// FIX: Moved this import to the top of the file so it can be used by GameActiveRoute.
+import { useGameStateStore } from './state/useGameStateStore';
+
 
 // A simple wrapper to protect routes that need an active game.
 const GameActiveRoute: React.FC<{ children: JSX.Element }> = ({ children }) => {
     const { currentSnapshot } = useGameStateStore();
     if (!currentSnapshot) {
+        // If no game is active, redirect to the library.
         return <Navigate to="/library" replace />;
     }
     return children;
 };
-
-import { useGameStateStore } from './state/useGameStateStore';
 
 export const AppRoutes = () => {
   return (
@@ -132,7 +135,7 @@ export const AppRoutes = () => {
       <Route path="/login" element={<LoginScreen />} />
       <Route path="/sourcedump" element={<SourceDump />} />
 
-      {/* Authenticated Routes Layout */}
+      {/* This layout component handles auth checks and orchestrates the initial game load */}
       <Route
         element={
           <ProtectedRoute>
@@ -144,6 +147,8 @@ export const AppRoutes = () => {
         <Route path="/library" element={<GameLibraryScreen />} />
         <Route path="/cards" element={<PromptCardManager />} />
         <Route path="/settings" element={<SettingsScreen />} />
+        
+        {/* These routes require an active game snapshot to be loaded */}
         <Route path="/game" element={<GameActiveRoute><GameScreen /></GameActiveRoute>} />
         <Route path="/world-state" element={<GameActiveRoute><WorldStateScreen /></GameActiveRoute>} />
         <Route path="/logs" element={<GameActiveRoute><LogViewerScreen /></GameActiveRoute>} />
@@ -152,7 +157,7 @@ export const AppRoutes = () => {
         <Route path="/" element={<Navigate to="/library" replace />} />
       </Route>
 
-      {/* Catch-all for any unhandled paths */}
+      {/* Catch-all for any unhandled paths, redirecting to login */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
@@ -463,6 +468,8 @@ The mist curls like spectral fingers around the ancient oaks. #Lyrielle stands r
 *   **Tagging Rules:** Use \`#\` for characters, \`@\` for locations, \`$\` for items. Use tags consistently in narration and emits.
 
 `.trim();
+
+
 @@FOLDER: src/data/infrastructure
 @@FILE: src/data/infrastructure/firebaseClient.ts
 // src/data/infrastructure/firebaseClient.ts
@@ -2374,232 +2381,153 @@ export function parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput 
 @@FILE: src/logic/gameSession.ts
 import type { IGameRepository } from '../data/repositories/gameRepository';
 import type { IPromptCardRepository } from '../data/repositories/promptCardRepository';
-import type { GameSnapshot, GameState, LogEntry, Message, PromptCard } from '../models';
+import type { GameSnapshot, PromptCard, AiConnection } from '../models';
 import { formatIsoDateForDisplay } from '../utils/formatDate';
 import { generateUuid } from '../utils/uuid';
 import type { ITurnProcessor } from './ITurnProcessor';
 import type { ISnapshotUpdater } from './ISnapshotUpdater';
-import { debugLog, errorLog } from '../utils/debug'; // ✅ Injected centralized logger
+import { debugLog, errorLog } from '../utils/debug';
 
+/**
+ * Defines the contract for the stateless GameSession service.
+ * Its purpose is to calculate game state transitions, not to hold state itself.
+ */
 export interface IGameSession {
-  initializeGame(userId: string, cardId: string, existingSnapshotId?: string): Promise<void>;
-  processPlayerAction(action: string, useDummyNarrator: boolean): Promise<GameSnapshot>;
-  getCurrentGameSnapshot(): GameSnapshot | null;
-  saveGame(snapshot: GameSnapshot): Promise<void>;
-  loadGame(userId: string, snapshotId: string): Promise<void>;
-  loadLastActiveGame(userId: string): Promise<boolean>;
-  getCurrentPromptCard(): PromptCard | null;
-  getCurrentGameState(): GameState | null;
-  getGameLogs(): LogEntry[];
-  gameRepo: IGameRepository;
-  renameWorldCategory(oldName: string, newName: string): Promise<GameSnapshot | null>;
-  renameWorldEntity(category: string, oldName: string, newName: string): Promise<GameSnapshot | null>;
-  deleteWorldCategory(category: string): Promise<GameSnapshot | null>;
-  deleteWorldEntity(category: string, entity: string): Promise<GameSnapshot | null>;
-  editWorldKeyValue(key: string, value: any): Promise<GameSnapshot | null>;
-  deleteWorldKey(key: string): Promise<GameSnapshot | null>;
-  toggleWorldStatePin(keyPath: string, type: 'variable' | 'entity' | 'category'): Promise<GameSnapshot | null>;
+  initializeGame(userId: string, card: PromptCard): GameSnapshot;
+  processPlayerAction(
+    snapshot: GameSnapshot,
+    card: PromptCard,
+    action: string,
+    useDummyNarrator: boolean,
+    aiConnections: AiConnection[]
+  ): Promise<GameSnapshot>;
+
+  renameWorldCategory(snapshot: GameSnapshot, oldName: string, newName: string): GameSnapshot;
+  renameWorldEntity(snapshot: GameSnapshot, category: string, oldName: string, newName: string): GameSnapshot;
+  deleteWorldCategory(snapshot: GameSnapshot, category: string): GameSnapshot;
+  deleteWorldEntity(snapshot: GameSnapshot, category: string, entity: string): GameSnapshot;
+  editWorldKeyValue(snapshot: GameSnapshot, key: string, value: any): GameSnapshot;
+  deleteWorldKey(snapshot: GameSnapshot, key: string): GameSnapshot;
+  toggleWorldStatePin(snapshot: GameSnapshot, keyPath: string, type: 'variable' | 'entity' | 'category'): GameSnapshot;
 }
 
+/**
+ * A stateless service that calculates game state transitions.
+ * It does not hold any internal state like currentSnapshot.
+ */
 export class GameSession implements IGameSession {
-  private currentUserId: string | null = null;
-  private currentSnapshot: GameSnapshot | null = null;
-  private currentPromptCard: PromptCard | null = null;
-
   constructor(
-    public gameRepo: IGameRepository,
-    private cardRepo: IPromptCardRepository,
     private turnProcessor: ITurnProcessor,
     private snapshotUpdater: ISnapshotUpdater
   ) {
-    debugLog('[gameSession.ts] GameSession constructor called.');
+    debugLog('[gameSession.ts] Stateless GameSession service instantiated.');
   }
 
-  public async initializeGame(userId: string, cardId: string, existingSnapshotId?: string): Promise<void> {
-    debugLog(`[gameSession.ts] initializeGame: Starting for User=${userId}, Card=${cardId}, Snapshot=${existingSnapshotId || 'new'}`);
-    this.currentUserId = userId;
-  
-    if (existingSnapshotId) {
-      await this.loadGame(userId, existingSnapshotId);
-      debugLog(`[gameSession.ts] initializeGame: Loaded existing game ${existingSnapshotId}.`);
-      return;
-    }
-  
-    const card = await this.cardRepo.getPromptCard(userId, cardId);
-    if (!card) {
-      errorLog(`[gameSession.ts] initializeGame: PromptCard with ID ${cardId} not found.`);
-      throw new Error(`PromptCard with ID ${cardId} not found.`);
-    }
-    this.currentPromptCard = card;
-  
+  public initializeGame(userId: string, card: PromptCard): GameSnapshot {
+    debugLog(`[gameSession.ts] initializeGame: Creating new snapshot for User=${userId}, Card=${card.id}`);
+    
     let initialWorldState = {};
     try {
       if (card.worldStateInit) {
         initialWorldState = JSON.parse(card.worldStateInit);
-      } else {
-        initialWorldState = {};
       }
     } catch (e) {
       errorLog("[gameSession.ts] initializeGame: Failed to parse worldStateInit JSON:", e);
       initialWorldState = {};
     }
-  
+
     const now = new Date().toISOString();
-  
-    // Unconditionally create a new snapshot because an existingSnapshotId was not provided.
-    // This ensures that any previous game state in this session instance is wiped.
+
     const initialSnapshot: GameSnapshot = {
       id: generateUuid(),
       userId: userId,
-      promptCardId: cardId,
+      promptCardId: card.id,
       title: `Game with ${card.title} - ${formatIsoDateForDisplay(now)}`,
       createdAt: now,
       updatedAt: now,
       currentTurn: 0,
       gameState: {
-        narration: card.firstTurnOnlyBlock, // Initial scene description for the user
+        narration: card.firstTurnOnlyBlock,
         worldState: initialWorldState,
         scene: { location: null, present: [] },
       },
-      // Pre-populate history with the initial scene so it's not lost.
       conversationHistory: [
-        { role: 'assistant', content: card.firstTurnOnlyBlock }
+        { role: 'assistant', content: card.firstTurnOnlyBlock },
       ],
       logs: [],
       worldStatePinnedKeys: [],
     };
-  
-    this.currentSnapshot = initialSnapshot;
-    debugLog(`[gameSession.ts] initializeGame: NEW game initialized with ID ${initialSnapshot.id}. currentSnapshot set.`);
-  }
-  
 
-  public async processPlayerAction(action: string, useDummyNarrator: boolean): Promise<GameSnapshot> {
-    debugLog(`[gameSession.ts] processPlayerAction: Starting for action: "${action.substring(0, 50)}..."`);
-    if (!this.currentSnapshot || !this.currentUserId || !this.currentPromptCard) {
-      errorLog('[gameSession.ts] processPlayerAction: Prerequisites missing.');
-      throw new Error("Cannot process player action: Game not initialized correctly.");
+    debugLog(`[gameSession.ts] initializeGame: NEW game initialized with ID ${initialSnapshot.id}.`);
+    return initialSnapshot;
+  }
+
+  public async processPlayerAction(
+    snapshot: GameSnapshot,
+    card: PromptCard,
+    action: string,
+    useDummyNarrator: boolean,
+    aiConnections: AiConnection[]
+  ): Promise<GameSnapshot> {
+    debugLog(`[gameSession.ts] processPlayerAction: Starting for action: "${action.substring(0, 50)}..." on snapshot ${snapshot.id}`);
+
+    if (!snapshot || !card) {
+      errorLog('[gameSession.ts] processPlayerAction: Snapshot or Card is missing.');
+      throw new Error("Cannot process player action: Snapshot and Card are required.");
     }
 
-    const aiConnections = await this.gameRepo.getAiConnections(this.currentUserId);
-    debugLog(`[gameSession.ts] processPlayerAction: Calling turnProcessor.useDummyNarrator=${useDummyNarrator}.`);
-
-    // Determine if this is the very first player action (turn 0 with no logs yet)
-    const isFirstPlayerAction = this.currentSnapshot.currentTurn === 0 && this.currentSnapshot.logs.length === 0;
+    const isFirstPlayerAction = snapshot.currentTurn === 0 && snapshot.logs.length === 0;
 
     const turnResult = await this.turnProcessor.processPlayerTurn(
-      this.currentUserId,
-      this.currentPromptCard,
-      this.currentSnapshot.gameState,
-      this.currentSnapshot.logs,
-      this.currentSnapshot.conversationHistory,
+      snapshot.userId,
+      card,
+      snapshot.gameState,
+      snapshot.logs,
+      snapshot.conversationHistory,
       action,
-      this.currentSnapshot.currentTurn,
+      snapshot.currentTurn,
       useDummyNarrator,
       aiConnections,
       isFirstPlayerAction
     );
 
-    debugLog('[gameSession.ts] processPlayerAction: Calling snapshotUpdater.applyTurnResultToSnapshot.');
-    const newSnapshot = this.snapshotUpdater.applyTurnResultToSnapshot(this.currentSnapshot, { ...turnResult, playerAction: action });
+    debugLog('[gameSession.ts] processPlayerAction: Calling snapshotUpdater to apply turn result.');
+    const newSnapshot = this.snapshotUpdater.applyTurnResultToSnapshot(snapshot, {
+      ...turnResult,
+      playerAction: action,
+    });
 
-    this.currentSnapshot = newSnapshot;
-    debugLog(`[gameSession.ts] processPlayerAction: newSnapshot ${newSnapshot.id} applied. Saving game...`);
-    await this.saveGame(newSnapshot);
-    debugLog('[gameSession.ts] processPlayerAction: Finished and saved.');
+    debugLog(`[gameSession.ts] processPlayerAction: new snapshot ${newSnapshot.id} created.`);
     return newSnapshot;
   }
 
-  private async updateAndSave(updater: (snapshot: GameSnapshot) => GameSnapshot): Promise<GameSnapshot | null> {
-    debugLog(`[gameSession.ts] updateAndSave: Applying update and saving. currentSnapshot before update: ${this.currentSnapshot?.id || 'null'}`);
-    if (!this.currentSnapshot) {
-      debugLog('[gameSession.ts] updateAndSave: No currentSnapshot to update. Returning null.');
-      return null;
-    }
-
-    const newSnapshot = updater(this.currentSnapshot);
-    this.currentSnapshot = newSnapshot;
-    debugLog(`[gameSession.ts] updateAndSave: currentSnapshot updated to ${this.currentSnapshot.id}. Persisting...`);
-    await this.saveGame(newSnapshot);
-    debugLog('[gameSession.ts] updateAndSave: Persisted successfully.');
-    return newSnapshot;
+  public renameWorldCategory(snapshot: GameSnapshot, oldName: string, newName: string): GameSnapshot {
+    return this.snapshotUpdater.applyCategoryRename(snapshot, oldName, newName);
   }
 
-  public async renameWorldCategory(oldName: string, newName: string): Promise<GameSnapshot | null> {
-    return this.updateAndSave(snap => this.snapshotUpdater.applyCategoryRename(snap, oldName, newName));
+  public renameWorldEntity(snapshot: GameSnapshot, category: string, oldName: string, newName: string): GameSnapshot {
+    return this.snapshotUpdater.applyEntityRename(snapshot, category, oldName, newName);
   }
 
-  public async renameWorldEntity(category: string, oldName: string, newName: string): Promise<GameSnapshot | null> {
-    return this.updateAndSave(snap => this.snapshotUpdater.applyEntityRename(snap, category, oldName, newName));
+  public deleteWorldCategory(snapshot: GameSnapshot, category: string): GameSnapshot {
+    return this.snapshotUpdater.applyCategoryDelete(snapshot, category);
   }
 
-  public async deleteWorldCategory(category: string): Promise<GameSnapshot | null> {
-    return this.updateAndSave(snap => this.snapshotUpdater.applyCategoryDelete(snap, category));
+  public deleteWorldEntity(snapshot: GameSnapshot, category: string, entity: string): GameSnapshot {
+    return this.snapshotUpdater.applyEntityDelete(snapshot, category, entity);
   }
 
-  public async deleteWorldEntity(category: string, entity: string): Promise<GameSnapshot | null> {
-    return this.updateAndSave(snap => this.snapshotUpdater.applyEntityDelete(snap, category, entity));
+  public editWorldKeyValue(snapshot: GameSnapshot, key: string, value: any): GameSnapshot {
+    return this.snapshotUpdater.applyKeyValueEdit(snapshot, key, value);
   }
 
-  public async editWorldKeyValue(key: string, value: any): Promise<GameSnapshot | null> {
-    return this.updateAndSave(snap => this.snapshotUpdater.applyKeyValueEdit(snap, key, value));
+  public deleteWorldKey(snapshot: GameSnapshot, key: string): GameSnapshot {
+    return this.snapshotUpdater.applyKeyDelete(snapshot, key);
   }
 
-  public async deleteWorldKey(key: string): Promise<GameSnapshot | null> {
-    return this.updateAndSave(snap => this.snapshotUpdater.applyKeyDelete(snap, key));
+  public toggleWorldStatePin(snapshot: GameSnapshot, keyPath: string, type: 'variable' | 'entity' | 'category'): GameSnapshot {
+    return this.snapshotUpdater.applyPinToggle(snapshot, keyPath, type);
   }
-
-  public async toggleWorldStatePin(keyPath: string, type: 'variable' | 'entity' | 'category'): Promise<GameSnapshot | null> {
-    debugLog(`[gameSession.ts] toggleWorldStatePin: Toggling pin for ${type} at path "${keyPath}".`);
-    return this.updateAndSave(snap => this.snapshotUpdater.applyPinToggle(snap, keyPath, type));
-  }
-
-  public async loadGame(userId: string, snapshotId: string): Promise<void> {
-    debugLog(`[gameSession.ts] loadGame: Attempting to load snapshot ${snapshotId} for user ${userId}.`);
-    const snapshot = await this.gameRepo.getGameSnapshot(userId, snapshotId);
-    if (!snapshot) {
-      errorLog(`[gameSession.ts] loadGame: Snapshot ${snapshotId} not found.`);
-      throw new Error(`Game snapshot ${snapshotId} not found.`);
-    }
-    const card = await this.cardRepo.getPromptCard(userId, snapshot.promptCardId);
-    if (!card) {
-      errorLog(`[gameSession.ts] loadGame: PromptCard ${snapshot.promptCardId} not found for loaded game.`);
-      throw new Error(`PromptCard ${snapshot.promptCardId} not found.`);
-    }
-
-    this.currentUserId = userId;
-    this.currentSnapshot = snapshot;
-    this.currentPromptCard = card;
-    debugLog(`[gameSession.ts] loadGame: Successfully loaded snapshot ${snapshot.id} and card ${card.id}. currentSnapshot set.`);
-  }
-
-  public async loadLastActiveGame(userId: string): Promise<boolean> {
-    debugLog(`[gameSession.ts] loadLastActiveGame: Checking for last active game for user ${userId}.`);
-    const allSnapshots = await this.gameRepo.getAllGameSnapshots(userId);
-    if (allSnapshots.length > 0) {
-      debugLog(`[gameSession.ts] loadLastActiveGame: Found ${allSnapshots.length} snapshots. Loading most recent: ${allSnapshots[0].id}.`);
-      await this.loadGame(userId, allSnapshots[0].id);
-      debugLog('[gameSession.ts] loadLastActiveGame: Finished loading last active game. Returning true.');
-      return true;
-    }
-    debugLog('[gameSession.ts] loadLastActiveGame: No last active game found. Returning false.');
-    return false;
-  }
-
-  public async saveGame(snapshot: GameSnapshot): Promise<void> {
-    debugLog(`[gameSession.ts] saveGame: Attempting to save snapshot ${snapshot.id}.`);
-    if (!this.currentUserId) {
-      errorLog('[gameSession.ts] saveGame: User not initialized during save. Throwing error.');
-      throw new Error("User not initialized.");
-    }
-    await this.gameRepo.saveGameSnapshot(this.currentUserId, snapshot);
-    debugLog(`[gameSession.ts] saveGame: Snapshot ${snapshot.id} saved successfully.`);
-  }
-
-  public getCurrentGameSnapshot = () => this.currentSnapshot;
-  public getCurrentPromptCard = () => this.currentPromptCard;
-  public getCurrentGameState = () => this.currentSnapshot?.gameState || null;
-  public getGameLogs = () => this.currentSnapshot?.logs || [];
 }
 
 @@FILE: src/logic/gameSessionServices.ts
@@ -3314,16 +3242,12 @@ export default SourceDump;
 
 @@FOLDER: src/providers
 @@FILE: src/providers/GameSessionAndStoreProvider.tsx
-// src/providers/GameSessionAndStoreProvider.tsx
 import React, { useRef } from 'react';
 import { GameSession } from '../logic/gameSession';
 import type { IGameSession } from '../logic/gameSession';
-import { gameRepository } from '../data/repositories/gameRepository';
-import { promptCardRepository } from '../data/repositories/promptCardRepository';
 import { initializeGameStateStore } from '../state/useGameStateStore';
 import { GameSessionProvider } from '../contexts/GameSessionContext';
-
-// Import the new centralized service singletons
+// Centralized stateless services
 import { turnProcessor, snapshotUpdater } from '../logic/gameSessionServices';
 
 interface GameSessionAndStoreProviderProps {
@@ -3331,34 +3255,27 @@ interface GameSessionAndStoreProviderProps {
 }
 
 export const GameSessionAndStoreProvider: React.FC<GameSessionAndStoreProviderProps> = ({ children }) => {
-  const gameSessionInstanceRef = useRef<IGameSession | null>(null);
+  const gameSessionServiceRef = useRef<IGameSession | null>(null);
 
-  if (!gameSessionInstanceRef.current) {
-    // DEBUG: Log the very first instantiation
-    console.log('%c[GameSessionAndStoreProvider.tsx] Instantiating GameSession and Initializing GameStateStore for the first time.', 'color: blue; font-weight: bold;');
-
-    
-    // The GameSession constructor is now much cleaner
-    gameSessionInstanceRef.current = new GameSession(
-      gameRepository,
-      promptCardRepository,
-      turnProcessor,
-      snapshotUpdater
+  if (!gameSessionServiceRef.current) {
+    console.log(
+      '%c[GameSessionAndStoreProvider.tsx] Instantiating STATELESS GameSession service and initializing GameStateStore.',
+      'color: blue; font-weight: bold;'
     );
 
-    // DEBUG: Confirm GameSession injection
-    initializeGameStateStore(gameSessionInstanceRef.current);
+    gameSessionServiceRef.current = new GameSession(turnProcessor, snapshotUpdater);
+    initializeGameStateStore(gameSessionServiceRef.current);
   } else {
-    // DEBUG: Log if it's NOT the first time (should happen once per app lifecycle)
-    console.log('[GameSessionAndStoreProvider.tsx] Re-rendering, GameSession already instantiated.');
-  }   
-   
+    console.log('[GameSessionAndStoreProvider.tsx] Re-rendering; GameSession service already instantiated.');
+  }
+
   return (
-    <GameSessionProvider gameSession={gameSessionInstanceRef.current}>
+    <GameSessionProvider gameSession={gameSessionServiceRef.current}>
       {children}
     </GameSessionProvider>
   );
 };
+
 @@FOLDER: src/state
 @@FILE: src/state/useAuthStore.ts
 // src/state/useAuthStore.ts
@@ -3427,23 +3344,24 @@ const unsubscribe = subscribeToAuthChanges((user) => {
 // If you were to integrate this into a React component's useEffect, you'd return the unsubscribe function.
 // For a global store, we typically let it live.
 @@FILE: src/state/useGameStateStore.ts
-// src/state/useGameStateStore.ts
-
 import { create } from 'zustand';
-import type { StoreApi } from 'zustand';
-import { useSettingsStore } from './useSettingsStore';
 import type { GameSnapshot, GameState, LogEntry, Message } from '../models';
 import type { IGameSession } from '../logic/gameSession';
+import { useSettingsStore } from './useSettingsStore';
+import { usePromptCardStore } from './usePromptCardStore';
+import { gameRepository } from '../data/repositories/gameRepository';
+import { promptCardRepository } from '../data/repositories/promptCardRepository';
 import { debugLog, errorLog } from '../utils/debug';
+import { produce } from 'immer';
 
-let _gameSessionInstance: IGameSession | null = null;
+
+// External GameSession service instance
+let _gameSessionService: IGameSession | null = null;
 
 export const initializeGameStateStore = (gameSession: IGameSession) => {
-  if (_gameSessionInstance === null) {
-    _gameSessionInstance = gameSession;
-    debugLog('%c[useGameStateStore.ts] GameSession instance injected successfully.', 'color: green;');
-  } else {
-    debugLog('[useGameStateStore.ts] Attempted to re-inject GameSession instance. This should only happen once.');
+  if (_gameSessionService === null) {
+    _gameSessionService = gameSession;
+    debugLog('%c[useGameStateStore.ts] GameSession service injected successfully.', 'color: green;');
   }
 };
 
@@ -3454,12 +3372,13 @@ interface GameStateState {
   gameError: string | null;
   gameLoading: boolean;
   isProcessingTurn: boolean;
+  conversationHistory: Message[];
+  logEntries: LogEntry[];
 }
 
 interface GameStateActions {
   initializeGame: (userId: string, cardId: string, existingSnapshotId?: string) => Promise<void>;
   processPlayerAction: (action: string) => Promise<void>;
-  saveGame: () => Promise<void>;
   loadGame: (userId: string, snapshotId: string) => Promise<void>;
   loadLastActiveGame: (userId: string) => Promise<boolean>;
   updateNarratorInputText: (text: string) => void;
@@ -3472,6 +3391,9 @@ interface GameStateActions {
   deleteWorldKey: (key: string) => Promise<void>;
   toggleWorldStatePin: (keyPath: string, type: 'variable' | 'entity' | 'category') => Promise<void>;
   reset: () => void;
+  processTurn: (action: string) => Promise<void>;
+  resetGameFromSnapshot: (snapshot: GameSnapshot) => void;
+  rerollLastNarration: () => void;
 }
 
 type GameStateStore = GameStateState & GameStateActions;
@@ -3483,37 +3405,49 @@ const initialState: GameStateState = {
   gameError: null,
   gameLoading: false,
   isProcessingTurn: false,
+  conversationHistory: [],
+  logEntries: [],
 };
 
 export const useGameStateStore = create<GameStateStore>((set, get) => {
-  const getGameSession = (): IGameSession => {
-    if (!_gameSessionInstance) {
-      errorLog('%c[useGameStateStore.ts] CRITICAL ERROR: GameSession instance is NULL when getGameSession() called!', 'color: red; font-weight: bold;');
-      throw new Error("Game session instance not initialized.");
+  const getGameService = (): IGameSession => {
+    if (!_gameSessionService) {
+      throw new Error("GameSession service has not been initialized in the store.");
     }
-    return _gameSessionInstance;
+    return _gameSessionService;
   };
 
-  const syncStateWithSnapshot = (snapshot: GameSnapshot | null) => {
-    debugLog(`%c[useGameStateStore.ts] syncStateWithSnapshot: Updating currentSnapshot to ${snapshot ? snapshot.id : 'null'}. isProcessingTurn: ${get().isProcessingTurn}`, 'color: dodgerblue;');
-    set({ currentSnapshot: snapshot });
-    const verifySnapshot = get().currentSnapshot;
-    debugLog(`%c[useGameStateStore.ts] syncStateWithSnapshot: currentSnapshot is now ${verifySnapshot ? verifySnapshot.id : 'null'}.`, 'color: dodgerblue;');
+  const updateSnapshotAndPersist = async (newSnapshot: GameSnapshot | null) => {
+    if (!newSnapshot) {
+      set({ currentSnapshot: null });
+      return;
+    }
+    set({ currentSnapshot: newSnapshot });
+    try {
+      await gameRepository.saveGameSnapshot(newSnapshot.userId, newSnapshot);
+      debugLog(`[useGameStateStore] Persisted snapshot ${newSnapshot.id}`);
+    } catch (e: any) {
+      errorLog("[useGameStateStore] Failed to persist snapshot:", e);
+      set({ gameError: "Failed to save game progress." });
+    }
   };
 
-  const performWorldStateUpdate = async (updateFn: (session: IGameSession) => Promise<GameSnapshot | null>) => {
-    debugLog('%c[useGameStateStore.ts] performWorldStateUpdate: Starting a world state modification.', 'color: purple;');
+  const performWorldStateUpdate = async (
+    updateFn: (service: IGameSession, snapshot: GameSnapshot) => GameSnapshot
+  ) => {
+    const currentState = get().currentSnapshot;
+    if (!currentState) {
+      set({ gameError: "No active game to update." });
+      return;
+    }
     set({ gameError: null });
     try {
-      const session = getGameSession();
-      const updatedSnapshot = await updateFn(session);
-      syncStateWithSnapshot(updatedSnapshot);
+      const service = getGameService();
+      const updatedSnapshot = updateFn(service, currentState);
+      await updateSnapshotAndPersist(updatedSnapshot);
     } catch (error: any) {
-      errorLog("[useGameStateStore.ts] performWorldStateUpdate: Error during update:", error);
+      errorLog("[useGameStateStore] Error during world state update:", error);
       set({ gameError: error.message });
-    } finally {
-      set({ gameLoading: false });
-      debugLog('[useGameStateStore.ts] performWorldStateUpdate: Finished a world state modification.');
     }
   };
 
@@ -3521,84 +3455,80 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
     ...initialState,
 
     initializeGame: async (userId, cardId, existingSnapshotId) => {
-      debugLog(`[useGameStateStore.ts] initializeGame action: userId=${userId}, cardId=${cardId}, existingSnapshotId=${existingSnapshotId}`);
-      set({ gameLoading: true, gameError: null }); // Set gameLoading for this major operation
-      set({ currentSnapshot: null }); // IMPORTANT: Clear current snapshot immediately
+      set({ gameLoading: true, gameError: null, currentSnapshot: null });
       try {
-        const gameSession = getGameSession();
-        await gameSession.initializeGame(userId, cardId, existingSnapshotId);
-        syncStateWithSnapshot(gameSession.getCurrentGameSnapshot());
+        if (existingSnapshotId) {
+          await get().loadGame(userId, existingSnapshotId);
+        } else {
+          const card = await promptCardRepository.getPromptCard(userId, cardId);
+          if (!card) throw new Error(`PromptCard with ID ${cardId} not found.`);
+          usePromptCardStore.getState().setActivePromptCard(card);
+          const service = getGameService();
+          const initialSnapshot = service.initializeGame(userId, card);
+          await updateSnapshotAndPersist(initialSnapshot);
+        }
       } catch (error: any) {
-        errorLog("[useGameStateStore.ts] initializeGame action ERROR:", error);
+        errorLog("[useGameStateStore] initializeGame action ERROR:", error);
         set({ gameError: error.message });
       } finally {
         set({ gameLoading: false });
       }
     },
 
-
     processPlayerAction: async (action) => {
-      debugLog(`[useGameStateStore.ts] processPlayerAction action started. Action: "${action}"`);
+      const snapshot = get().currentSnapshot;
+      const card = usePromptCardStore.getState().activePromptCard;
+      if (!snapshot || !card) {
+        set({ gameError: "Cannot process action: Game or Prompt Card not loaded." });
+        return;
+      }
       set({ isProcessingTurn: true, gameError: null, narratorInputText: '' });
       const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
       try {
-        const gameSession = getGameSession();
-        const updatedSnapshot = await gameSession.processPlayerAction(action, useDummyNarrator);
-        syncStateWithSnapshot(updatedSnapshot);
+        const aiConnections = await gameRepository.getAiConnections(snapshot.userId);
+        const service = getGameService();
+        const newSnapshot = await service.processPlayerAction(
+          snapshot,
+          card,
+          action,
+          useDummyNarrator,
+          aiConnections
+        );
+        await updateSnapshotAndPersist(newSnapshot);
       } catch (error: any) {
-        errorLog("[useGameStateStore.ts] processPlayerAction action ERROR:", error);
+        errorLog("[useGameStateStore] processPlayerAction action ERROR:", error);
         set({ gameError: error.message });
       } finally {
         set({ isProcessingTurn: false });
-        debugLog('[useGameStateStore.ts] processPlayerAction action finished.');
-      }
-    },
-
-    saveGame: async () => {
-      debugLog('[useGameStateStore.ts] saveGame action called.');
-      const { currentSnapshot } = get();
-      if (!currentSnapshot) {
-        debugLog('[useGameStateStore.ts] saveGame action: No currentSnapshot to save.');
-        return;
-      }
-      try {
-        await getGameSession().saveGame(currentSnapshot);
-        debugLog(`[useGameStateStore.ts] saveGame action: Snapshot ${currentSnapshot.id} saved.`);
-      } catch (error: any) {
-        errorLog("[useGameStateStore.ts] saveGame action ERROR:", error);
-        set({ gameError: error.message });
       }
     },
 
     loadGame: async (userId, snapshotId) => {
-      debugLog(`[useGameStateStore.ts] loadGame action: userId=${userId}, snapshotId=${snapshotId}`);
       set({ gameLoading: true, gameError: null });
       try {
-        const gameSession = getGameSession();
-        await gameSession.loadGame(userId, snapshotId);
-        syncStateWithSnapshot(gameSession.getCurrentGameSnapshot());
+        const snapshot = await gameRepository.getGameSnapshot(userId, snapshotId);
+        if (!snapshot) throw new Error(`Game snapshot ${snapshotId} not found.`);
+        const card = await promptCardRepository.getPromptCard(userId, snapshot.promptCardId);
+        if (!card) throw new Error(`PromptCard ${snapshot.promptCardId} not found for loaded game.`);
+        usePromptCardStore.getState().setActivePromptCard(card);
+        set({ currentSnapshot: snapshot, gameLoading: false });
       } catch (error: any) {
-        errorLog("[useGameStateStore.ts] loadGame action ERROR:", error);
-        set({ gameError: error.message });
-      } finally {
-        set({ gameLoading: false });
-        debugLog('[useGameStateStore.ts] loadGame action finished.');
+        errorLog("[useGameStateStore] loadGame action ERROR:", error);
+        set({ gameError: error.message, gameLoading: false });
       }
     },
 
     loadLastActiveGame: async (userId: string): Promise<boolean> => {
-      debugLog('%c[useGameStateStore.ts] loadLastActiveGame action called.', 'color: blue; font-weight: bold;');
       set({ gameLoading: true, gameError: null });
       try {
-        const gameSession = getGameSession();
-        const gameLoaded = await gameSession.loadLastActiveGame(userId);
-        const snapshotAfterLoad = gameSession.getCurrentGameSnapshot();
-        debugLog(`%c[useGameStateStore.ts] gameSession.getCurrentGameSnapshot() after loadLastActiveGame: ${snapshotAfterLoad ? snapshotAfterLoad.id : 'null'}`, 'color: blue;');
-        syncStateWithSnapshot(snapshotAfterLoad);
-        debugLog(`%c[useGameStateStore.ts] loadLastActiveGame action finished. Game loaded: ${gameLoaded}`, 'color: blue; font-weight: bold;');
-        return gameLoaded;
+        const allSnapshots = await gameRepository.getAllGameSnapshots(userId);
+        if (allSnapshots.length > 0) {
+          await get().loadGame(userId, allSnapshots[0].id);
+          return true;
+        }
+        return false;
       } catch (error: any) {
-        errorLog("%c[useGameStateStore.ts] loadLastActiveGame action FAILED with error:", 'color: red; font-weight: bold;', error);
+        errorLog("[useGameStateStore] loadLastActiveGame action FAILED with error:", error);
         set({ gameError: error.message });
         return false;
       } finally {
@@ -3606,16 +3536,83 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
       }
     },
 
+    processTurn: (action: string) => {
+      return get().processPlayerAction(action);
+    },
+
+    resetGameFromSnapshot: async (snapshot: GameSnapshot) => {
+      debugLog(`[useGameStateStore] resetGameFromSnapshot: Resetting to snapshot ${snapshot.id}`);
+      set({ gameLoading: true, gameError: null });
+      try {
+        const card = await promptCardRepository.getPromptCard(snapshot.userId, snapshot.promptCardId);
+        if (!card) {
+          throw new Error(`PromptCard ${snapshot.promptCardId} for the snapshot could not be found.`);
+        }
+        usePromptCardStore.getState().setActivePromptCard(card);
+        await updateSnapshotAndPersist(snapshot);
+      } catch (error: any) {
+        errorLog("[useGameStateStore] resetGameFromSnapshot ERROR:", error);
+        set({ gameError: error.message });
+      } finally {
+        set({ gameLoading: false });
+      }
+    },
+
+    rerollLastNarration: async () => {
+      debugLog(`[useGameStateStore] rerollLastNarration: Attempting to reroll last turn.`);
+      set({ isProcessingTurn: true, gameError: null });
+      try {
+        const originalSnapshot = get().currentSnapshot;
+        if (!originalSnapshot || originalSnapshot.logs.length === 0) {
+          throw new Error("Cannot reroll: No previous turn found in logs.");
+        }
+
+        const lastLog = originalSnapshot.logs[originalSnapshot.logs.length - 1];
+        const lastUserInput = lastLog.userInput;
+        if (!lastUserInput) {
+          throw new Error("Cannot reroll: Last user input could not be determined.");
+        }
+
+        const rolledBackSnapshot = produce(originalSnapshot, draft => {
+          draft.logs.pop();
+          draft.conversationHistory.pop();
+          draft.conversationHistory.pop();
+        });
+
+        set({ currentSnapshot: rolledBackSnapshot });
+        await get().processPlayerAction(lastUserInput);
+        debugLog(`[useGameStateStore] rerollLastNarration: Successfully re-ran action: "${lastUserInput}"`);
+      } catch (error: any) {
+        errorLog("[useGameStateStore] rerollLastNarration ERROR:", error);
+        set({ gameError: error.message });
+      } finally {
+        set({ isProcessingTurn: false });
+      }
+    },
+
     updateNarratorInputText: (text) => set({ narratorInputText: text }),
     updateNarratorScrollPosition: (position) => set({ narratorScrollPosition: position }),
 
-    renameWorldCategory: (oldName, newName) => performWorldStateUpdate(session => session.renameWorldCategory(oldName, newName)),
-    renameWorldEntity: (category, oldName, newName) => performWorldStateUpdate(session => session.renameWorldEntity(category, oldName, newName)),
-    deleteWorldCategory: (category) => performWorldStateUpdate(session => session.deleteWorldCategory(category)),
-    deleteWorldEntity: (category, entity) => performWorldStateUpdate(session => session.deleteWorldEntity(category, entity)),
-    editWorldKeyValue: (key, value) => performWorldStateUpdate(session => session.editWorldKeyValue(key, value)),
-    deleteWorldKey: (key) => performWorldStateUpdate(session => session.deleteWorldKey(key)),
-    toggleWorldStatePin: (key, type) => performWorldStateUpdate(session => session.toggleWorldStatePin(key, type)),
+    renameWorldCategory: (oldName, newName) =>
+      performWorldStateUpdate((s, snap) => s.renameWorldCategory(snap, oldName, newName)),
+
+    renameWorldEntity: (category, oldName, newName) =>
+      performWorldStateUpdate((s, snap) => s.renameWorldEntity(snap, category, oldName, newName)),
+
+    deleteWorldCategory: (category) =>
+      performWorldStateUpdate((s, snap) => s.deleteWorldCategory(snap, category)),
+
+    deleteWorldEntity: (category, entity) =>
+      performWorldStateUpdate((s, snap) => s.deleteWorldEntity(snap, category, entity)),
+
+    editWorldKeyValue: (key, value) =>
+      performWorldStateUpdate((s, snap) => s.editWorldKeyValue(snap, key, value)),
+
+    deleteWorldKey: (key) =>
+      performWorldStateUpdate((s, snap) => s.deleteWorldKey(snap, key)),
+
+    toggleWorldStatePin: (key, type) =>
+      performWorldStateUpdate((s, snap) => s.toggleWorldStatePin(snap, key, type)),
 
     reset: () => {
       debugLog('%c[useGameStateStore.ts] RESETTING GameStateStore to initialState.', 'color: red; font-weight: bold;');
@@ -3628,12 +3625,15 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
 export const selectCurrentGameState = (state: GameStateStore): GameState | null => {
   return state.currentSnapshot?.gameState ?? null;
 };
+
 export const selectGameLogs = (state: GameStateStore): LogEntry[] => {
   return state.currentSnapshot?.logs ?? [];
 };
+
 export const selectConversationHistory = (state: GameStateStore): Message[] => {
   return state.currentSnapshot?.conversationHistory ?? [];
 };
+
 export const selectWorldStatePinnedKeys = (state: GameStateStore): string[] => {
   return state.currentSnapshot?.worldStatePinnedKeys ?? [];
 };
@@ -5154,6 +5154,444 @@ export const PinnedItemsView: React.FC = React.memo(() => {
   );
 });
 
+@@FILE: src/ui/components/PromptCard.tsx
+// src/ui/components/PromptCardCard.tsx
+import React from 'react';
+import {
+  Card, CardContent, CardActions, Typography, IconButton, Tooltip,
+} from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import type { PromptCard } from '../../models';
+
+interface PromptCardCardProps {
+  card: PromptCard;
+  onEdit: () => void;
+  onDelete: () => void;
+}
+
+export const PromptCardCard: React.FC<PromptCardCardProps> = ({ card, onEdit, onDelete }) => {
+  return (
+    <Card variant="outlined" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <CardContent sx={{ flexGrow: 1 }}>
+        <Typography variant="h6" gutterBottom>{card.title || 'Untitled Card'}</Typography>
+        <Typography variant="body2" color="text.secondary">
+          {card.prompt.slice(0, 100)}{card.prompt.length > 100 ? '…' : ''}
+        </Typography>
+      </CardContent>
+      <CardActions>
+        <Tooltip title="Edit Card">
+          <IconButton onClick={onEdit}><EditIcon /></IconButton>
+        </Tooltip>
+        <Tooltip title="Delete Card">
+          <IconButton onClick={onDelete}><DeleteIcon /></IconButton>
+        </Tooltip>
+      </CardActions>
+    </Card>
+  );
+};
+
+@@FILE: src/ui/components/PromptCardEditorDialog.tsx
+// src/ui/components/PromptCardEditorDialog.tsx
+
+import React, { useState, useEffect } from 'react';
+import {
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  Button, Box, TextField
+} from '@mui/material';
+import type { PromptCard } from '../../models';
+import {
+  DEFAULT_EMIT_SKELETON_STRING,
+  DEFAULT_FIRST_TURN_PROMPT_BLOCK,
+  defaultAiSettingsInCard,
+  defaultStackInstructions
+} from '../../data/config/promptCardDefaults'; // ✅ Use existing constants instead
+
+import { EmitSkeletonSection } from './PromptCardEditorSections/EmitSkeletonSection.tsx';
+import { PromptSection } from './PromptCardEditorSections/PromptSection.tsx';
+import { WorldStateInitSection } from './PromptCardEditorSections/WorldStateInitSection.tsx';
+import { GameRulesSection } from './PromptCardEditorSections/GameRulesSection.tsx';
+import { AiSettingsSection } from './PromptCardEditorSections/AiSettingsSection.tsx';
+
+interface PromptCardEditorDialogProps {
+  open: boolean;
+  initialCard: PromptCard | null;
+  onClose: () => void;
+  onSave: (card: PromptCard) => void;
+}
+
+// ✅ Local helper: mock default PromptCard (not persisted or valid for storage yet)
+const createBlankPromptCard = (): PromptCard => ({
+  id: 'temporary-id',
+  rootId: 'temporary-id',
+  parentId: null,
+  ownerId: 'preview',
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  title: 'Untitled Card',
+  prompt: '',
+  description: null,
+  firstTurnOnlyBlock: DEFAULT_FIRST_TURN_PROMPT_BLOCK,
+  stackInstructions: defaultStackInstructions,
+  emitSkeleton: DEFAULT_EMIT_SKELETON_STRING,
+  worldStateInit: '',
+  gameRules: '',
+  aiSettings: { ...defaultAiSettingsInCard },
+  helperAiSettings: { ...defaultAiSettingsInCard },
+  isHelperAiEnabled: false,
+  tags: [],
+  isExample: false,
+  functionDefs: '',
+  isPublic: false,
+  contentHash: '',
+});
+
+export const PromptCardEditorDialog: React.FC<PromptCardEditorDialogProps> = ({
+  open,
+  initialCard,
+  onClose,
+  onSave,
+}) => {
+  const [card, setCard] = useState<PromptCard>(initialCard || createBlankPromptCard());
+
+  useEffect(() => {
+    if (initialCard) {
+      setCard(initialCard);
+    } else {
+      setCard(createBlankPromptCard());
+    }
+  }, [initialCard]);
+
+  const handleChange = <K extends keyof PromptCard>(key: K, value: PromptCard[K]) => {
+    setCard(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSave = () => {
+    onSave(card);
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} fullScreen scroll="paper">
+      <DialogTitle>{initialCard ? 'Edit Prompt Card' : 'New Prompt Card'}</DialogTitle>
+      <DialogContent dividers>
+        <Box sx={{ mb: 2 }}>
+          <TextField
+            fullWidth
+            label="Card Title"
+            value={card.title}
+            onChange={(e) => handleChange('title', e.target.value)}
+          />
+        </Box>
+
+        <PromptSection prompt={card.prompt} onChange={(v) => handleChange('prompt', v)} />
+
+        <EmitSkeletonSection emitSkeleton={card.emitSkeleton} onChange={(v) => handleChange('emitSkeleton', v)} />
+
+        <WorldStateInitSection worldState={card.worldStateInit} onChange={(v) => handleChange('worldStateInit', v)} />
+
+        <GameRulesSection gameRules={card.gameRules} onChange={(v) => handleChange('gameRules', v)} />
+
+        <AiSettingsSection settings={card.aiSettings} onChange={(v) => handleChange('aiSettings', v)} />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={handleSave} variant="contained">Save</Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+@@FOLDER: src/ui/components/PromptCardEditorSections
+@@FILE: src/ui/components/PromptCardEditorSections/AiSettingsSection.tsx
+// src/ui/components/PromptCardEditorSections/AiSettingsSection.tsx
+import React from 'react';
+import { Box, Typography, Slider, TextField } from '@mui/material';
+import type { AiSettings } from '../../../models';
+import { useSettingsStore } from '../../../state/useSettingsStore';
+
+interface AiSettingsSectionProps {
+  settings: AiSettings;
+  onChange: (newSettings: AiSettings) => void;
+}
+
+export const AiSettingsSection: React.FC<AiSettingsSectionProps> = ({ settings, onChange }) => {
+  const update = <K extends keyof AiSettings>(key: K, value: AiSettings[K]) => {
+    onChange({ ...settings, [key]: value });
+  };
+
+  const availableConnections = useSettingsStore((state) => state.aiConnections);
+  const selectedConnection = availableConnections.find(
+    (conn) => conn.id === settings.selectedConnectionId
+  );
+
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom>AI Settings</Typography>
+
+      <Box sx={{ mt: 2 }}>
+        <Typography gutterBottom>Model Name</Typography>
+        <TextField
+          fullWidth
+          value={selectedConnection?.modelName || "Unknown"}
+          disabled // 👈 Make this readonly
+        />
+      </Box>
+
+
+      <Box sx={{ mt: 3 }}>
+        <Typography gutterBottom>Temperature: {settings.temperature}</Typography>
+        <Slider
+          value={settings.temperature}
+          min={0}
+          max={1.5}
+          step={0.05}
+          onChange={(_, val) => update('temperature', val as number)}
+        />
+      </Box>
+
+      <Box sx={{ mt: 3 }}>
+        <Typography gutterBottom>Top P: {settings.topP}</Typography>
+        <Slider
+          value={settings.topP}
+          min={0}
+          max={1}
+          step={0.05}
+          onChange={(_, val) => update('topP', val as number)}
+        />
+      </Box>
+
+      <Box sx={{ mt: 3 }}>
+        <Typography gutterBottom>Max Tokens</Typography>
+        <TextField
+          type="number"
+          fullWidth
+          value={settings.maxTokens}
+          onChange={(e) => update('maxTokens', parseInt(e.target.value) || 0)}
+        />
+      </Box>
+
+      <Box sx={{ mt: 3 }}>
+        <Typography gutterBottom>Presence Penalty: {settings.presencePenalty}</Typography>
+        <Slider
+          value={settings.presencePenalty}
+          min={-2}
+          max={2}
+          step={0.1}
+          onChange={(_, val) => update('presencePenalty', val as number)}
+        />
+      </Box>
+
+      <Box sx={{ mt: 3 }}>
+        <Typography gutterBottom>Frequency Penalty: {settings.frequencyPenalty}</Typography>
+        <Slider
+          value={settings.frequencyPenalty}
+          min={-2}
+          max={2}
+          step={0.1}
+          onChange={(_, val) => update('frequencyPenalty', val as number)}
+        />
+      </Box>
+    </Box>
+  );
+};
+
+@@FILE: src/ui/components/PromptCardEditorSections/EmitSkeletonSection.tsx
+// src/ui/components/PromptCardEditorSections/EmitSkeletonSection.tsx
+import React from 'react';
+import { Box, Typography, TextField } from '@mui/material';
+
+interface EmitSkeletonSectionProps {
+  emitSkeleton: string;
+  onChange: (value: string) => void;
+}
+
+export const EmitSkeletonSection: React.FC<EmitSkeletonSectionProps> = ({ emitSkeleton, onChange }) => {
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom>Emit Skeleton</Typography>
+      <TextField
+        label="Emit Skeleton JSON"
+        multiline
+        fullWidth
+        minRows={6}
+        value={emitSkeleton}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </Box>
+  );
+};
+
+@@FILE: src/ui/components/PromptCardEditorSections/GameRulesSection.tsx
+// src/ui/components/PromptCardEditorSections/GameRulesSection.tsx
+import React from 'react';
+import { Box, Typography, TextField } from '@mui/material';
+
+interface GameRulesSectionProps {
+  gameRules: string;
+  onChange: (value: string) => void;
+}
+
+export const GameRulesSection: React.FC<GameRulesSectionProps> = ({ gameRules, onChange }) => {
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom>Game Rules</Typography>
+      <TextField
+        label="Rules Text"
+        multiline
+        fullWidth
+        minRows={6}
+        value={gameRules}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </Box>
+  );
+};
+
+@@FILE: src/ui/components/PromptCardEditorSections/PromptSection.tsx
+// src/ui/components/PromptCardEditorSections/PromptSection.tsx
+import React from 'react';
+import { Box, Typography, TextField } from '@mui/material';
+
+interface PromptSectionProps {
+  prompt: string;
+  onChange: (value: string) => void;
+}
+
+export const PromptSection: React.FC<PromptSectionProps> = ({ prompt, onChange }) => {
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom>Core Prompt</Typography>
+      <TextField
+        label="Prompt Text"
+        multiline
+        fullWidth
+        minRows={6}
+        value={prompt}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </Box>
+  );
+};
+
+@@FILE: src/ui/components/PromptCardEditorSections/WorldStateInitSection.tsx
+// src/ui/components/PromptCardEditorSections/WorldStateInitSection.tsx
+import React from 'react';
+import { Box, Typography, TextField } from '@mui/material';
+
+interface WorldStateInitSectionProps {
+  worldState: string;
+  onChange: (value: string) => void;
+}
+
+export const WorldStateInitSection: React.FC<WorldStateInitSectionProps> = ({ worldState, onChange }) => {
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom>Initial World State</Typography>
+      <TextField
+        label="World State JSON"
+        multiline
+        fullWidth
+        minRows={8}
+        value={worldState}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </Box>
+  );
+};
+
+@@FILE: src/ui/components/PromptCardList.tsx
+import React from 'react';
+import {
+  List,
+  ListItem,
+  ListItemText,
+  ListItemButton,
+  Typography,
+  Divider,
+  IconButton,
+  Box,
+} from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import type { PromptCard } from '../../models';
+
+interface PromptCardListProps {
+  cards: PromptCard[];
+  activeCardId: string | null;
+  onSelectCard: (card: PromptCard) => void;
+  onDeleteCard: (cardId: string) => void;
+  onDuplicateCard: (cardId: string) => void;
+  onExportCard: (cardId: string) => void;
+}
+
+export const PromptCardList: React.FC<PromptCardListProps> = ({
+  cards,
+  activeCardId,
+  onSelectCard,
+  onDeleteCard,
+  onDuplicateCard,
+  onExportCard,
+}) => {
+  return (
+    <>
+      <Typography variant="h6" sx={{ p: 2, pb: 1 }}>
+        Your Cards
+      </Typography>
+      <Divider />
+      <List>
+        {cards.length === 0 ? (
+          <ListItem>
+            <ListItemText
+              primary="No cards yet. Create one!"
+              sx={{ textAlign: 'center' }}
+            />
+          </ListItem>
+        ) : (
+          cards.map((card) => (
+            <ListItem
+              key={card.id}
+              disablePadding
+              secondaryAction={
+                <Box>
+                  <IconButton
+                    edge="end"
+                    aria-label="duplicate"
+                    onClick={() => onDuplicateCard(card.id)}
+                  >
+                    <ContentCopyIcon />
+                  </IconButton>
+                  <IconButton
+                    edge="end"
+                    aria-label="export"
+                    onClick={() => onExportCard(card.id)}
+                  >
+                    <FileDownloadIcon />
+                  </IconButton>
+                  <IconButton
+                    edge="end"
+                    aria-label="delete"
+                    onClick={() => onDeleteCard(card.id)}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </Box>
+              }
+            >
+              <ListItemButton
+                selected={activeCardId === card.id}
+                onClick={() => onSelectCard(card)}
+              >
+                <ListItemText primary={card.title || 'Untitled Card'} />
+              </ListItemButton>
+            </ListItem>
+          ))
+        )}
+      </List>
+    </>
+  );
+};
+
 @@FILE: src/ui/components/ProtectedRoute.tsx
 // src/ui/components/ProtectedRoute.tsx
 import React from 'react';
@@ -5331,6 +5769,297 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
 };
 
 export { StackInstructionsEditor };
+@@FILE: src/ui/components/WorldStateCategory.tsx
+import React from 'react';
+import {
+  Box,
+  Typography,
+  IconButton,
+  Collapse,
+  Checkbox,
+  List,
+  Divider,
+} from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import { WorldStateEntity } from './WorldStateEntity';
+import { WorldStateItemRow } from './WorldStateItemRow';
+
+interface WorldStateCategoryProps {
+  categoryName: string;
+  entities: Record<string, Record<string, any>>;
+  isExpanded: boolean;
+  areAllChildrenPinned: boolean;
+  isAnyChildPinned: boolean;
+  expandedEntities: Set<string>;
+  worldStatePinnedKeys: string[];
+  onToggleExpand: () => void;
+  onTogglePin: () => void;
+  onStartRename: () => void;
+  onDelete: () => void;
+  // Entity-level handlers
+  onToggleEntityExpand: (entityKey: string) => void;
+  onToggleEntityPin: (entityPath: string) => void;
+  onStartRenameEntity: (category: string, entity: string) => void;
+  onDeleteEntity: (category: string, entity: string) => void;
+  // Variable-level handlers
+  onDeleteKey: (key: string) => Promise<void>;
+  onEditKey: (key: string, value: any) => Promise<void>;
+  onToggleVariablePin: (key: string) => void;
+}
+
+export const WorldStateCategory: React.FC<WorldStateCategoryProps> = ({
+  categoryName,
+  entities,
+  isExpanded,
+  areAllChildrenPinned,
+  isAnyChildPinned,
+  expandedEntities,
+  worldStatePinnedKeys,
+  onToggleExpand,
+  onTogglePin,
+  onStartRename,
+  onDelete,
+  onToggleEntityExpand,
+  onToggleEntityPin,
+  onStartRenameEntity,
+  onDeleteEntity,
+  onDeleteKey,
+  onEditKey,
+  onToggleVariablePin,
+}) => {
+  return (
+    <Box
+      sx={{
+        mb: 2,
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 1,
+      }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          p: 1.5,
+          cursor: 'pointer',
+          backgroundColor: 'action.hover',
+        }}
+        onClick={onToggleExpand}
+      >
+        <IconButton size="small" sx={{ mr: 1 }}>
+          {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+        </IconButton>
+        <Typography variant="h6" sx={{ flexGrow: 1 }}>
+          {categoryName}
+        </Typography>
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            onStartRename();
+          }}
+        >
+          <EditIcon fontSize="small" />
+        </IconButton>
+        <Checkbox
+          checked={areAllChildrenPinned}
+          indeterminate={isAnyChildPinned && !areAllChildrenPinned}
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePin();
+          }}
+        />
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+        >
+          <DeleteIcon fontSize="small" color="error" />
+        </IconButton>
+      </Box>
+      <Collapse in={isExpanded}>
+        <Divider />
+        <List component="div" disablePadding sx={{ pl: 2, pr: 1, pt: 1 }}>
+          {Object.entries(entities).map(([entityKey, variables]) => {
+            const entityPath = `${categoryName}.${entityKey}`;
+
+            if (entityKey === '@@_direct') {
+              return Object.entries(variables).map(([varName, value]) => (
+                <WorldStateItemRow
+                  key={`${categoryName}.${varName}`}
+                  itemKey={`${categoryName}.${varName}`}
+                  value={value}
+                  onDelete={onDeleteKey}
+                  onEdit={onEditKey}
+                  isPinned={worldStatePinnedKeys.includes(`${categoryName}.${varName}`)}
+                  onTogglePin={onToggleVariablePin}
+                />
+              ));
+            }
+
+            return (
+              <WorldStateEntity
+                key={entityPath}
+                categoryName={categoryName}
+                entityKey={entityKey}
+                entityPath={entityPath}
+                variables={variables}
+                isExpanded={expandedEntities.has(entityPath)}
+                worldStatePinnedKeys={worldStatePinnedKeys}
+                onToggleExpand={() => onToggleEntityExpand(entityPath)}
+                onTogglePin={() => onToggleEntityPin(entityPath)}
+                onStartRename={() => onStartRenameEntity(categoryName, entityKey)}
+                onDelete={() => onDeleteEntity(categoryName, entityKey)}
+                onDeleteKey={onDeleteKey}
+                onEditKey={onEditKey}
+                onToggleVariablePin={onToggleVariablePin}
+              />
+            );
+          })}
+        </List>
+      </Collapse>
+    </Box>
+  );
+};
+
+@@FILE: src/ui/components/WorldStateEntity.tsx
+import React from 'react';
+import {
+  Box,
+  Typography,
+  IconButton,
+  Collapse,
+  Checkbox,
+  Divider,
+} from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import { WorldStateItemRow } from './WorldStateItemRow';
+import { flattenJsonObject } from '../../utils/jsonUtils';
+
+interface WorldStateEntityProps {
+  categoryName: string;
+  entityKey: string;
+  entityPath: string;
+  variables: Record<string, any>;
+  isExpanded: boolean;
+  worldStatePinnedKeys: string[];
+  onToggleExpand: () => void;
+  onTogglePin: () => void;
+  onStartRename: () => void;
+  onDelete: () => void;
+  onDeleteKey: (key: string) => Promise<void>;
+  onEditKey: (key: string, value: any) => Promise<void>;
+  onToggleVariablePin: (key: string) => void;
+}
+
+export const WorldStateEntity: React.FC<WorldStateEntityProps> = ({
+  entityPath,
+  variables,
+  isExpanded,
+  worldStatePinnedKeys,
+  onToggleExpand,
+  onTogglePin,
+  onStartRename,
+  onDelete,
+  onDeleteKey,
+  onEditKey,
+  onToggleVariablePin,
+}) => {
+  const childVariableKeys = React.useMemo(
+    () => Object.keys(flattenJsonObject(variables, entityPath)),
+    [variables, entityPath]
+  );
+
+  const areAllChildrenPinned =
+    childVariableKeys.length > 0 &&
+    childVariableKeys.every((key) => worldStatePinnedKeys.includes(key));
+
+  const isAnyChildPinned =
+    childVariableKeys.length > 0 &&
+    childVariableKeys.some((key) => worldStatePinnedKeys.includes(key));
+
+  const entityDisplayName = entityPath.split('.').pop() || entityPath;
+
+  return (
+    <Box
+      sx={{
+        mb: 1,
+        border: '1px dashed',
+        borderColor: 'divider',
+        borderRadius: 1,
+        mt: 1,
+      }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          p: 1,
+          cursor: 'pointer',
+        }}
+        onClick={onToggleExpand}
+      >
+        <IconButton size="small" sx={{ mr: 1 }}>
+          {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+        </IconButton>
+        <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
+          {entityDisplayName}
+        </Typography>
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            onStartRename();
+          }}
+        >
+          <EditIcon fontSize="small" />
+        </IconButton>
+        <Checkbox
+          checked={areAllChildrenPinned}
+          indeterminate={isAnyChildPinned && !areAllChildrenPinned}
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePin();
+          }}
+        />
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+        >
+          <DeleteIcon fontSize="small" color="error" />
+        </IconButton>
+      </Box>
+      <Collapse in={isExpanded}>
+        <Divider />
+        <Box sx={{ p: 1.5 }}>
+          {Object.entries(variables).map(([varName, value]) => (
+            <WorldStateItemRow
+              key={varName}
+              itemKey={`${entityPath}.${varName}`}
+              value={value}
+              onDelete={onDeleteKey}
+              onEdit={onEditKey}
+              isPinned={worldStatePinnedKeys.includes(`${entityPath}.${varName}`)}
+              onTogglePin={() => onToggleVariablePin(`${entityPath}.${varName}`)}
+            />
+          ))}
+        </Box>
+      </Collapse>
+    </Box>
+  );
+};
+
 @@FILE: src/ui/components/WorldStateItemRow.tsx
 // src/ui/components/WorldStateItemRow.tsx
 
@@ -5452,297 +6181,6 @@ export const WorldStateItemRow: React.FC<WorldStateItemRowProps> = ({
     </Box>
   );
 };
-@@FOLDER: src/ui/components/promptCardEditorParts
-@@FILE: src/ui/components/promptCardEditorParts/CorePromptEditor.tsx
-import React from 'react';
-import { TextField } from '@mui/material';
-import { CollapsibleSection } from '../CollapsibleSection';
-import { InfoDialog } from '../InfoDialog';
-
-interface Props {
-  prompt: string;
-  onPromptChange: (prompt: string) => void;
-}
-
-export const CorePromptEditor: React.FC<Props> = ({ prompt, onPromptChange }) => (
-  <CollapsibleSection title="AI Prompt" initiallyExpanded={true}>
-    <TextField
-      fullWidth
-      multiline
-      minRows={5}
-      label={
-        <>
-          Core Scenario / Persona Prompt
-          <InfoDialog
-            title="Core Scenario / Persona Prompt"
-            content="This is the most important part of your prompt card. It defines the core scenario, the AI's persona, the setting, and any foundational rules. This text is ALWAYS sent to the AI."
-          />
-        </>
-      }
-      value={prompt}
-      onChange={(e) => onPromptChange(e.target.value)}
-    />
-  </CollapsibleSection>
-);
-@@FILE: src/ui/components/promptCardEditorParts/EmitSkeletonEditor.tsx
-import React from 'react';
-import { TextField } from '@mui/material';
-import { CollapsibleSection } from '../CollapsibleSection';
-import { InfoDialog } from '../InfoDialog';
-import { DEFAULT_EMIT_SKELETON_STRING } from '../../../data/config/promptCardDefaults';
-
-interface Props {
-  emitSkeleton: string;
-  onEmitSkeletonChange: (value: string) => void;
-}
-
-export const EmitSkeletonEditor: React.FC<Props> = ({ emitSkeleton, onEmitSkeletonChange }) => (
-  <CollapsibleSection title="Emit & Tagging Skeleton" initiallyExpanded={false}>
-    <TextField
-      fullWidth
-      multiline
-      minRows={6}
-      label={
-        <>
-          Emit/Tagging Rules (JSON/Text)
-          <InfoDialog
-            title="Emit & Tagging Skeleton"
-            content={`This section provides the AI with strict rules on how to output structured data (@delta, @digest, @scene) as part of its response.`}
-          />
-        </>
-      }
-      value={emitSkeleton}
-      onChange={(e) => onEmitSkeletonChange(e.target.value)}
-      placeholder={DEFAULT_EMIT_SKELETON_STRING}
-    />
-  </CollapsibleSection>
-);
-@@FILE: src/ui/components/promptCardEditorParts/FirstTurnEditor.tsx
-import React from 'react';
-import { TextField } from '@mui/material';
-import { CollapsibleSection } from '../CollapsibleSection';
-import { InfoDialog } from '../InfoDialog';
-import { DEFAULT_FIRST_TURN_PROMPT_BLOCK } from '../../../data/config/promptCardDefaults';
-
-interface Props {
-  firstTurnOnlyBlock: string;
-  onFirstTurnChange: (value: string) => void;
-}
-
-export const FirstTurnEditor: React.FC<Props> = ({ firstTurnOnlyBlock, onFirstTurnChange }) => (
-  <CollapsibleSection title="First Turn Scene Setup" initiallyExpanded={false}>
-    <TextField
-      fullWidth
-      multiline
-      minRows={4}
-      label={
-        <>
-          Intro scene shown only on turn 1
-          <InfoDialog
-            title="First Turn Only Block"
-            content={`This text is added to the AI's prompt ONLY for the very first turn of a new game. It's ideal for setting an initial scene.`}
-          />
-        </>
-      }
-      value={firstTurnOnlyBlock}
-      onChange={(e) => onFirstTurnChange(e.target.value)}
-      placeholder={DEFAULT_FIRST_TURN_PROMPT_BLOCK}
-    />
-  </CollapsibleSection>
-);
-@@FILE: src/ui/components/promptCardEditorParts/FunctionDefsEditor.tsx
-import React from 'react';
-import { TextField } from '@mui/material';
-import { CollapsibleSection } from '../CollapsibleSection';
-import { InfoDialog } from '../InfoDialog';
-
-interface Props {
-  functionDefs: string;
-  onFunctionDefsChange: (value: string) => void;
-}
-
-export const FunctionDefsEditor: React.FC<Props> = ({ functionDefs, onFunctionDefsChange }) => (
-  <CollapsibleSection title="Function Definitions" initiallyExpanded={false}>
-    <TextField
-      fullWidth
-      multiline
-      minRows={6}
-      label={
-        <>
-          Function Definitions (JSON)
-          <InfoDialog
-            title="Function Definitions"
-            content={`Provide JSON schemas for functions the AI can 'call'. This enables structured interaction with game systems.`}
-          />
-        </>
-      }
-      value={functionDefs}
-      onChange={(e) => onFunctionDefsChange(e.target.value)}
-      placeholder="e.g., { 'name': 'action', 'parameters': { ... } }"
-    />
-  </CollapsibleSection>
-);
-@@FILE: src/ui/components/promptCardEditorParts/GameRulesEditor.tsx
-import React from 'react';
-import { TextField } from '@mui/material';
-import { CollapsibleSection } from '../CollapsibleSection';
-import { InfoDialog } from '../InfoDialog';
-
-interface Props {
-  gameRules: string;
-  onGameRulesChange: (value: string) => void;
-}
-
-export const GameRulesEditor: React.FC<Props> = ({ gameRules, onGameRulesChange }) => (
-  <CollapsibleSection title="Game Rules Skeleton" initiallyExpanded={false}>
-    <TextField
-      fullWidth
-      multiline
-      minRows={5}
-      label={
-        <>
-          Game Rules
-          <InfoDialog
-            title="Game Rules"
-            content="Textual rules or guidelines for the AI to follow throughout the game. This is always included in the AI prompt."
-          />
-        </>
-      }
-      value={gameRules}
-      onChange={(e) => onGameRulesChange(e.target.value)}
-      placeholder="Rules for the AI to follow during gameplay."
-    />
-  </CollapsibleSection>
-);
-@@FILE: src/ui/components/promptCardEditorParts/MetadataEditor.tsx
-import React from 'react';
-import { Box, Checkbox, FormControlLabel } from '@mui/material';
-import { InfoDialog } from '../InfoDialog';
-
-interface Props {
-  isPublic: boolean;
-  isExample: boolean;
-  onCardChange: (updates: { isPublic: boolean; isExample: boolean }) => void;
-}
-
-export const MetadataEditor: React.FC<Props> = ({ isPublic, isExample, onCardChange }) => (
-  <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', gap: 1 }}>
-    <FormControlLabel
-      control={
-        <Checkbox
-          checked={isPublic}
-          onChange={(e) => onCardChange({ isPublic: e.target.checked, isExample })}
-        />
-      }
-      label={
-        <>
-          Make Public (visible to others)
-          <InfoDialog
-            title="Public Card"
-            content="If checked, this prompt card will be visible and potentially usable by other users."
-          />
-        </>
-      }
-    />
-    <FormControlLabel
-      control={
-        <Checkbox
-          checked={isExample}
-          onChange={(e) => onCardChange({ isPublic, isExample: e.target.checked })}
-        />
-      }
-      label={
-        <>
-          Is Example Card (for showcase)
-          <InfoDialog
-            title="Example Card"
-            content="Mark this card as an official example. This is usually for built-in, curated content."
-          />
-        </>
-      }
-    />
-  </Box>
-);
-@@FILE: src/ui/components/promptCardEditorParts/TitleAndDescriptionEditor.tsx
-import React from 'react';
-import { TextField } from '@mui/material';
-import { CollapsibleSection } from '../CollapsibleSection';
-import { InfoDialog } from '../InfoDialog';
-
-interface Props {
-  title: string;
-  description: string | null;
-  onCardChange: (updates: { title: string; description: string | null }) => void;
-}
-
-export const TitleAndDescriptionEditor: React.FC<Props> = ({ title, description, onCardChange }) => (
-  <CollapsibleSection title="Title & Description" initiallyExpanded={true}>
-    <TextField
-      fullWidth
-      label={
-        <>
-          Title
-          <InfoDialog
-            title="Prompt Card Title"
-            content="A short, descriptive name for this prompt card. Used for display in the game library and manager."
-          />
-        </>
-      }
-      value={title}
-      onChange={(e) => onCardChange({ title: e.target.value, description })}
-      sx={{ mb: 2 }}
-    />
-    <TextField
-      fullWidth
-      label={
-        <>
-          Description
-          <InfoDialog
-            title="Prompt Card Description"
-            content="An optional, longer explanation of what this prompt card is about. It is NOT sent to the AI."
-          />
-        </>
-      }
-      multiline
-      minRows={2}
-      value={description || ''}
-      onChange={(e) => onCardChange({ title, description: e.target.value || null })}
-      placeholder="Optional: A short description for this prompt card."
-    />
-  </CollapsibleSection>
-);
-@@FILE: src/ui/components/promptCardEditorParts/WorldStateInitEditor.tsx
-import React from 'react';
-import { TextField } from '@mui/material';
-import { CollapsibleSection } from '../CollapsibleSection';
-import { InfoDialog } from '../InfoDialog';
-
-interface Props {
-  worldStateInit: string;
-  onWorldStateInitChange: (value: string) => void;
-}
-
-export const WorldStateInitEditor: React.FC<Props> = ({ worldStateInit, onWorldStateInitChange }) => (
-  <CollapsibleSection title="World State Initialization" initiallyExpanded={false}>
-    <TextField
-      fullWidth
-      multiline
-      minRows={5}
-      label={
-        <>
-          Initial World State (JSON)
-          <InfoDialog
-            title="Initial World State (JSON)"
-            content={`A JSON object defining the starting state of your game world. This is loaded once at the beginning of a new game session.`}
-          />
-        </>
-      }
-      value={worldStateInit}
-      onChange={(e) => onWorldStateInitChange(e.target.value)}
-      placeholder="{}"
-    />
-  </CollapsibleSection>
-);
 @@FOLDER: src/ui/components/stackInstructions
 @@FILE: src/ui/components/stackInstructions/DigestPolicyEditor.tsx
 // src/ui/components/stackInstructions/DigestPolicyEditor.tsx
@@ -6463,273 +6901,153 @@ export default GameLibraryScreen;
 
 @@FILE: src/ui/screens/GameScreen.tsx
 // src/ui/screens/GameScreen.tsx
-import React from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Box, Typography, Button, TextField, Paper, IconButton, CircularProgress,
-  Dialog, DialogTitle, DialogContent, DialogActions, Snackbar, Alert, Tooltip,
-  useTheme, useMediaQuery, InputAdornment,
+  Box, Paper, Typography, TextField, IconButton, Stack, Divider,
+  CircularProgress, Button,
 } from '@mui/material';
-import SendIcon from '@mui/icons-material/Send';
 import CasinoIcon from '@mui/icons-material/Casino';
-import { useGameScreenLogic } from '../../utils/hooks/useGameScreenLogic';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { LogView } from '../components/LogView';
+import { useGameStateStore } from '../../state/useGameStateStore';
+import { usePromptCardStore } from '../../state/usePromptCardStore';
 import { PinnedItemsView } from '../components/PinnedItemsView';
 
-const GameScreen: React.FC<{ onNavToggle: () => void }> = () => {
+export const GameScreen: React.FC = () => {
   const {
-    isReady,
-    isLoading,
-    isProcessingTurn,
-    gameError,
-    // gameState, // REMOVED: No longer directly used in JSX, handled in hook
+    gameLoading,
+    currentSnapshot,
     conversationHistory,
-    narratorInputText,
-    logContainerRef,
-    snackbar,
-    rollDialog,
-    handleGoToLogin,
-    handleSendAction,
-    handleInputChange,
-    handleKeyPress,
-    handleRollDice,
-    handleOpenRollDialog,
-    handleCloseRollDialog,
-    handleRollFormulaChange,
-    closeSnackbar,
-    displayedCurrentNarration,
-    fullLatestNarration, // Renamed from latestNarrationFromHook in the hook's return
-    enableStreaming,
-  } = useGameScreenLogic();
+    processTurn,
+    resetGameFromSnapshot,
+    rerollLastNarration,
+  } = useGameStateStore();
 
-  const theme = useTheme();
-  const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
-  const pinnedHeight = isSmallScreen ? theme.spacing(14) : theme.spacing(16); // USED: Now it's used below
+  const activePromptCard = usePromptCardStore((state) => state.activePromptCard);
 
-  if (isLoading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress />
-        <Typography variant="h6" ml={2}>Loading Game...</Typography>
-      </Box>
-    );
-  }
+  const [userInput, setUserInput] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  if (!isReady) {
-    return (
-      <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
-        <Typography variant="h6" color="error">Game Not Initialized</Typography>
-        <Typography variant="body1" sx={{ my: 2 }}>
-          There is no active game session. Please start a new game from the library.
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [conversationHistory]);
+
+  const handleSubmit = async () => {
+    if (!userInput.trim()) return;
+    await processTurn(userInput);
+    setUserInput('');
+  };
+
+  const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  }, [userInput]);
+
+  const handleReset = () => {
+    if (currentSnapshot) {
+      resetGameFromSnapshot(currentSnapshot);
+    }
+  };
+
+  const handleReroll = () => {
+    rerollLastNarration();
+  };
+
+  const renderMessages = () => {
+    return conversationHistory.map((msg, index) => (
+      <Box key={index} sx={{ mb: 2 }}>
+        <Typography variant="subtitle2" color="text.secondary">
+          {msg.role === 'user' ? 'Player' : 'Narrator'}
         </Typography>
-        <Button variant="contained" onClick={handleGoToLogin}>Go to Game Library</Button>
-        {gameError && <Alert severity="error" sx={{ mt: 2 }}>{gameError}</Alert>}
+        <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+          {msg.content}
+        </Typography>
+        <Divider sx={{ my: 1 }} />
+      </Box>
+    ));
+  };
+
+  if (gameLoading || !activePromptCard) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Typography variant="h6">Loading game...</Typography>
+        <CircularProgress sx={{ mt: 2 }} />
       </Box>
     );
   }
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100vh',
-        position: 'relative',
-        overflow: 'hidden',
-        px: isSmallScreen ? 1 : 2,
-        pt: pinnedHeight, // FIXED: Now using pinnedHeight
-      }}
-    >
-      {/* Floating pinned items */}
-      <Box
-        sx={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 10,
-          backdropFilter: 'blur(8px)',
-          backgroundColor: 'rgba(255,255,255,0.1)',
-          borderBottom: `1px solid ${theme.palette.divider}`,
-          boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-          px: isSmallScreen ? 1 : 2,
-          py: isSmallScreen ? 1 : 2,
-          pointerEvents: 'none',
-        }}
-      >
-        <PinnedItemsView />
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <PinnedItemsView />
+      <Box sx={{ flex: 1, overflowY: 'auto', px: 3, pt: 1 }}>
+        {renderMessages()}
       </Box>
 
-      {/* Scrollable narration area */}
-      <Paper
-        ref={logContainerRef}
-        elevation={1}
-        sx={{
-          flexGrow: 1,
-          overflowY: 'auto',
-          p: isSmallScreen ? 1 : 2,
-          typography: isSmallScreen ? 'body2' : 'body1',
-          backgroundColor: theme.palette.background.paper,
-        }}
-      >
-        <LogView
-          conversationHistory={conversationHistory}
-          currentStreamingNarration={displayedCurrentNarration}
-          isProcessingTurn={isProcessingTurn}
-          fullLatestNarration={fullLatestNarration}
-          enableStreaming={enableStreaming}
-        />
-      </Paper>
-
-      {/* Input area */}
-      <Box sx={{ position: 'relative', mt: 1 }}>
+      <Box sx={{ p: 2, borderTop: '1px solid #ccc', display: 'flex', alignItems: 'center' }}>
         <TextField
           fullWidth
+          placeholder="Type your action..."
           multiline
-          maxRows={4}
-          variant="outlined"
-          placeholder="What do you do?"
-          value={narratorInputText}
-          onChange={(e) => handleInputChange(e.target.value)}
+          minRows={2}
+          value={userInput}
+          onChange={(e) => setUserInput(e.target.value)}
           onKeyPress={handleKeyPress}
-          disabled={isProcessingTurn}
-          size={isSmallScreen ? 'small' : 'medium'}
-          InputProps={{
-            endAdornment: (
-              <InputAdornment position="end">
-                <IconButton
-                  color="primary"
-                  onClick={handleSendAction}
-                  disabled={isProcessingTurn || narratorInputText.trim() === ''}
-                >
-                  {isProcessingTurn ? <CircularProgress size={20} color="inherit" /> : <SendIcon />}
-                </IconButton>
-              </InputAdornment>
-            ),
-          }}
+          inputRef={inputRef}
         />
-
-        {/* Floating dice icon */}
-        <Tooltip title="Roll Dice (Right-click to change formula)">
-          <IconButton
-            color="secondary"
-            onClick={handleRollDice}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              handleOpenRollDialog();
-            }}
-            sx={{
-              position: 'absolute',
-              right: 60,
-              top: -30,
-              zIndex: 20,
-              backgroundColor: theme.palette.background.paper,
-              border: '1px solid',
-              borderColor: 'divider',
-              boxShadow: 2,
-              '&:hover': { backgroundColor: theme.palette.action.hover },
-            }}
-          >
-            <CasinoIcon />
-          </IconButton>
-        </Tooltip>
+        <IconButton onClick={handleSubmit} size="large" sx={{ ml: 1 }}>
+          <CasinoIcon />
+        </IconButton>
       </Box>
 
-      {/* Dice Roll Dialog */}
-      <Dialog open={rollDialog.open} onClose={handleCloseRollDialog}>
-        <DialogTitle>Dice Roll</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Dice Formula"
-            type="text"
-            fullWidth
-            variant="standard"
-            value={rollDialog.formula}
-            onChange={(e) => handleRollFormulaChange(e.target.value)}
-            helperText="e.g., 2d6, 1d20+5, 3d8-2"
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseRollDialog}>Cancel</Button>
-          <Button onClick={handleRollDice}>Roll & Send</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Snackbar */}
-      <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={closeSnackbar}>
-        <Alert onClose={closeSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      <Stack direction="row" spacing={2} sx={{ p: 2, justifyContent: 'flex-end' }}>
+        <Button variant="outlined" onClick={handleReset} startIcon={<RestartAltIcon />}>
+          Reset
+        </Button>
+        <Button variant="outlined" onClick={handleReroll}>
+          Reroll
+        </Button>
+      </Stack>
     </Box>
   );
 };
 
-export default GameScreen;
 @@FILE: src/ui/screens/LogViewerScreen.tsx
 // src/ui/screens/LogViewerScreen.tsx
+
 import React from 'react';
-import {
-  Box, Typography, Button, AppBar, Toolbar, IconButton, Menu, MenuItem,
-  Checkbox, FormControlLabel, Paper, CircularProgress, Alert,
-} from '@mui/material';
-import MenuIcon from '@mui/icons-material/Menu';
-import { useLogViewerLogic } from '../../utils/hooks/useLogViewerLogic';
-import { LogViewMode } from '../../utils/types';
-import { CollapsibleLogEntry } from '../components/CollapsibleLogEntry';
+import { Box, Typography, Paper } from '@mui/material';
+import { useGameStateStore } from '../../state/useGameStateStore';
+import type { Message, LogEntry } from '../../models';
 
-const LogViewerScreen: React.FC = () => {
-  const {
-    logEntries, selectedLogViewModes, isLoading, error,
-    menuAnchorEl, isMenuOpen, handleMenuClick, handleMenuClose, handleCheckboxChange,
-  } = useLogViewerLogic();
-
-  if (isLoading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress /> <Typography variant="h6" ml={2}>Loading Logs...</Typography>
-      </Box>
-    );
-  }
+export const LogViewerScreen: React.FC = () => {
+  const conversationHistory = useGameStateStore(state => state.conversationHistory);
+  const logEntries = useGameStateStore(state => state.logEntries);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
-      <Box sx={{ mb: 2 }}>
-        <Typography variant="h5" component="h1">Logs</Typography>
-      </Box>
-      <Menu anchorEl={menuAnchorEl} open={isMenuOpen} onClose={handleMenuClose}>
-        {Object.values(LogViewMode).map((mode) => (
-          <MenuItem key={mode} onClick={() => handleCheckboxChange(mode)}>
-            <FormControlLabel
-              control={<Checkbox checked={selectedLogViewModes.includes(mode)} />}
-              label={mode}
-              sx={{ pointerEvents: 'none' }} // Let the MenuItem handle the click
-            />
-          </MenuItem>
-        ))}
-      </Menu>
+    <Box p={2}>
+      <Typography variant="h6">Conversation History</Typography>
+      {conversationHistory.map((msg: Message, index: number) => (
+        <Paper key={index} sx={{ p: 1, my: 1 }}>
+          <Typography variant="subtitle2">{msg.role}</Typography>
+          <Typography variant="body2">{msg.content}</Typography>
+        </Paper>
+      ))}
 
-      {error && <Alert severity="error" sx={{ m: 2 }}>Error: {error}</Alert>}
-
-      <Paper elevation={1} sx={{ flexGrow: 1, m: 2, overflowY: 'auto' }}>
-        {logEntries.length === 0 ? (
-          <Box sx={{ textAlign: 'center', p: 4 }}><Typography color="text.secondary">No log entries for this game yet.</Typography></Box>
-        ) : (
-          logEntries.map((entry) => (
-            <CollapsibleLogEntry
-              key={entry.turnNumber}
-              entry={entry}
-              selectedLogViewModes={selectedLogViewModes}
-            />
-          ))
-        )}
-      </Paper>
+      <Typography variant="h6" mt={4}>Log Entries</Typography>
+      {logEntries.map((entry: LogEntry, index: number) => (
+        <Paper key={index} sx={{ p: 1, my: 1 }}>
+          <Typography variant="subtitle2">Turn {entry.turnNumber}</Typography>
+          <Typography variant="body2">{entry.prose}</Typography>
+        </Paper>
+      ))}
     </Box>
   );
 };
 
-export default LogViewerScreen;
 @@FILE: src/ui/screens/LoginScreen.tsx
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom'; // Add this
@@ -6809,25 +7127,20 @@ export default LoginScreen;
 @@FILE: src/ui/screens/PromptCardEditor.tsx
 // src/ui/screens/PromptCardEditor.tsx
 import React from 'react';
-import { Box, Divider, FormControlLabel, Switch } from '@mui/material';
-import type{ PromptCard, AiConnection, StackInstructions, AiSettings } from '../../models';
+import { Box, Divider, FormControlLabel, Switch, TextField } from '@mui/material';
+import type { PromptCard, AiConnection } from '../../models';
 
-// Import the existing modular editors
+// Import the more complex, reusable editor components
 import { AiSettingsEditor } from '../components/AiSettingsEditor';
 import { StackInstructionsEditor } from '../components/StackInstructionsEditor';
 import { CollapsibleSection } from '../components/CollapsibleSection';
 import { InfoDialog } from '../components/InfoDialog';
 
-// Import the new decomposed parts
-import { TitleAndDescriptionEditor } from '../components/promptCardEditorParts/TitleAndDescriptionEditor';
-import { CorePromptEditor } from '../components/promptCardEditorParts/CorePromptEditor';
-import { FirstTurnEditor } from '../components/promptCardEditorParts/FirstTurnEditor';
-import { EmitSkeletonEditor } from '../components/promptCardEditorParts/EmitSkeletonEditor';
-import { WorldStateInitEditor } from '../components/promptCardEditorParts/WorldStateInitEditor';
-import { GameRulesEditor } from '../components/promptCardEditorParts/GameRulesEditor';
-import { FunctionDefsEditor } from '../components/promptCardEditorParts/FunctionDefsEditor';
-import { MetadataEditor } from '../components/promptCardEditorParts/MetadataEditor';
-
+// Import constants for placeholders
+import {
+  DEFAULT_FIRST_TURN_PROMPT_BLOCK,
+  DEFAULT_EMIT_SKELETON_STRING,
+} from '../../data/config/promptCardDefaults';
 
 interface PromptCardEditorProps {
   card: PromptCard;
@@ -6840,44 +7153,98 @@ const PromptCardEditor: React.FC<PromptCardEditorProps> = ({
   onCardChange,
   availableConnections,
 }) => {
-  // Create specific change handlers for children to call
+  // A single handler to update the parent component's state
   const handleFieldChange = (updates: Partial<PromptCard>) => {
     onCardChange({ ...card, ...updates });
   };
 
   return (
-    <Box sx={{ p: 1, pb: 4 }}>
-      <TitleAndDescriptionEditor
-        title={card.title}
-        description={card.description}
-        onCardChange={(updates) => handleFieldChange(updates)}
-      />
+    <Box sx={{ p: 2, pb: 4 }}>
+      {/* --- Title & Description Section (Merged) --- */}
+      <CollapsibleSection title="Title & Description" initiallyExpanded={true}>
+        <TextField
+          fullWidth
+          label="Title"
+          value={card.title}
+          onChange={(e) => handleFieldChange({ title: e.target.value })}
+          sx={{ mb: 2 }}
+        />
+        <TextField
+          fullWidth
+          label="Description"
+          multiline
+          minRows={2}
+          value={card.description || ''}
+          onChange={(e) => handleFieldChange({ description: e.target.value || null })}
+          placeholder="Optional: A short description for this card (not sent to AI)."
+        />
+      </CollapsibleSection>
 
-      <CorePromptEditor
-        prompt={card.prompt}
-        onPromptChange={(prompt) => handleFieldChange({ prompt })}
-      />
+      {/* --- Core Prompt Section (Merged) --- */}
+      <CollapsibleSection title="AI Prompt" initiallyExpanded={true}>
+        <TextField
+          fullWidth
+          multiline
+          minRows={5}
+          label="Core Scenario / Persona Prompt"
+          value={card.prompt}
+          onChange={(e) => handleFieldChange({ prompt: e.target.value })}
+        />
+      </CollapsibleSection>
 
-      <FirstTurnEditor
-        firstTurnOnlyBlock={card.firstTurnOnlyBlock}
-        onFirstTurnChange={(firstTurnOnlyBlock) => handleFieldChange({ firstTurnOnlyBlock })}
-      />
+      {/* --- First Turn Section (Merged) --- */}
+      <CollapsibleSection title="First Turn Scene Setup" initiallyExpanded={false}>
+        <TextField
+          fullWidth
+          multiline
+          minRows={4}
+          label="Intro scene shown only on turn 1"
+          value={card.firstTurnOnlyBlock}
+          onChange={(e) => handleFieldChange({ firstTurnOnlyBlock: e.target.value })}
+          placeholder={DEFAULT_FIRST_TURN_PROMPT_BLOCK}
+        />
+      </CollapsibleSection>
 
-      <EmitSkeletonEditor
-        emitSkeleton={card.emitSkeleton}
-        onEmitSkeletonChange={(emitSkeleton) => handleFieldChange({ emitSkeleton })}
-      />
+      {/* --- Emit Skeleton Section (Merged) --- */}
+      <CollapsibleSection title="Emit & Tagging Skeleton" initiallyExpanded={false}>
+        <TextField
+          fullWidth
+          multiline
+          minRows={6}
+          label="AI Output Structure & Rules"
+          value={card.emitSkeleton}
+          onChange={(e) => handleFieldChange({ emitSkeleton: e.target.value })}
+          placeholder={DEFAULT_EMIT_SKELETON_STRING}
+        />
+      </CollapsibleSection>
 
-      <WorldStateInitEditor
-        worldStateInit={card.worldStateInit}
-        onWorldStateInitChange={(worldStateInit) => handleFieldChange({ worldStateInit })}
-      />
+      {/* --- World State Init Section (Merged) --- */}
+      <CollapsibleSection title="World State Initialization" initiallyExpanded={false}>
+        <TextField
+          fullWidth
+          multiline
+          minRows={5}
+          label="Initial World State (JSON)"
+          value={card.worldStateInit}
+          onChange={(e) => handleFieldChange({ worldStateInit: e.target.value })}
+          placeholder="{}"
+        />
+      </CollapsibleSection>
 
-      <GameRulesEditor
-        gameRules={card.gameRules}
-        onGameRulesChange={(gameRules) => handleFieldChange({ gameRules })}
-      />
+      {/* --- Game Rules Section (Merged) --- */}
+      <CollapsibleSection title="Game Rules Skeleton" initiallyExpanded={false}>
+        <TextField
+          fullWidth
+          multiline
+          minRows={5}
+          label="Game Rules"
+          value={card.gameRules}
+          onChange={(e) => handleFieldChange({ gameRules: e.target.value })}
+          placeholder="Rules for the AI to follow during gameplay."
+        />
+      </CollapsibleSection>
 
+      {/* --- AI Settings Section (Uses Reusable Component) --- */}
       <AiSettingsEditor
         label="Primary AI Settings"
         settings={card.aiSettings}
@@ -6885,6 +7252,7 @@ const PromptCardEditor: React.FC<PromptCardEditorProps> = ({
         availableConnections={availableConnections}
       />
 
+      {/* --- Helper AI Settings Section (Uses Reusable Component) --- */}
       <CollapsibleSection title="Helper AI Settings" initiallyExpanded={false}>
         <FormControlLabel
           control={
@@ -6899,29 +7267,54 @@ const PromptCardEditor: React.FC<PromptCardEditorProps> = ({
         <Divider sx={{ mb: 2 }} />
         <Box sx={{ opacity: card.isHelperAiEnabled ? 1 : 0.5, pointerEvents: card.isHelperAiEnabled ? 'auto' : 'none' }}>
           <AiSettingsEditor
-            label=""
+            label="" // No label for the nested editor
             settings={card.helperAiSettings}
             onSettingsChange={(helperAiSettings) => handleFieldChange({ helperAiSettings })}
             availableConnections={availableConnections}
           />
         </Box>
       </CollapsibleSection>
+      
+      {/* --- Function Definitions Section (Merged) --- */}
+      <CollapsibleSection title="Function Definitions" initiallyExpanded={false}>
+        <TextField
+          fullWidth
+          multiline
+          minRows={6}
+          label="Function Definitions (JSON)"
+          value={card.functionDefs}
+          onChange={(e) => handleFieldChange({ functionDefs: e.target.value })}
+          placeholder="e.g., { 'name': 'action', 'parameters': { ... } }"
+        />
+      </CollapsibleSection>
 
-      <FunctionDefsEditor
-        functionDefs={card.functionDefs}
-        onFunctionDefsChange={(functionDefs) => handleFieldChange({ functionDefs })}
-      />
-
+      {/* --- Stack Instructions Section (Uses Reusable Component) --- */}
       <StackInstructionsEditor
         stackInstructions={card.stackInstructions}
         onStackInstructionsChange={(stackInstructions) => handleFieldChange({ stackInstructions })}
       />
 
-      <MetadataEditor
-        isPublic={card.isPublic}
-        isExample={card.isExample}
-        onCardChange={(updates) => handleFieldChange(updates)}
-      />
+      {/* --- Metadata Section (Merged) --- */}
+       <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={card.isPublic}
+              onChange={(e) => handleFieldChange({ isPublic: e.target.checked })}
+            />
+          }
+          label="Make Public (visible to others)"
+        />
+        <FormControlLabel
+          control={
+            <Switch
+              checked={card.isExample}
+              onChange={(e) => handleFieldChange({ isExample: e.target.checked })}
+            />
+          }
+          label="Is Example Card (for showcase)"
+        />
+      </Box>
     </Box>
   );
 };
@@ -6929,73 +7322,186 @@ const PromptCardEditor: React.FC<PromptCardEditorProps> = ({
 export default PromptCardEditor;
 @@FILE: src/ui/screens/PromptCardManager.tsx
 // src/ui/screens/PromptCardManager.tsx
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Box,
-  Typography,
-  Button,
-  List,
-  ListItem,
-  ListItemText,
-  IconButton,
-  Paper,
-  Divider,
-  CircularProgress,
-  Alert,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Snackbar,
-  ListItemButton
+  Box, Typography, Button, Paper, Divider, CircularProgress,
+  Alert, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Snackbar,
 } from '@mui/material';
-import MenuIcon from '@mui/icons-material/Menu';
 import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
-import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../state/useAuthStore';
-import { usePromptCardManagerLogic } from '../../utils/hooks/usePromptCardManagerLogic';
+import { usePromptCardStore } from '../../state/usePromptCardStore';
+import { useGameStateStore } from '../../state/useGameStateStore';
+import { useSettingsStore } from '../../state/useSettingsStore';
+import type { PromptCard, NewPromptCardData } from '../../models';
+import {
+  defaultStackInstructions, defaultAiSettingsInCard,
+  DEFAULT_FIRST_TURN_PROMPT_BLOCK, DEFAULT_EMIT_SKELETON_STRING,
+} from '../../data/config/promptCardDefaults';
 import PromptCardEditor from './PromptCardEditor';
-import type { PromptCard } from '../../models';
-
-
+import { PromptCardList } from '../components/PromptCardList';
 
 const PromptCardManager: React.FC = () => {
+  // --- Start of Co-located Logic (from the old usePromptCardManagerLogic hook) ---
   const { user } = useAuthStore();
+  const navigate = useNavigate();
+
   const {
-    isLoading,
-    error,
-    promptCards,
-    activePromptCard,
-    localEditedCard,
-    isCardDirty,
-    aiConnections,
-    saveDialog,
-    snackbar,
-    handleCardSelect,
-    handleLocalCardChange,
-    handleSaveCard,
-    handleRevert,
-    handleNewCard,
-    handleDeleteCard,
-    handleDuplicateCard,
-    handleImport,
-    handleExport,
-    handleStartGame,
-    setSaveDialog,
-    setSaveAsNewTitle,
-    closeSnackbar,
-  } = usePromptCardManagerLogic(user);
+    promptCards, activePromptCard, isLoading, error, fetchPromptCards, setActivePromptCard,
+    addPromptCard, updatePromptCard, duplicatePromptCard, deletePromptCard,
+    importPromptCards, exportPromptCard,
+  } = usePromptCardStore();
+
+  const { initializeGame } = useGameStateStore();
+  const { aiConnections, fetchAiConnections } = useSettingsStore();
+
+  const [localEditedCard, setLocalEditedCard] = useState<PromptCard | null>(null);
+  const [isCardDirty, setIsCardDirty] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [saveAsNewTitle, setSaveAsNewTitle] = useState('');
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({ open: false, message: '', severity: 'info' });
+
+  useEffect(() => {
+    if (user?.uid) { // FIX: Use user.uid
+      fetchPromptCards(user.uid);
+      fetchAiConnections(user.uid);
+    }
+  }, [user?.uid, fetchPromptCards, fetchAiConnections]);
+
+  useEffect(() => {
+    setLocalEditedCard(activePromptCard ? { ...activePromptCard } : null);
+    setIsCardDirty(false);
+  }, [activePromptCard]);
+
+  const showSnackbar = useCallback((message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
+    setSnackbar({ open: true, message, severity });
+  }, []);
+
+  const handleCardSelect = useCallback((card: PromptCard) => {
+    if (isCardDirty) {
+      if (window.confirm('You have unsaved changes that will be lost. Are you sure you want to switch?')) {
+        setActivePromptCard(card);
+      }
+    } else {
+      setActivePromptCard(card);
+    }
+  }, [isCardDirty, setActivePromptCard]);
+
+  const handleLocalCardChange = useCallback((updatedCard: PromptCard) => {
+    setLocalEditedCard(updatedCard);
+    setIsCardDirty(JSON.stringify(updatedCard) !== JSON.stringify(activePromptCard));
+  }, [activePromptCard]);
+
+  const handleSaveCard = useCallback(async (saveAsNew: boolean = false) => {
+    if (!user?.uid || !localEditedCard) return; // FIX: Use user.uid
+    try {
+      let savedCard: PromptCard | null = null;
+      if (saveAsNew) {
+        const newCardData: NewPromptCardData = { ...localEditedCard, title: saveAsNewTitle || `${localEditedCard.title} (Copy)` };
+        savedCard = await addPromptCard(user.uid, newCardData); // FIX: Use correct action name
+      } else {
+        savedCard = await updatePromptCard(user.uid, localEditedCard.id, localEditedCard);
+      }
+      if (savedCard) {
+        setActivePromptCard(savedCard);
+        showSnackbar('Card saved successfully!', 'success');
+      }
+    } catch (e) {
+      showSnackbar(`Failed to save card: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
+    } finally {
+      setShowSaveDialog(false);
+      setSaveAsNewTitle('');
+    }
+  }, [user?.uid, localEditedCard, saveAsNewTitle, addPromptCard, updatePromptCard, setActivePromptCard, showSnackbar]);
+
+  const handleRevert = useCallback(() => {
+    if (activePromptCard) {
+      setLocalEditedCard({ ...activePromptCard });
+      setIsCardDirty(false);
+      showSnackbar('Changes reverted.', 'info');
+    }
+  }, [activePromptCard, showSnackbar]);
+
+  const handleNewCard = useCallback(async () => {
+    if (!user?.uid) return; // FIX: Use user.uid
+    const defaultConnectionId = aiConnections.length > 0 ? aiConnections[0].id : "";
+    const newCardData: NewPromptCardData = {
+      title: "New Untitled Card", prompt: "A new adventure begins...",
+      description: null, firstTurnOnlyBlock: DEFAULT_FIRST_TURN_PROMPT_BLOCK,
+      stackInstructions: defaultStackInstructions, emitSkeleton: DEFAULT_EMIT_SKELETON_STRING,
+      worldStateInit: '{}', gameRules: '',
+      aiSettings: { ...defaultAiSettingsInCard, selectedConnectionId: defaultConnectionId },
+      helperAiSettings: { ...defaultAiSettingsInCard, selectedConnectionId: defaultConnectionId },
+      isHelperAiEnabled: false, tags: [], isExample: false, functionDefs: '', isPublic: false,
+    };
+    const createdCard = await addPromptCard(user.uid, newCardData); // FIX: Use correct action name
+    if (createdCard) {
+      setActivePromptCard(createdCard);
+      showSnackbar('New card created!', 'success');
+    }
+  }, [user?.uid, aiConnections, addPromptCard, setActivePromptCard, showSnackbar]);
+  
+  const handleDeleteCard = useCallback(async (cardId: string) => {
+    if (!user?.uid || !window.confirm("Are you sure you want to delete this card forever?")) return; // FIX: Use user.uid
+    await deletePromptCard(user.uid, cardId);
+    showSnackbar('Card deleted.', 'success');
+  }, [user?.uid, deletePromptCard, showSnackbar]);
+
+  const handleDuplicateCard = useCallback(async (cardId: string) => {
+    if (!user?.uid) return; // FIX: Use user.uid
+    await duplicatePromptCard(user.uid, cardId);
+    showSnackbar('Card duplicated!', 'success');
+  }, [user?.uid, duplicatePromptCard, showSnackbar]);
+
+  const handleImport = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0 || !user?.uid) return; // FIX: Use user.uid
+    try {
+      const allCards: NewPromptCardData[] = [];
+      for (const file of files) {
+        const content = await file.text();
+        const parsed = JSON.parse(content);
+        allCards.push(...(Array.isArray(parsed) ? parsed : [parsed]));
+      }
+      await importPromptCards(user.uid, allCards);
+      showSnackbar(`Successfully imported ${allCards.length} card(s)!`, 'success');
+    } catch (err) {
+      showSnackbar(`Import failed: ${err instanceof Error ? err.message : 'Invalid JSON'}`, 'error');
+    }
+    event.target.value = '';
+  }, [user?.uid, importPromptCards, showSnackbar]);
+
+  const handleExport = useCallback(async (cardId: string) => {
+    if (!user?.uid) return; // FIX: Use user.uid
+    const card = await exportPromptCard(user.uid, cardId);
+    if (card) {
+      const blob = new Blob([JSON.stringify(card, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `prompt_card_${card.title.replace(/\s/g, '_')}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      a.remove();
+      showSnackbar(`Exported "${card.title}".`, 'success');
+    }
+  }, [user?.uid, exportPromptCard, showSnackbar]);
+
+  const handleStartGame = useCallback(async () => {
+    if (!user?.uid || !activePromptCard) return; // FIX: Use user.uid
+    if (isCardDirty) { showSnackbar('Please save changes before starting a game.', 'warning'); return; }
+    await initializeGame(user.uid, activePromptCard.id);
+    navigate('/game');
+  }, [user?.uid, activePromptCard, isCardDirty, initializeGame, navigate, showSnackbar]);
+  
+  // --- End of Co-located Logic ---
 
   if (isLoading && !promptCards.length) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress />
-        <Typography variant="h6" ml={2}>Loading Prompt Cards...</Typography>
+        <CircularProgress /><Typography variant="h6" ml={2}>Loading Prompt Cards...</Typography>
       </Box>
     );
   }
@@ -7003,99 +7509,60 @@ const PromptCardManager: React.FC = () => {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h5" component="h1">
-          Prompt Cards
-        </Typography>
+        <Typography variant="h5" component="h1">Prompt Cards Manager</Typography>
       </Box>
-
       <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
-        <Button variant="contained" onClick={handleNewCard} startIcon={<AddIcon />}>
-          New Card
-        </Button>
+        <Button variant="contained" onClick={handleNewCard} startIcon={<AddIcon />}>New Card</Button>
         <Button variant="outlined" component="label" startIcon={<FileUploadIcon />}>
-          Import Cards
-          <input type="file" hidden accept=".json" onChange={handleImport} multiple/>
+          Import Card(s)<input type="file" hidden accept=".json" onChange={handleImport} multiple/>
         </Button>
       </Box>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          Error: {error}
-        </Alert>
-      )}
-
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden', gap: 2 }}>
-        <Paper elevation={1} sx={{ flex: 1, minWidth: 250, maxWidth: 350, overflowY: 'auto' }}>
-          <Typography variant="h6" sx={{ p: 2, pb: 1 }}>Your Cards</Typography>
-          <Divider />
-          <List>
-            {promptCards.length === 0 ? (
-              <ListItem><ListItemText primary="No cards yet. Create one!" sx={{ textAlign: 'center' }} /></ListItem>
-            ) : (
-              promptCards.map((card: PromptCard) => (
-                <ListItem key={card.id} disablePadding component="li">
-                  <ListItemButton
-                    selected={activePromptCard?.id === card.id}
-                    onClick={() => handleCardSelect(card)}
-                    sx={{
-                      py: 1,
-                      pr: 2,
-                      cursor: 'pointer',
-                      '&:hover': {
-                        backgroundColor: (theme) => theme.palette.action.hover,
-                      },
-                    }}
-                  >
-                    <ListItemText primary={card.title || 'Untitled Card'} />
-                  </ListItemButton>
-                </ListItem>
-
-              ))
-            )}
-          </List>
+        <Paper elevation={1} sx={{ flex: 1, minWidth: 250, maxWidth: 400, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+          {/* FIX: Use the new PromptCardList component */}
+          <PromptCardList
+            cards={promptCards}
+            activeCardId={activePromptCard?.id || null}
+            onSelectCard={handleCardSelect}
+            onDeleteCard={handleDeleteCard}
+            onDuplicateCard={handleDuplicateCard}
+            onExportCard={handleExport}
+          />
         </Paper>
-
         <Paper elevation={1} sx={{ flex: 2, minWidth: 400, overflowY: 'auto' }}>
-          {!activePromptCard || !localEditedCard ? (
+          {!localEditedCard ? (
             <Box sx={{ textAlign: 'center', p: 4, mt: 4 }}>
-              <Typography variant="h6" color="text.secondary">Select a card or create a new one to start editing.</Typography>
+              <Typography variant="h6" color="text.secondary">Select a card or create a new one.</Typography>
             </Box>
           ) : (
-            <Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, borderBottom: '1px solid', borderColor: 'divider', position: 'sticky', top: 0, backgroundColor: 'background.paper', zIndex: 1 }}>
-                <Typography variant="h6" component="h2">{localEditedCard.title}</Typography>
+            <>
+              <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider', position: 'sticky', top: 0, backgroundColor: 'background.paper', zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="h6">{localEditedCard.title}</Typography>
                 <Box sx={{ display: 'flex', gap: 1 }}>
-                  {isCardDirty && (
-                    <>
-                      <Button variant="outlined" onClick={handleRevert}>Revert</Button>
-                      <Button variant="contained" onClick={() => handleSaveCard(false)}>Save Changes</Button>
-                    </>
-                  )}
-                  <Button variant="outlined" onClick={() => setSaveDialog(true)}>Save As...</Button>
-                  <Button variant="contained" color="primary" onClick={handleStartGame} startIcon={<PlayArrowIcon />} disabled={isCardDirty}>
-                    Start Game
-                  </Button>
+                  {isCardDirty && (<>
+                    <Button variant="outlined" onClick={handleRevert}>Revert</Button>
+                    <Button variant="contained" onClick={() => handleSaveCard(false)}>Save</Button>
+                  </>)}
+                  <Button variant="outlined" onClick={() => setShowSaveDialog(true)}>Save As...</Button>
+                  <Button variant="contained" color="primary" onClick={handleStartGame} startIcon={<PlayArrowIcon />} disabled={isCardDirty}>Start Game</Button>
                 </Box>
               </Box>
               <PromptCardEditor card={localEditedCard} onCardChange={handleLocalCardChange} availableConnections={aiConnections} />
-            </Box>
+            </>
           )}
         </Paper>
       </Box>
-
-      <Dialog open={saveDialog.open} onClose={() => setSaveDialog(false)}>
-        <DialogTitle>Save Prompt Card As New</DialogTitle>
-        <DialogContent><TextField autoFocus margin="dense" label="New Card Title" type="text" fullWidth variant="outlined" value={saveDialog.title} onChange={(e) => setSaveAsNewTitle(e.target.value)} placeholder={`${localEditedCard?.title} (Copy)`} /></DialogContent>
+      <Dialog open={showSaveDialog} onClose={() => setShowSaveDialog(false)}>
+        <DialogTitle>Save As New Card</DialogTitle>
+        <DialogContent><TextField autoFocus margin="dense" label="New Title" type="text" fullWidth variant="outlined" value={saveAsNewTitle} onChange={(e) => setSaveAsNewTitle(e.target.value)} placeholder={`${localEditedCard?.title} (Copy)`} /></DialogContent>
         <DialogActions>
-          <Button onClick={() => setSaveDialog(false)}>Cancel</Button>
+          <Button onClick={() => setShowSaveDialog(false)}>Cancel</Button>
           <Button onClick={() => handleSaveCard(true)}>Save</Button>
         </DialogActions>
       </Dialog>
-
-      <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={closeSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-        <Alert onClose={closeSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
-          {snackbar.message}
-        </Alert>
+      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(prev => ({...prev, open: false}))} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert onClose={() => setSnackbar(prev => ({...prev, open: false}))} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}</Alert>
       </Snackbar>
     </Box>
   );
@@ -7459,59 +7926,123 @@ function parseDumpToTree(dump: string) {
 
 @@FILE: src/ui/screens/WorldStateScreen.tsx
 // src/ui/screens/WorldStateScreen.tsx
-import React from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
-  Box, Typography, Button, IconButton, Paper, 
-  Alert, List, Collapse, Checkbox, TextField, Dialog, DialogTitle, DialogContent,
-  DialogActions, Divider,
+  Box, Typography, Button, Paper, 
+  Alert, Dialog, DialogTitle, DialogContent,
+  DialogActions, TextField,
 } from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
-import { useGameStateStore, selectWorldStatePinnedKeys } from '../../state/useGameStateStore'; // Selectors imported
-import { useWorldStateViewLogic } from '../../utils/hooks/useWorldStateViewLogic';
-import { WorldStateItemRow } from '../components/WorldStateItemRow';
-import { debugLog, errorLog } from '../../utils/debug';
+import {
+  useGameStateStore,
+  selectWorldStatePinnedKeys,
+  selectCurrentGameState,
+} from '../../state/useGameStateStore';
+import { flattenJsonObject, getNestedValue } from '../../utils/jsonUtils';
+import { WorldStateCategory } from '../components/WorldStateCategory';
 
 const WorldStateScreen: React.FC = () => {
-  const worldStatePinnedKeys = useGameStateStore(selectWorldStatePinnedKeys); // Use selector
-  const { gameError } = useGameStateStore(); // Top-level state is fine
+  // --- Start of Co-located Logic (from the old useWorldStateViewLogic hook) ---
 
-  // --- Keep your existing DEBUG LINES here for verification ---
-  debugLog('%c[WorldStateScreen.tsx] Component re-rendered.', 'color: #008080; font-weight: bold;');
-  debugLog('[WorldStateScreen.tsx] Pinned Keys (from store selector):', worldStatePinnedKeys);
-  // --- END DEBUG LINES ---
-
+  const gameState = useGameStateStore(selectCurrentGameState);
+  const worldStatePinnedKeys = useGameStateStore(selectWorldStatePinnedKeys);
   const {
-    groupedByCategory,
-    // All other state variables (expandedCategories, editingCategory, etc.) are now correctly sourced from the hook:
-    expandedCategories,
-    expandedEntities,
-    editingCategory,
-    newCategoryName,
-    editingEntity,
-    newEntityName,
-    isAnyChildPinned, // These methods come from the hook
-    areAllChildrenPinned, // These methods come from the hook
-    handleToggleCategoryExpand, // Local handlers returned by hook
-    handleToggleEntityExpand,   // Local handlers returned by hook
-    handleToggleCategoryPin,    // Local handlers returned by hook
-    handleToggleEntityPin,      // Local handlers returned by hook
-    handleStartRenameCategory,
-    handleConfirmRenameCategory,
-    setNewCategoryName,
-    handleStartRenameEntity,
-    handleConfirmRenameEntity,
-    setNewEntityName,
-    cancelEdit,
-    // Actions passed directly from store (for clarity)
-    deleteWorldCategory,
-    deleteWorldEntity,
-    editWorldKeyValue,
-    deleteWorldKey,
-    toggleWorldStatePin, // Ensure actions from store are correctly accessible
-  } = useWorldStateViewLogic(); 
+    toggleWorldStatePin, renameWorldCategory, renameWorldEntity,
+    deleteWorldCategory, deleteWorldEntity, editWorldKeyValue, deleteWorldKey,
+  } = useGameStateStore();
+
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [editingEntity, setEditingEntity] = useState<[string, string] | null>(null);
+  const [newEntityName, setNewEntityName] = useState('');
+
+  const worldState = gameState?.worldState || {};
+
+  const flattenedWorld = useMemo(() => flattenJsonObject(worldState), [worldState]);
+
+  const groupedByCategory = useMemo(() => {
+    const grouped: Record<string, Record<string, Record<string, any>>> = {};
+    Object.keys(flattenedWorld).forEach(fullKey => {
+      const value = flattenedWorld[fullKey];
+      const parts = fullKey.split(".");
+      if (parts.length < 1) return;
+
+      const category = parts[0];
+      const entity = (parts.length > 1 && /^[#@$]/.test(parts[1])) ? parts[1] : '@@_direct';
+      const variable = (entity === '@@_direct') ? parts.slice(1).join('.') : parts.slice(2).join('.');
+      if (!variable && entity !== '@@_direct') return; // Skip if entity has no variables
+
+      grouped[category] = grouped[category] || {};
+      grouped[category][entity] = grouped[category][entity] || {};
+      grouped[category][entity][variable] = value;
+    });
+    // Clean up empty direct keys
+    Object.keys(grouped).forEach(category => {
+      if (grouped[category]['@@_direct'] && Object.keys(grouped[category]['@@_direct']).length === 0) {
+        delete grouped[category]['@@_direct'];
+      }
+    });
+    return grouped;
+  }, [flattenedWorld]);
+
+  const getAllChildVariableKeys = useCallback((basePath: string): string[] => {
+    const nestedData = getNestedValue(worldState, basePath.split('.'));
+    if (typeof nestedData !== 'object' || nestedData === null) return [];
+    return Object.keys(flattenJsonObject(nestedData, basePath));
+  }, [worldState]);
+
+  const isAnyChildPinned = useCallback((parentPath: string) => {
+    return getAllChildVariableKeys(parentPath).some(key => worldStatePinnedKeys.includes(key));
+  }, [getAllChildVariableKeys, worldStatePinnedKeys]);
+
+  const areAllChildrenPinned = useCallback((parentPath: string) => {
+    const childKeys = getAllChildVariableKeys(parentPath);
+    return childKeys.length > 0 && childKeys.every(key => worldStatePinnedKeys.includes(key));
+  }, [getAllChildVariableKeys, worldStatePinnedKeys]);
+
+  const handleToggleCategoryExpand = useCallback((category: string) => {
+    setExpandedCategories(prev => {
+      const newSet = new Set(prev);
+      newSet.has(category) ? newSet.delete(category) : newSet.add(category);
+      return newSet;
+    });
+  }, []);
+
+  const handleToggleEntityExpand = useCallback((entityPath: string) => {
+    setExpandedEntities(prev => {
+      const newSet = new Set(prev);
+      newSet.has(entityPath) ? newSet.delete(entityPath) : newSet.add(entityPath);
+      return newSet;
+    });
+  }, []);
+  
+  const handleToggleCategoryPin = useCallback((category: string) => toggleWorldStatePin(category, 'category'), [toggleWorldStatePin]);
+  const handleToggleEntityPin = useCallback((entityPath: string) => toggleWorldStatePin(entityPath, 'entity'), [toggleWorldStatePin]);
+  const handleToggleVariablePin = useCallback((key: string) => toggleWorldStatePin(key, 'variable'), [toggleWorldStatePin]);
+
+  const handleStartRenameCategory = useCallback((category: string) => { setEditingCategory(category); setNewCategoryName(category); }, []);
+  const handleStartRenameEntity = useCallback((category: string, entity: string) => { setEditingEntity([category, entity]); setNewEntityName(entity); }, []);
+
+  const cancelEdit = useCallback(() => { setEditingCategory(null); setEditingEntity(null); }, []);
+
+  const handleConfirmRenameCategory = useCallback(async () => {
+    if (editingCategory && newCategoryName.trim() && newCategoryName !== editingCategory) {
+      await renameWorldCategory(editingCategory, newCategoryName.trim());
+    }
+    cancelEdit();
+  }, [editingCategory, newCategoryName, renameWorldCategory, cancelEdit]);
+
+  const handleConfirmRenameEntity = useCallback(async () => {
+    if (editingEntity && newEntityName.trim() && newEntityName !== editingEntity[1]) {
+      await renameWorldEntity(editingEntity[0], editingEntity[1], newEntityName.trim());
+    }
+    cancelEdit();
+  }, [editingEntity, newEntityName, renameWorldEntity, cancelEdit]);
+
+  // --- End of Co-located Logic ---
+
+  const { gameError } = useGameStateStore();
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
@@ -7519,7 +8050,7 @@ const WorldStateScreen: React.FC = () => {
         <Typography variant="h5" component="h1">World State</Typography>
       </Box>
 
-      {gameError && (<Alert severity="error" sx={{ m: 2 }}>Error: {gameError}</Alert>)}
+      {gameError && (<Alert severity="error" sx={{ m: 2 }}>{gameError}</Alert>)}
 
       {Object.keys(groupedByCategory).length === 0 ? (
         <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
@@ -7527,64 +8058,53 @@ const WorldStateScreen: React.FC = () => {
         </Box>
       ) : (
         <Paper elevation={1} sx={{ flexGrow: 1, m: 2, p: 2, overflowY: 'auto' }}>
-          {Object.entries(groupedByCategory).map(([category, entities]) => (
-            <Box key={category} sx={{ mb: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', p: 1.5, cursor: 'pointer', backgroundColor: 'action.hover' }} onClick={() => handleToggleCategoryExpand(category)}>
-                <IconButton size="small" sx={{ mr: 1 }}>{expandedCategories.has(category) ? <ExpandLessIcon /> : <ExpandMoreIcon />}</IconButton>
-                <Typography variant="h6" sx={{ flexGrow: 1 }}>{category}</Typography>
-                <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleStartRenameCategory(category); }}><EditIcon fontSize="small" /></IconButton>
-                {/* Use the hook's own methods correctly */}
-                <Checkbox checked={areAllChildrenPinned(category)} indeterminate={isAnyChildPinned(category) && !areAllChildrenPinned(category)} onClick={(e) => { e.stopPropagation(); handleToggleCategoryPin(category); }} />
-                <IconButton size="small" onClick={(e) => { e.stopPropagation(); deleteWorldCategory(category); }}><DeleteIcon fontSize="small" color="error" /></IconButton>
-              </Box>
-              <Collapse in={expandedCategories.has(category)}>
-                <Divider />
-                <List component="div" disablePadding sx={{ pl: 2 }}>
-                  {Object.entries(entities).map(([entity, variables]) => {
-                    const entityPath = `${category}.${entity}`;
-                    if (entity === '@@_direct') {
-                      return Object.entries(variables).map(([varName, value]) => (
-                        <WorldStateItemRow key={`${category}.${varName}`} itemKey={`${category}.${varName}`} value={value} onDelete={deleteWorldKey} onEdit={editWorldKeyValue} isPinned={worldStatePinnedKeys.includes(`${category}.${varName}`)} onTogglePin={(key) => toggleWorldStatePin(key, 'variable')} />
-                      ));
-                    }
-                    return (
-                      <Box key={entity} sx={{ mb: 1, border: '1px dashed', borderColor: 'divider', borderRadius: 1, mt: 1 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', p: 1, cursor: 'pointer' }} onClick={() => handleToggleEntityExpand(category, entity)}>
-                          <IconButton size="small" sx={{ mr: 1 }}>{expandedEntities.has(entityPath) ? <ExpandLessIcon /> : <ExpandMoreIcon />}</IconButton>
-                          <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>{entity}</Typography>
-                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleStartRenameEntity([category, entity]); }}><EditIcon fontSize="small" /></IconButton>
-                           {/* Use the hook's own methods correctly */}
-                          <Checkbox checked={areAllChildrenPinned(entityPath)} indeterminate={isAnyChildPinned(entityPath) && !areAllChildrenPinned(entityPath)} onClick={(e) => { e.stopPropagation(); handleToggleEntityPin(entityPath); }} />
-                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); deleteWorldEntity(category, entity); }}><DeleteIcon fontSize="small" color="error" /></IconButton>
-                        </Box>
-                        <Collapse in={expandedEntities.has(entityPath)}>
-                          <Divider />
-                          <Box sx={{ p: 1.5 }}>
-                            {Object.entries(variables).map(([varName, value]) => (
-                              <WorldStateItemRow key={varName} itemKey={`${entityPath}.${varName}`} value={value} onDelete={deleteWorldKey} onEdit={editWorldKeyValue} isPinned={worldStatePinnedKeys.includes(`${entityPath}.${varName}`)} onTogglePin={(key) => toggleWorldStatePin(key, 'variable')} />
-                            ))}
-                          </Box>
-                        </Collapse>
-                      </Box>
-                    );
-                  })}
-                </List>
-              </Collapse>
-            </Box>
+          {Object.entries(groupedByCategory).map(([categoryName, entities]) => (
+            <WorldStateCategory
+              key={categoryName}
+              categoryName={categoryName}
+              entities={entities}
+              isExpanded={expandedCategories.has(categoryName)}
+              areAllChildrenPinned={areAllChildrenPinned(categoryName)}
+              isAnyChildPinned={isAnyChildPinned(categoryName)}
+              expandedEntities={expandedEntities}
+              worldStatePinnedKeys={worldStatePinnedKeys}
+              onToggleExpand={() => handleToggleCategoryExpand(categoryName)}
+              onTogglePin={() => handleToggleCategoryPin(categoryName)}
+              onStartRename={() => handleStartRenameCategory(categoryName)}
+              onDelete={() => deleteWorldCategory(categoryName)}
+              onToggleEntityExpand={handleToggleEntityExpand}
+              onToggleEntityPin={handleToggleEntityPin}
+              onStartRenameEntity={handleStartRenameEntity}
+              onDeleteEntity={deleteWorldEntity}
+              onDeleteKey={deleteWorldKey}
+              onEditKey={editWorldKeyValue}
+              onToggleVariablePin={handleToggleVariablePin}
+            />
           ))}
         </Paper>
       )}
 
+      {/* Dialogs for renaming */}
       <Dialog open={!!editingCategory} onClose={cancelEdit}>
         <DialogTitle>Rename Category</DialogTitle>
-        <DialogContent><TextField autoFocus margin="dense" label="New Category Name" type="text" fullWidth variant="outlined" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} /></DialogContent>
-        <DialogActions><Button onClick={cancelEdit}>Cancel</Button><Button onClick={handleConfirmRenameCategory}>Rename</Button></DialogActions>
+        <DialogContent>
+          <TextField autoFocus margin="dense" label="New Category Name" fullWidth variant="outlined" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleConfirmRenameCategory()} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelEdit}>Cancel</Button>
+          <Button onClick={handleConfirmRenameCategory}>Rename</Button>
+        </DialogActions>
       </Dialog>
 
       <Dialog open={!!editingEntity} onClose={cancelEdit}>
         <DialogTitle>Rename Entity</DialogTitle>
-        <DialogContent><TextField autoFocus margin="dense" label="New Entity Name" type="text" fullWidth variant="outlined" value={newEntityName} onChange={(e) => setNewEntityName(e.target.value)} /></DialogContent>
-        <DialogActions><Button onClick={cancelEdit}>Cancel</Button><Button onClick={handleConfirmRenameEntity}>Rename</Button></DialogActions>
+        <DialogContent>
+          <TextField autoFocus margin="dense" label="New Entity Name" fullWidth variant="outlined" value={newEntityName} onChange={(e) => setNewEntityName(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleConfirmRenameEntity()} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelEdit}>Cancel</Button>
+          <Button onClick={handleConfirmRenameEntity}>Rename</Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );
