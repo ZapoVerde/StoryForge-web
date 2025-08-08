@@ -26,8 +26,6 @@ interface GameStateState {
   gameError: string | null;
   gameLoading: boolean;
   isProcessingTurn: boolean;
-  conversationHistory: Message[];
-  logEntries: LogEntry[];
 }
 
 interface GameStateActions {
@@ -59,8 +57,6 @@ const initialState: GameStateState = {
   gameError: null,
   gameLoading: false,
   isProcessingTurn: false,
-  conversationHistory: [],
-  logEntries: [],
 };
 
 export const useGameStateStore = create<GameStateStore>((set, get) => {

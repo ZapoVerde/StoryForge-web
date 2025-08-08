@@ -1,6 +1,6 @@
 import type { IGameRepository } from '../data/repositories/gameRepository';
 import type { IPromptCardRepository } from '../data/repositories/promptCardRepository';
-import type { GameSnapshot, PromptCard, AiConnection } from '../models';
+import type { GameSnapshot, PromptCard, AiConnection, LogEntry  } from '../models';
 import { formatIsoDateForDisplay } from '../utils/formatDate';
 import { generateUuid } from '../utils/uuid';
 import type { ITurnProcessor } from './ITurnProcessor';
@@ -13,6 +13,7 @@ import { debugLog, errorLog } from '../utils/debug';
  */
 export interface IGameSession {
   initializeGame(userId: string, card: PromptCard): GameSnapshot;
+  
   processPlayerAction(
     snapshot: GameSnapshot,
     card: PromptCard,
@@ -47,15 +48,33 @@ export class GameSession implements IGameSession {
     
     let initialWorldState = {};
     try {
-      if (card.worldStateInit) {
-        initialWorldState = JSON.parse(card.worldStateInit);
-      }
+      if (card.worldStateInit) initialWorldState = JSON.parse(card.worldStateInit);
     } catch (e) {
       errorLog("[gameSession.ts] initializeGame: Failed to parse worldStateInit JSON:", e);
       initialWorldState = {};
     }
 
     const now = new Date().toISOString();
+
+    // CREATE THE "TURN 0" LOG ENTRY
+    const turnZeroLog: LogEntry = {
+      turnNumber: 0,
+      timestamp: now,
+      userInput: "[GAME START]",
+      narratorOutput: card.firstTurnOnlyBlock,
+      prose: card.firstTurnOnlyBlock, // Merging initial text into both fields
+      digestLines: [],
+      deltas: null,
+      contextSnapshot: "Initial game state setup.",
+      tokenUsage: null,
+      apiRequestBody: null,
+      apiResponseBody: null,
+      apiUrl: null,
+      latencyMs: null,
+      aiSettings: card.aiSettings,
+      errorFlags: [],
+      modelSlugUsed: "N/A",
+    };
 
     const initialSnapshot: GameSnapshot = {
       id: generateUuid(),
@@ -64,7 +83,7 @@ export class GameSession implements IGameSession {
       title: `Game with ${card.title} - ${formatIsoDateForDisplay(now)}`,
       createdAt: now,
       updatedAt: now,
-      currentTurn: 0,
+      currentTurn: 1, // The NEXT turn to be played is Turn 1
       gameState: {
         narration: card.firstTurnOnlyBlock,
         worldState: initialWorldState,
@@ -73,11 +92,11 @@ export class GameSession implements IGameSession {
       conversationHistory: [
         { role: 'assistant', content: card.firstTurnOnlyBlock },
       ],
-      logs: [],
+      logs: [turnZeroLog], // SEED THE LOGS with our new Turn 0 entry
       worldStatePinnedKeys: [],
     };
 
-    debugLog(`[gameSession.ts] initializeGame: NEW game initialized with ID ${initialSnapshot.id}.`);
+    debugLog(`[gameSession.ts] initializeGame: NEW game initialized with ID ${initialSnapshot.id}. Set for Turn 1.`);
     return initialSnapshot;
   }
 

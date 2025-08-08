@@ -1,14 +1,16 @@
 // src/state/useLogStore.ts
 
 import { create } from 'zustand';
-import { LogViewMode } from '../utils/types'; // We'll define LogViewMode here
+import { LogViewMode } from '../utils/types';
 import type { LogEntry } from '../models';
-import { debugLog, errorLog } from '../utils/debug';
+import { debugLog } from '../utils/debug';
 
 const initialState = {
-  logEntries: [],
+  logEntries: [] as LogEntry[],
+  // Default to a useful set of views
+  selectedLogViewModes: [LogViewMode.USER_INPUT, LogViewMode.NARRATOR_OUTPUT, LogViewMode.DIGEST_LINES, LogViewMode.DELTAS] as LogViewMode[],
   isLoading: false,
-  error: null,
+  error: null as string | null,
 };
 
 interface LogState {
@@ -16,38 +18,18 @@ interface LogState {
   selectedLogViewModes: LogViewMode[];
   isLoading: boolean;
   error: string | null;
-
-  // Actions
-  setLogEntries: (entries: LogEntry[]) => void; // To be called by useGameStateStore after a turn
+  setLogEntries: (entries: LogEntry[]) => void;
   setSelectedLogViewModes: (modes: LogViewMode[]) => void;
-  // Potentially fetch logs if we implement persistent log storage separate from GameSnapshot
-  fetchLogs: (snapshotId: string) => Promise<void>;
   reset: () => void;
 }
 
-export const useLogStore = create<LogState>((set, get) => ({
-  logEntries: [],
-  selectedLogViewModes: [LogViewMode.NARRATOR_OUTPUT, LogViewMode.USER_INPUT, LogViewMode.DIGEST_LINES], // Default selection
-  isLoading: false,
-  error: null,
+export const useLogStore = create<LogState>((set) => ({
+  ...initialState,
 
   setLogEntries: (entries) => set({ logEntries: entries }),
 
   setSelectedLogViewModes: (modes) => set({ selectedLogViewModes: modes }),
 
-  fetchLogs: async (snapshotId) => {
-    set({ isLoading: true, error: null });
-    try {
-      // In MVP, logs are part of GameSnapshot. So this would primarily
-      // fetch the GameSnapshot and then extract its logs.
-      // E.g., const snapshot = await gameRepository.getGameSnapshot(userId, snapshotId);
-      // set({ logEntries: snapshot?.logs || [], isLoading: false });
-      set({ isLoading: false }); // Placeholder
-    } catch (error: any) {
-      set({ error: error.message, isLoading: false });
-      errorLog("Error fetching logs:", error);
-    }
-  },
   reset: () => {
     debugLog("Resetting LogStore.");
     set(initialState);

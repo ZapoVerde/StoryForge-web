@@ -107,7 +107,7 @@ import AuthOrchestrator from './ui/components/AuthOrchestrator';
 import LoginScreen from './ui/screens/LoginScreen';
 import GameLibraryScreen from './ui/screens/GameLibraryScreen';
 import PromptCardManager from './ui/screens/PromptCardManager';
-import  { GameScreen } from './ui/screens/GameScreen';
+import {GameScreen} from './ui/screens/GameScreen'; 
 import WorldStateScreen from './ui/screens/WorldStateScreen';
 import { LogViewerScreen } from './ui/screens/LogViewerScreen';
 import SettingsScreen from './ui/screens/SettingsScreen';
@@ -2381,7 +2381,7 @@ export function parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput 
 @@FILE: src/logic/gameSession.ts
 import type { IGameRepository } from '../data/repositories/gameRepository';
 import type { IPromptCardRepository } from '../data/repositories/promptCardRepository';
-import type { GameSnapshot, PromptCard, AiConnection } from '../models';
+import type { GameSnapshot, PromptCard, AiConnection, LogEntry  } from '../models';
 import { formatIsoDateForDisplay } from '../utils/formatDate';
 import { generateUuid } from '../utils/uuid';
 import type { ITurnProcessor } from './ITurnProcessor';
@@ -2394,6 +2394,7 @@ import { debugLog, errorLog } from '../utils/debug';
  */
 export interface IGameSession {
   initializeGame(userId: string, card: PromptCard): GameSnapshot;
+  
   processPlayerAction(
     snapshot: GameSnapshot,
     card: PromptCard,
@@ -2428,15 +2429,33 @@ export class GameSession implements IGameSession {
     
     let initialWorldState = {};
     try {
-      if (card.worldStateInit) {
-        initialWorldState = JSON.parse(card.worldStateInit);
-      }
+      if (card.worldStateInit) initialWorldState = JSON.parse(card.worldStateInit);
     } catch (e) {
       errorLog("[gameSession.ts] initializeGame: Failed to parse worldStateInit JSON:", e);
       initialWorldState = {};
     }
 
     const now = new Date().toISOString();
+
+    // CREATE THE "TURN 0" LOG ENTRY
+    const turnZeroLog: LogEntry = {
+      turnNumber: 0,
+      timestamp: now,
+      userInput: "[GAME START]",
+      narratorOutput: card.firstTurnOnlyBlock,
+      prose: card.firstTurnOnlyBlock, // Merging initial text into both fields
+      digestLines: [],
+      deltas: null,
+      contextSnapshot: "Initial game state setup.",
+      tokenUsage: null,
+      apiRequestBody: null,
+      apiResponseBody: null,
+      apiUrl: null,
+      latencyMs: null,
+      aiSettings: card.aiSettings,
+      errorFlags: [],
+      modelSlugUsed: "N/A",
+    };
 
     const initialSnapshot: GameSnapshot = {
       id: generateUuid(),
@@ -2445,7 +2464,7 @@ export class GameSession implements IGameSession {
       title: `Game with ${card.title} - ${formatIsoDateForDisplay(now)}`,
       createdAt: now,
       updatedAt: now,
-      currentTurn: 0,
+      currentTurn: 1, // The NEXT turn to be played is Turn 1
       gameState: {
         narration: card.firstTurnOnlyBlock,
         worldState: initialWorldState,
@@ -2454,11 +2473,11 @@ export class GameSession implements IGameSession {
       conversationHistory: [
         { role: 'assistant', content: card.firstTurnOnlyBlock },
       ],
-      logs: [],
+      logs: [turnZeroLog], // SEED THE LOGS with our new Turn 0 entry
       worldStatePinnedKeys: [],
     };
 
-    debugLog(`[gameSession.ts] initializeGame: NEW game initialized with ID ${initialSnapshot.id}.`);
+    debugLog(`[gameSession.ts] initializeGame: NEW game initialized with ID ${initialSnapshot.id}. Set for Turn 1.`);
     return initialSnapshot;
   }
 
@@ -3372,8 +3391,6 @@ interface GameStateState {
   gameError: string | null;
   gameLoading: boolean;
   isProcessingTurn: boolean;
-  conversationHistory: Message[];
-  logEntries: LogEntry[];
 }
 
 interface GameStateActions {
@@ -3405,8 +3422,6 @@ const initialState: GameStateState = {
   gameError: null,
   gameLoading: false,
   isProcessingTurn: false,
-  conversationHistory: [],
-  logEntries: [],
 };
 
 export const useGameStateStore = create<GameStateStore>((set, get) => {
@@ -3642,14 +3657,16 @@ export const selectWorldStatePinnedKeys = (state: GameStateStore): string[] => {
 // src/state/useLogStore.ts
 
 import { create } from 'zustand';
-import { LogViewMode } from '../utils/types'; // We'll define LogViewMode here
+import { LogViewMode } from '../utils/types';
 import type { LogEntry } from '../models';
-import { debugLog, errorLog } from '../utils/debug';
+import { debugLog } from '../utils/debug';
 
 const initialState = {
-  logEntries: [],
+  logEntries: [] as LogEntry[],
+  // Default to a useful set of views
+  selectedLogViewModes: [LogViewMode.USER_INPUT, LogViewMode.NARRATOR_OUTPUT, LogViewMode.DIGEST_LINES, LogViewMode.DELTAS] as LogViewMode[],
   isLoading: false,
-  error: null,
+  error: null as string | null,
 };
 
 interface LogState {
@@ -3657,38 +3674,18 @@ interface LogState {
   selectedLogViewModes: LogViewMode[];
   isLoading: boolean;
   error: string | null;
-
-  // Actions
-  setLogEntries: (entries: LogEntry[]) => void; // To be called by useGameStateStore after a turn
+  setLogEntries: (entries: LogEntry[]) => void;
   setSelectedLogViewModes: (modes: LogViewMode[]) => void;
-  // Potentially fetch logs if we implement persistent log storage separate from GameSnapshot
-  fetchLogs: (snapshotId: string) => Promise<void>;
   reset: () => void;
 }
 
-export const useLogStore = create<LogState>((set, get) => ({
-  logEntries: [],
-  selectedLogViewModes: [LogViewMode.NARRATOR_OUTPUT, LogViewMode.USER_INPUT, LogViewMode.DIGEST_LINES], // Default selection
-  isLoading: false,
-  error: null,
+export const useLogStore = create<LogState>((set) => ({
+  ...initialState,
 
   setLogEntries: (entries) => set({ logEntries: entries }),
 
   setSelectedLogViewModes: (modes) => set({ selectedLogViewModes: modes }),
 
-  fetchLogs: async (snapshotId) => {
-    set({ isLoading: true, error: null });
-    try {
-      // In MVP, logs are part of GameSnapshot. So this would primarily
-      // fetch the GameSnapshot and then extract its logs.
-      // E.g., const snapshot = await gameRepository.getGameSnapshot(userId, snapshotId);
-      // set({ logEntries: snapshot?.logs || [], isLoading: false });
-      set({ isLoading: false }); // Placeholder
-    } catch (error: any) {
-      set({ error: error.message, isLoading: false });
-      errorLog("Error fetching logs:", error);
-    }
-  },
   reset: () => {
     debugLog("Resetting LogStore.");
     set(initialState);
@@ -4585,6 +4582,67 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
     </Card>
   );
 };
+@@FILE: src/ui/components/DetailedLogTurnView.tsx
+// src/ui/components/DetailedLogTurnView.tsx
+
+import React from 'react';
+import { Box, Divider } from '@mui/material';
+import { LogViewMode } from '../../utils/types';
+import type { LogEntry } from '../../models';
+import { CollapsibleSection } from './CollapsibleSection';
+import { LogEntryDisplay } from './LogEntryDisplay';
+
+interface DetailedLogTurnViewProps {
+  entry: LogEntry;
+  selectedLogViewModes: LogViewMode[];
+}
+
+// This defines the ideal chronological and logical order of log parts.
+const RENDER_ORDER: LogViewMode[] = [
+    LogViewMode.API_DETAILS, // Metadata first
+    LogViewMode.CONTEXT_SNAPSHOT,
+    LogViewMode.API_REQUEST_BODY, // Then the request body
+    LogViewMode.USER_INPUT,
+    LogViewMode.RAW_NARRATOR_OUTPUT,
+    LogViewMode.API_RESPONSE_BODY, // Then the response body
+    LogViewMode.NARRATOR_OUTPUT,
+    LogViewMode.DIGEST_LINES,
+    LogViewMode.DELTAS,
+    // These are metadata and appear last
+    LogViewMode.MODEL_SLUG_USED,
+    LogViewMode.AI_SETTINGS,
+    LogViewMode.TOKEN_USAGE,
+    LogViewMode.ERROR_FLAGS,
+  ];
+
+export const DetailedLogTurnView: React.FC<DetailedLogTurnViewProps> = ({ entry, selectedLogViewModes }) => {
+  // Filter the master RENDER_ORDER array to only include modes the user has selected.
+  const viewsToRender = RENDER_ORDER.filter(mode => selectedLogViewModes.includes(mode));
+
+  if (viewsToRender.length === 0) {
+    return null; // Don't render anything for this turn if no relevant views are selected
+  }
+
+  return (
+    // Each turn is its own collapsible section
+    <CollapsibleSection
+      title={`Turn ${entry.turnNumber} - ${new Date(entry.timestamp).toLocaleTimeString()}`}
+      initiallyExpanded={entry.turnNumber === 0 || !!entry.errorFlags?.length} // Expand first turn or turns with errors
+    >
+      <Box sx={{ p: 1 }}>
+        {viewsToRender.map((mode, index) => (
+          <React.Fragment key={mode}>
+            {/* Each part of the log within the turn is ALSO a collapsible section */}
+            <CollapsibleSection title={mode} initiallyExpanded={true}>
+              <LogEntryDisplay mode={mode} entry={entry} />
+            </CollapsibleSection>
+            {index < viewsToRender.length - 1 && <Divider sx={{ my: 1.5, opacity: 0.5 }} />}
+          </React.Fragment>
+        ))}
+      </Box>
+    </CollapsibleSection>
+  );
+};
 @@FILE: src/ui/components/InfoDialog.tsx
 // src/ui/components/InfoDialog.tsx
 
@@ -4640,70 +4698,101 @@ export const InfoDialog: React.FC<InfoDialogProps> = ({ title, content, iconSize
 // src/ui/components/LogEntryDisplay.tsx
 
 import React from 'react';
-import { Box, Typography, Paper } from '@mui/material';
+import { Typography, Alert, Paper, Box } from '@mui/material'; // Add Paper and Box
 import type { LogEntry } from '../../models';
 import { LogViewMode } from '../../utils/types';
 
 interface LogEntryDisplayProps {
- mode: LogViewMode;
- entry: LogEntry;
- hideTurnInfo?: boolean; // New optional prop
+  mode: LogViewMode;
+  entry: LogEntry;
 }
 
-export const LogEntryDisplay: React.FC<LogEntryDisplayProps> = ({ mode, entry, hideTurnInfo }) => {
- const renderContent = () => {
-  switch (mode) {
-   case LogViewMode.NARRATOR_OUTPUT:
-    return entry.narratorOutput;
-   case LogViewMode.USER_INPUT:
-    return entry.userInput;
-   case LogViewMode.DIGEST_LINES:
-    // MODIFIED: Use `d.importance` which should now be correct
-    return entry.digestLines.map(d => `${d.text} (Imp: ${d.importance})`).join('\n');
-   case LogViewMode.DELTAS:
-    return entry.deltas ? JSON.stringify(entry.deltas, null, 2) : 'No Deltas';
-   case LogViewMode.CONTEXT_SNAPSHOT:
-    return entry.contextSnapshot ? entry.contextSnapshot : 'No Context Snapshot';
-   case LogViewMode.TOKEN_USAGE:
-    return entry.tokenUsage ? `Input: ${entry.tokenUsage.inputTokens}, Output: ${entry.tokenUsage.outputTokens}, Total: ${entry.tokenUsage.totalTokens}` : 'No Token Usage Info';
-   case LogViewMode.AI_SETTINGS:
-    return entry.aiSettings ? JSON.stringify(entry.aiSettings, null, 2) : 'No AI Settings';
-   case LogViewMode.API_DETAILS: {
-      // MODIFIED: Build a more detailed API details string
-     const details = [
-      `URL: ${entry.apiUrl || 'N/A'}`,
-      `Model: ${entry.modelSlugUsed || 'N/A'}`,
-      `Latency: ${entry.latencyMs !== null ? `${entry.latencyMs}ms` : 'N/A'}`,
-     ];
-      if (entry.apiRequestBody) {
-        details.push(`\n--- Request Body (without content) ---\n${entry.apiRequestBody}`);
-      }
-      if (entry.apiResponseBody) {
-        details.push(`\n--- Response Body ---\n${entry.apiResponseBody}`);
-      }
-      return details.join('\n');
+export const LogEntryDisplay: React.FC<LogEntryDisplayProps> = ({ mode, entry }) => {
+  const renderContent = () => {
+    switch (mode) {
+      case LogViewMode.USER_INPUT:
+        return entry.userInput || <Alert severity="info" sx={{mt:1}}>No user input for this turn (e.g., initial game state).</Alert>;
+
+      case LogViewMode.NARRATOR_OUTPUT:
+        return entry.prose || <Alert severity="info" sx={{mt:1}}>No prose was generated for this turn.</Alert>;
+        
+      case LogViewMode.RAW_NARRATOR_OUTPUT: // Add a case for the raw output if needed
+        return entry.narratorOutput || <Alert severity="info" sx={{mt:1}}>No raw output was logged.</Alert>;
+
+      case LogViewMode.DIGEST_LINES:
+        if (!entry.digestLines || entry.digestLines.length === 0) return <Alert severity="info" sx={{mt:1}}>No digest lines.</Alert>;
+        return entry.digestLines.map((d, i) => `(Importance ${d.importance}) ${d.text}`).join('\n');
+
+      case LogViewMode.DELTAS:
+        if (!entry.deltas || Object.keys(entry.deltas).length === 0) return <Alert severity="info" sx={{mt:1}}>No deltas.</Alert>;
+        return JSON.stringify(entry.deltas, null, 2);
+
+      case LogViewMode.CONTEXT_SNAPSHOT:
+        return entry.contextSnapshot || <Alert severity="info" sx={{mt:1}}>No context snapshot was logged.</Alert>;
+
+      case LogViewMode.TOKEN_USAGE:
+        if (!entry.tokenUsage) return <Alert severity="info" sx={{mt:1}}>No token usage info.</Alert>;
+        return `Input: ${entry.tokenUsage.inputTokens}, Output: ${entry.tokenUsage.outputTokens}, Total: ${entry.tokenUsage.totalTokens}`;
+
+      case LogViewMode.AI_SETTINGS:
+        if (!entry.aiSettings) return <Alert severity="info" sx={{mt:1}}>No AI settings logged.</Alert>;
+        return JSON.stringify(entry.aiSettings, null, 2);
+
+      case LogViewMode.API_DETAILS:
+        const details = [
+          `URL: ${entry.apiUrl || 'N/A'}`,
+          `Latency: ${entry.latencyMs !== null ? `${entry.latencyMs}ms` : 'N/A'}`,
+        ];
+        return details.join('\n');
+
+      // ADDED: New case for the request body.
+      case LogViewMode.API_REQUEST_BODY:
+        if (!entry.apiRequestBody) return <Alert severity="info" sx={{mt:1}}>No request body was logged.</Alert>;
+        return (
+            <Paper variant="outlined" sx={{ p: 1, mt: 1, backgroundColor: (theme) => theme.palette.action.hover }}>
+              <Typography component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '0.8rem' }}>
+                {entry.apiRequestBody}
+              </Typography>
+            </Paper>
+        );
+
+      // ADDED: New case for the response body.
+      case LogViewMode.API_RESPONSE_BODY:
+        if (!entry.apiResponseBody) return <Alert severity="info" sx={{mt:1}}>No response body was logged.</Alert>;
+        return (
+            <Paper variant="outlined" sx={{ p: 1, mt: 1, backgroundColor: (theme) => theme.palette.action.hover }}>
+              <Typography component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '0.8rem' }}>
+                {entry.apiResponseBody}
+              </Typography>
+            </Paper>
+        );
+
+      case LogViewMode.ERROR_FLAGS:
+        if (!entry.errorFlags || entry.errorFlags.length === 0) return <Alert severity="success" sx={{mt:1}}>No errors flagged.</Alert>;
+        return <Alert severity="error" sx={{mt:1}}>{entry.errorFlags.join(', ')}</Alert>;
+
+      case LogViewMode.RAW_NARRATOR_OUTPUT:
+        return entry.narratorOutput || <Alert severity="info" sx={{mt:1}}>No raw output was logged.</Alert>;
+  
+      case LogViewMode.MODEL_SLUG_USED: // ADD THIS CASE
+        return entry.modelSlugUsed || <Alert severity="info" sx={{mt:1}}>Model slug was not logged.</Alert>;  
+
+      default:
+        return `Unknown log view mode: ${mode}`;
     }
-   case LogViewMode.ERROR_FLAGS:
-    return entry.errorFlags && entry.errorFlags.length > 0 ? entry.errorFlags.join(', ') : 'No Errors';
-   case LogViewMode.MODEL_SLUG_USED:
-     return entry.modelSlugUsed || 'N/A';
-   default:
-    return 'Select a view mode.';
+  };
+
+  // The outer component can be simplified as the inner content now handles its own formatting
+  // We can create a list of modes that need special paper/box wrapping
+  const needsWrapper = [LogViewMode.API_REQUEST_BODY, LogViewMode.API_RESPONSE_BODY, LogViewMode.ERROR_FLAGS];
+  if (needsWrapper.includes(mode)) {
+    return <Box>{renderContent()}</Box>;
   }
- };
 
   return (
-    <Box sx={{ mb: 1.5 }}>
-      {/* Conditionally render turn info based on new prop */}
-      {!hideTurnInfo && (
-        <Typography variant="caption" color="text.secondary">
-          Turn {entry.turnNumber} - {new Date(entry.timestamp).toLocaleTimeString()}
-        </Typography>
-      )}
-      <Typography variant="body2" component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', mt: 0.5 }}>
-        {renderContent()}
-      </Typography>
-    </Box>
+    <Typography variant="body2" component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', mt: 0.5, fontFamily: 'monospace', fontSize: '0.9rem' }}>
+      {renderContent()}
+    </Typography>
   );
 };
 @@FILE: src/ui/components/LogView.tsx
@@ -6901,15 +6990,18 @@ export default GameLibraryScreen;
 
 @@FILE: src/ui/screens/GameScreen.tsx
 // src/ui/screens/GameScreen.tsx
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box, Paper, Typography, TextField, IconButton, Stack, Divider,
   CircularProgress, Button,
 } from '@mui/material';
-import CasinoIcon from '@mui/icons-material/Casino';
+import SendIcon from '@mui/icons-material/Send'; // Using SendIcon for clarity
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
-import { LogView } from '../components/LogView';
-import { useGameStateStore } from '../../state/useGameStateStore';
+import CasinoIcon from '@mui/icons-material/Casino'; // For dice rolls if you have them
+
+// Import the store AND the specific selector you need
+import { useGameStateStore, selectConversationHistory } from '../../state/useGameStateStore';
 import { usePromptCardStore } from '../../state/usePromptCardStore';
 import { PinnedItemsView } from '../components/PinnedItemsView';
 
@@ -6917,137 +7009,218 @@ export const GameScreen: React.FC = () => {
   const {
     gameLoading,
     currentSnapshot,
-    conversationHistory,
+    isProcessingTurn,
     processTurn,
     resetGameFromSnapshot,
     rerollLastNarration,
   } = useGameStateStore();
 
+  // FIX: Use the selector to get the conversation history
+  const conversationHistory = useGameStateStore(selectConversationHistory);
   const activePromptCard = usePromptCardStore((state) => state.activePromptCard);
 
   const [userInput, setUserInput] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+  const logEndRef = useRef<HTMLDivElement>(null); // For auto-scrolling
 
+  // Auto-scroll to the bottom of the conversation
   useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversationHistory]);
 
-  const handleSubmit = async () => {
-    if (!userInput.trim()) return;
+  const handleSubmit = useCallback(async () => {
+    if (!userInput.trim() || isProcessingTurn) return;
     await processTurn(userInput);
     setUserInput('');
-  };
+  }, [userInput, isProcessingTurn, processTurn]);
 
   const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
     }
-  }, [userInput]);
+  }, [handleSubmit]);
 
-  const handleReset = () => {
-    if (currentSnapshot) {
+  const handleReset = useCallback(() => {
+    if (currentSnapshot && window.confirm("Are you sure you want to restart this turn? This will revert any changes made in the last narration.")) {
       resetGameFromSnapshot(currentSnapshot);
     }
-  };
+  }, [currentSnapshot, resetGameFromSnapshot]);
 
-  const handleReroll = () => {
-    rerollLastNarration();
-  };
-
-  const renderMessages = () => {
-    return conversationHistory.map((msg, index) => (
-      <Box key={index} sx={{ mb: 2 }}>
-        <Typography variant="subtitle2" color="text.secondary">
-          {msg.role === 'user' ? 'Player' : 'Narrator'}
-        </Typography>
-        <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
-          {msg.content}
-        </Typography>
-        <Divider sx={{ my: 1 }} />
-      </Box>
-    ));
-  };
+  const handleReroll = useCallback(() => {
+    if (window.confirm("Are you sure you want to reroll the last narration? The AI will try again with the same input.")) {
+        rerollLastNarration();
+    }
+  }, [rerollLastNarration]);
 
   if (gameLoading || !activePromptCard) {
     return (
-      <Box sx={{ p: 3 }}>
-        <Typography variant="h6">Loading game...</Typography>
-        <CircularProgress sx={{ mt: 2 }} />
+      <Box sx={{ p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+        <CircularProgress />
+        <Typography variant="h6" ml={2}>Loading Game...</Typography>
       </Box>
     );
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', p: 2 }}>
       <PinnedItemsView />
-      <Box sx={{ flex: 1, overflowY: 'auto', px: 3, pt: 1 }}>
-        {renderMessages()}
+      <Divider sx={{ my: 1 }} />
+
+      <Box sx={{ flex: 1, overflowY: 'auto', px: 1 }}>
+        {conversationHistory.map((msg, index) => (
+          <Paper key={index} elevation={0} sx={{ p: 1.5, mb: 1.5, backgroundColor: 'transparent' }}>
+            <Typography variant="body2" sx={{ fontWeight: 'bold', color: msg.role === 'user' ? 'primary.main' : 'secondary.main' }}>
+              {msg.role === 'user' ? 'You' : 'Narrator'}
+            </Typography>
+            <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+              {msg.content}
+            </Typography>
+          </Paper>
+        ))}
+        {isProcessingTurn && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+            <CircularProgress size={30} />
+          </Box>
+        )}
+        <div ref={logEndRef} />
       </Box>
 
-      <Box sx={{ p: 2, borderTop: '1px solid #ccc', display: 'flex', alignItems: 'center' }}>
-        <TextField
-          fullWidth
-          placeholder="Type your action..."
-          multiline
-          minRows={2}
-          value={userInput}
-          onChange={(e) => setUserInput(e.target.value)}
-          onKeyPress={handleKeyPress}
-          inputRef={inputRef}
-        />
-        <IconButton onClick={handleSubmit} size="large" sx={{ ml: 1 }}>
-          <CasinoIcon />
-        </IconButton>
-      </Box>
-
-      <Stack direction="row" spacing={2} sx={{ p: 2, justifyContent: 'flex-end' }}>
-        <Button variant="outlined" onClick={handleReset} startIcon={<RestartAltIcon />}>
-          Reset
-        </Button>
-        <Button variant="outlined" onClick={handleReroll}>
-          Reroll
-        </Button>
-      </Stack>
+      <Paper elevation={3} sx={{ p: 1, mt: 1 }}>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <TextField
+            fullWidth
+            placeholder="What do you do next?"
+            multiline
+            minRows={1}
+            maxRows={5}
+            value={userInput}
+            onChange={(e) => setUserInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            disabled={isProcessingTurn}
+          />
+          <IconButton onClick={handleSubmit} color="primary" disabled={isProcessingTurn || !userInput.trim()}>
+            <SendIcon />
+          </IconButton>
+        </Stack>
+        <Stack direction="row" spacing={1} sx={{ mt: 1, justifyContent: 'flex-end' }}>
+          <Button size="small" variant="outlined" onClick={handleReroll} disabled={isProcessingTurn || conversationHistory.length < 2}>
+            Reroll Last
+          </Button>
+          <Button size="small" variant="outlined" color="warning" onClick={handleReset} disabled={isProcessingTurn}>
+            Restart Turn
+          </Button>
+        </Stack>
+      </Paper>
     </Box>
   );
 };
-
 @@FILE: src/ui/screens/LogViewerScreen.tsx
 // src/ui/screens/LogViewerScreen.tsx
 
-import React from 'react';
-import { Box, Typography, Paper } from '@mui/material';
+import React, { useState, useEffect } from 'react';
+import {
+  Box, Typography, Paper, Alert, Fab, Popover,
+  List, ListItem, ListItemIcon, ListItemText, Checkbox
+} from '@mui/material';
+import TuneIcon from '@mui/icons-material/Tune'; // A more fitting icon for "views/filters"
+import { useLogStore } from '../../state/useLogStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
-import type { Message, LogEntry } from '../../models';
+import { LogViewMode } from '../../utils/types';
+import { DetailedLogTurnView } from '../components/DetailedLogTurnView';
 
 export const LogViewerScreen: React.FC = () => {
-  const conversationHistory = useGameStateStore(state => state.conversationHistory);
-  const logEntries = useGameStateStore(state => state.logEntries);
+  const { logEntries, selectedLogViewModes, setLogEntries, setSelectedLogViewModes } = useLogStore();
+  const currentSnapshot = useGameStateStore(state => state.currentSnapshot);
+
+  // The critical synchronization effect
+  useEffect(() => {
+    setLogEntries(currentSnapshot?.logs || []);
+  }, [currentSnapshot, setLogEntries]);
+
+  // State for the Popover menu
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const isMenuOpen = Boolean(anchorEl);
+
+  const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleCheckboxChange = (mode: LogViewMode) => {
+    const newSelection = selectedLogViewModes.includes(mode)
+      ? selectedLogViewModes.filter((m) => m !== mode)
+      : [...selectedLogViewModes, mode];
+    setSelectedLogViewModes(newSelection);
+  };
 
   return (
-    <Box p={2}>
-      <Typography variant="h6">Conversation History</Typography>
-      {conversationHistory.map((msg: Message, index: number) => (
-        <Paper key={index} sx={{ p: 1, my: 1 }}>
-          <Typography variant="subtitle2">{msg.role}</Typography>
-          <Typography variant="body2">{msg.content}</Typography>
-        </Paper>
-      ))}
+    // Use position relative to anchor the floating button
+    <Box sx={{ position: 'relative', height: '100%', p: 2 }}>
+      <Typography variant="h5" component="h1" sx={{ mb: 2, textAlign: 'center' }}>
+        Game Log
+      </Typography>
 
-      <Typography variant="h6" mt={4}>Log Entries</Typography>
-      {logEntries.map((entry: LogEntry, index: number) => (
-        <Paper key={index} sx={{ p: 1, my: 1 }}>
-          <Typography variant="subtitle2">Turn {entry.turnNumber}</Typography>
-          <Typography variant="body2">{entry.prose}</Typography>
+      <Paper elevation={2} sx={{ height: 'calc(100% - 60px)', overflowY: 'auto' }}>
+        {logEntries.length === 0 ? (
+          <Box sx={{ p: 4, textAlign: 'center' }}>
+            <Typography color="text.secondary">No log entries to display.</Typography>
+          </Box>
+        ) : (
+          logEntries.map((entry) => (
+            <Box key={entry.turnNumber} sx={{ p: 1 }}>
+              <DetailedLogTurnView
+                entry={entry}
+                selectedLogViewModes={selectedLogViewModes}
+              />
+            </Box>
+          ))
+        )}
+      </Paper>
+
+      {/* Floating Action Button (FAB) for the menu */}
+      <Fab
+        color="primary"
+        aria-label="log views"
+        onClick={handleMenuClick}
+        sx={{ position: 'absolute', bottom: 32, right: 32 }}
+      >
+        <TuneIcon />
+      </Fab>
+
+      {/* Popover Menu - Non-blocking */}
+      <Popover
+        open={isMenuOpen}
+        anchorEl={anchorEl}
+        onClose={handleMenuClose}
+        anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Paper sx={{ width: 320 }}>
+          <List dense>
+            {Object.values(LogViewMode).map((mode) => (
+              <ListItem key={mode} disablePadding>
+                <ListItem button onClick={() => handleCheckboxChange(mode)}>
+                  <ListItemIcon>
+                    <Checkbox
+                      edge="start"
+                      checked={selectedLogViewModes.includes(mode)}
+                      tabIndex={-1}
+                      disableRipple
+                    />
+                  </ListItemIcon>
+                  <ListItemText primary={mode} />
+                </ListItem>
+              </ListItem>
+            ))}
+          </List>
         </Paper>
-      ))}
+      </Popover>
     </Box>
   );
 };
-
 @@FILE: src/ui/screens/LoginScreen.tsx
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom'; // Add this
@@ -9332,16 +9505,19 @@ export function getNestedValue(obj: Record<string, any>, pathParts: string[]): a
 // src/utils/types.ts
 
 export enum LogViewMode {
-  NARRATOR_OUTPUT = 'Narrator Output',
   USER_INPUT = 'User Input',
+  NARRATOR_OUTPUT = 'Narrator Output (Parsed Prose)',
+  RAW_NARRATOR_OUTPUT = 'Raw Narrator Output (Full AI Response)',
   DIGEST_LINES = 'Digest Lines',
   DELTAS = 'Deltas',
-  CONTEXT_SNAPSHOT = 'Context Snapshot',
+  CONTEXT_SNAPSHOT = 'Context Snapshot (Prompt)',
   TOKEN_USAGE = 'Token Usage',
   AI_SETTINGS = 'AI Settings',
-  API_DETAILS = 'API Details',
+  API_DETAILS = 'API Details (URL, Latency)', // This will now be for metadata only
+  API_REQUEST_BODY = 'API Request Body',     // ADD THIS
+  API_RESPONSE_BODY = 'API Response Body',   // ADD THIS
+  MODEL_SLUG_USED = 'Model Slug Used',
   ERROR_FLAGS = 'Error Flags',
-  MODEL_SLUG_USED = 'Model Slug Used'
 }
 @@FILE: src/utils/uuid.ts
 // src/utils/uuid.ts

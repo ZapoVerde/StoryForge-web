@@ -6,7 +6,7 @@ import AuthOrchestrator from './ui/components/AuthOrchestrator';
 import LoginScreen from './ui/screens/LoginScreen';
 import GameLibraryScreen from './ui/screens/GameLibraryScreen';
 import PromptCardManager from './ui/screens/PromptCardManager';
-import  { GameScreen } from './ui/screens/GameScreen';
+import {GameScreen} from './ui/screens/GameScreen'; 
 import WorldStateScreen from './ui/screens/WorldStateScreen';
 import { LogViewerScreen } from './ui/screens/LogViewerScreen';
 import SettingsScreen from './ui/screens/SettingsScreen';

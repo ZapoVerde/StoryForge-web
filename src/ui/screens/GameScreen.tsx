@@ -1,13 +1,16 @@
 // src/ui/screens/GameScreen.tsx
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box, Paper, Typography, TextField, IconButton, Stack, Divider,
   CircularProgress, Button,
 } from '@mui/material';
-import CasinoIcon from '@mui/icons-material/Casino';
+import SendIcon from '@mui/icons-material/Send'; // Using SendIcon for clarity
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
-import { LogView } from '../components/LogView';
-import { useGameStateStore } from '../../state/useGameStateStore';
+import CasinoIcon from '@mui/icons-material/Casino'; // For dice rolls if you have them
+
+// Import the store AND the specific selector you need
+import { useGameStateStore, selectConversationHistory } from '../../state/useGameStateStore';
 import { usePromptCardStore } from '../../state/usePromptCardStore';
 import { PinnedItemsView } from '../components/PinnedItemsView';
 
@@ -15,100 +18,108 @@ export const GameScreen: React.FC = () => {
   const {
     gameLoading,
     currentSnapshot,
-    conversationHistory,
+    isProcessingTurn,
     processTurn,
     resetGameFromSnapshot,
     rerollLastNarration,
   } = useGameStateStore();
 
+  // FIX: Use the selector to get the conversation history
+  const conversationHistory = useGameStateStore(selectConversationHistory);
   const activePromptCard = usePromptCardStore((state) => state.activePromptCard);
 
   const [userInput, setUserInput] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
+  const logEndRef = useRef<HTMLDivElement>(null); // For auto-scrolling
 
+  // Auto-scroll to the bottom of the conversation
   useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversationHistory]);
 
-  const handleSubmit = async () => {
-    if (!userInput.trim()) return;
+  const handleSubmit = useCallback(async () => {
+    if (!userInput.trim() || isProcessingTurn) return;
     await processTurn(userInput);
     setUserInput('');
-  };
+  }, [userInput, isProcessingTurn, processTurn]);
 
   const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
     }
-  }, [userInput]);
+  }, [handleSubmit]);
 
-  const handleReset = () => {
-    if (currentSnapshot) {
+  const handleReset = useCallback(() => {
+    if (currentSnapshot && window.confirm("Are you sure you want to restart this turn? This will revert any changes made in the last narration.")) {
       resetGameFromSnapshot(currentSnapshot);
     }
-  };
+  }, [currentSnapshot, resetGameFromSnapshot]);
 
-  const handleReroll = () => {
-    rerollLastNarration();
-  };
-
-  const renderMessages = () => {
-    return conversationHistory.map((msg, index) => (
-      <Box key={index} sx={{ mb: 2 }}>
-        <Typography variant="subtitle2" color="text.secondary">
-          {msg.role === 'user' ? 'Player' : 'Narrator'}
-        </Typography>
-        <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
-          {msg.content}
-        </Typography>
-        <Divider sx={{ my: 1 }} />
-      </Box>
-    ));
-  };
+  const handleReroll = useCallback(() => {
+    if (window.confirm("Are you sure you want to reroll the last narration? The AI will try again with the same input.")) {
+        rerollLastNarration();
+    }
+  }, [rerollLastNarration]);
 
   if (gameLoading || !activePromptCard) {
     return (
-      <Box sx={{ p: 3 }}>
-        <Typography variant="h6">Loading game...</Typography>
-        <CircularProgress sx={{ mt: 2 }} />
+      <Box sx={{ p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+        <CircularProgress />
+        <Typography variant="h6" ml={2}>Loading Game...</Typography>
       </Box>
     );
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', p: 2 }}>
       <PinnedItemsView />
-      <Box sx={{ flex: 1, overflowY: 'auto', px: 3, pt: 1 }}>
-        {renderMessages()}
+      <Divider sx={{ my: 1 }} />
+
+      <Box sx={{ flex: 1, overflowY: 'auto', px: 1 }}>
+        {conversationHistory.map((msg, index) => (
+          <Paper key={index} elevation={0} sx={{ p: 1.5, mb: 1.5, backgroundColor: 'transparent' }}>
+            <Typography variant="body2" sx={{ fontWeight: 'bold', color: msg.role === 'user' ? 'primary.main' : 'secondary.main' }}>
+              {msg.role === 'user' ? 'You' : 'Narrator'}
+            </Typography>
+            <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+              {msg.content}
+            </Typography>
+          </Paper>
+        ))}
+        {isProcessingTurn && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+            <CircularProgress size={30} />
+          </Box>
+        )}
+        <div ref={logEndRef} />
       </Box>
 
-      <Box sx={{ p: 2, borderTop: '1px solid #ccc', display: 'flex', alignItems: 'center' }}>
-        <TextField
-          fullWidth
-          placeholder="Type your action..."
-          multiline
-          minRows={2}
-          value={userInput}
-          onChange={(e) => setUserInput(e.target.value)}
-          onKeyPress={handleKeyPress}
-          inputRef={inputRef}
-        />
-        <IconButton onClick={handleSubmit} size="large" sx={{ ml: 1 }}>
-          <CasinoIcon />
-        </IconButton>
-      </Box>
-
-      <Stack direction="row" spacing={2} sx={{ p: 2, justifyContent: 'flex-end' }}>
-        <Button variant="outlined" onClick={handleReset} startIcon={<RestartAltIcon />}>
-          Reset
-        </Button>
-        <Button variant="outlined" onClick={handleReroll}>
-          Reroll
-        </Button>
-      </Stack>
+      <Paper elevation={3} sx={{ p: 1, mt: 1 }}>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <TextField
+            fullWidth
+            placeholder="What do you do next?"
+            multiline
+            minRows={1}
+            maxRows={5}
+            value={userInput}
+            onChange={(e) => setUserInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            disabled={isProcessingTurn}
+          />
+          <IconButton onClick={handleSubmit} color="primary" disabled={isProcessingTurn || !userInput.trim()}>
+            <SendIcon />
+          </IconButton>
+        </Stack>
+        <Stack direction="row" spacing={1} sx={{ mt: 1, justifyContent: 'flex-end' }}>
+          <Button size="small" variant="outlined" onClick={handleReroll} disabled={isProcessingTurn || conversationHistory.length < 2}>
+            Reroll Last
+          </Button>
+          <Button size="small" variant="outlined" color="warning" onClick={handleReset} disabled={isProcessingTurn}>
+            Restart Turn
+          </Button>
+        </Stack>
+      </Paper>
     </Box>
   );
 };
