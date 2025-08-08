@@ -1,0 +1,557 @@
+{
+  "generatedAt": "2025-08-08T16:11:32.052Z",
+  "totalFiles": 127,
+  "totalBytes": 707005,
+  "files": [
+    {
+      "path": ".devcontainer/devcontainer.json",
+      "bytes": 1046
+    },
+    {
+      "path": ".devcontainer/Dockerfile",
+      "bytes": 572
+    },
+    {
+      "path": ".gitignore",
+      "bytes": 264
+    },
+    {
+      "path": ".idx/dev.nix",
+      "bytes": 149
+    },
+    {
+      "path": ".idx/integrations.json",
+      "bytes": 22
+    },
+    {
+      "path": ".prettierrc",
+      "bytes": 125
+    },
+    {
+      "path": "dump-src.js",
+      "bytes": 5092
+    },
+    {
+      "path": "eslint.config.js",
+      "bytes": 610
+    },
+    {
+      "path": "firestore.rules",
+      "bytes": 399
+    },
+    {
+      "path": "index.html",
+      "bytes": 408
+    },
+    {
+      "path": "package-lock.json",
+      "bytes": 329425
+    },
+    {
+      "path": "package.json",
+      "bytes": 1682
+    },
+    {
+      "path": "README.md",
+      "bytes": 2269
+    },
+    {
+      "path": "src/App.css",
+      "bytes": 606
+    },
+    {
+      "path": "src/App.tsx",
+      "bytes": 1795
+    },
+    {
+      "path": "src/AppRoutes.tsx",
+      "bytes": 2788
+    },
+    {
+      "path": "src/assets/react.svg",
+      "bytes": 4126
+    },
+    {
+      "path": "src/config/navigation.tsx",
+      "bytes": 1689
+    },
+    {
+      "path": "src/contexts/GameSessionContext.tsx",
+      "bytes": 939
+    },
+    {
+      "path": "src/contexts/LayoutContext.tsx",
+      "bytes": 1187
+    },
+    {
+      "path": "src/data/config/aiConnectionTemplates.ts",
+      "bytes": 3959
+    },
+    {
+      "path": "src/data/config/promptCardDefaults.ts",
+      "bytes": 4729
+    },
+    {
+      "path": "src/data/infrastructure/firebaseClient.ts",
+      "bytes": 1092
+    },
+    {
+      "path": "src/data/repositories/aiConnectionRepository.ts",
+      "bytes": 2656
+    },
+    {
+      "path": "src/data/repositories/authRepository.ts",
+      "bytes": 2497
+    },
+    {
+      "path": "src/data/repositories/gameRepository.ts",
+      "bytes": 4083
+    },
+    {
+      "path": "src/data/repositories/promptCardRepository.ts",
+      "bytes": 7441
+    },
+    {
+      "path": "src/index.css",
+      "bytes": 335
+    },
+    {
+      "path": "src/logic/aiClient.ts",
+      "bytes": 6801
+    },
+    {
+      "path": "src/logic/cardManager.ts",
+      "bytes": 11633
+    },
+    {
+      "path": "src/logic/ContextStackAssembler.ts",
+      "bytes": 3479
+    },
+    {
+      "path": "src/logic/deltaParser.ts",
+      "bytes": 6851
+    },
+    {
+      "path": "src/logic/gameSession.ts",
+      "bytes": 6569
+    },
+    {
+      "path": "src/logic/gameSessionServices.ts",
+      "bytes": 633
+    },
+    {
+      "path": "src/logic/GameStateManager.ts",
+      "bytes": 8083
+    },
+    {
+      "path": "src/logic/IContextStackAssembler.ts",
+      "bytes": 766
+    },
+    {
+      "path": "src/logic/IGameStateManager.ts",
+      "bytes": 2305
+    },
+    {
+      "path": "src/logic/ISnapshotUpdater.ts",
+      "bytes": 1683
+    },
+    {
+      "path": "src/logic/ITurnProcessor.ts",
+      "bytes": 1509
+    },
+    {
+      "path": "src/logic/logManager.ts",
+      "bytes": 6945
+    },
+    {
+      "path": "src/logic/promptBuilder.ts",
+      "bytes": 3092
+    },
+    {
+      "path": "src/logic/SnapshotUpdater.ts",
+      "bytes": 7443
+    },
+    {
+      "path": "src/logic/TurnProcessor.ts",
+      "bytes": 6050
+    },
+    {
+      "path": "src/main.tsx",
+      "bytes": 549
+    },
+    {
+      "path": "src/models/AiConnection.ts",
+      "bytes": 905
+    },
+    {
+      "path": "src/models/DeltaInstruction.ts",
+      "bytes": 904
+    },
+    {
+      "path": "src/models/GameSnapshot.ts",
+      "bytes": 1222
+    },
+    {
+      "path": "src/models/GameState.ts",
+      "bytes": 606
+    },
+    {
+      "path": "src/models/index.ts",
+      "bytes": 399
+    },
+    {
+      "path": "src/models/LogEntry.ts",
+      "bytes": 789
+    },
+    {
+      "path": "src/models/LogEntryElements.ts",
+      "bytes": 1079
+    },
+    {
+      "path": "src/models/Message.ts",
+      "bytes": 214
+    },
+    {
+      "path": "src/models/ParsedNarrationOutput.ts",
+      "bytes": 725
+    },
+    {
+      "path": "src/models/PromptCard.ts",
+      "bytes": 2853
+    },
+    {
+      "path": "src/models/StackInstructions.ts",
+      "bytes": 2085
+    },
+    {
+      "path": "src/pages/SourceDump.tsx",
+      "bytes": 587
+    },
+    {
+      "path": "src/providers/GameSessionAndStoreProvider.tsx",
+      "bytes": 1288
+    },
+    {
+      "path": "src/state/useAuthStore.ts",
+      "bytes": 2651
+    },
+    {
+      "path": "src/state/useGameStateStore.ts",
+      "bytes": 11217
+    },
+    {
+      "path": "src/state/useLogStore.ts",
+      "bytes": 1050
+    },
+    {
+      "path": "src/state/usePromptCardStore.ts",
+      "bytes": 5774
+    },
+    {
+      "path": "src/state/useSettingsStore.ts",
+      "bytes": 6523
+    },
+    {
+      "path": "src/theme/index.ts",
+      "bytes": 4191
+    },
+    {
+      "path": "src/ui/components/AiSettingsEditor.tsx",
+      "bytes": 5162
+    },
+    {
+      "path": "src/ui/components/AuthOrchestrator.tsx",
+      "bytes": 3416
+    },
+    {
+      "path": "src/ui/components/CollapsibleLogEntry.tsx",
+      "bytes": 1916
+    },
+    {
+      "path": "src/ui/components/CollapsibleSection.tsx",
+      "bytes": 1540
+    },
+    {
+      "path": "src/ui/components/DetailedLogTurnView.tsx",
+      "bytes": 2319
+    },
+    {
+      "path": "src/ui/components/InfoDialog.tsx",
+      "bytes": 1616
+    },
+    {
+      "path": "src/ui/components/LogEntryDisplay.tsx",
+      "bytes": 4712
+    },
+    {
+      "path": "src/ui/components/LogView.tsx",
+      "bytes": 3220
+    },
+    {
+      "path": "src/ui/components/MainLayout.tsx",
+      "bytes": 3567
+    },
+    {
+      "path": "src/ui/components/PinnedAttributeChip.tsx",
+      "bytes": 1478
+    },
+    {
+      "path": "src/ui/components/PinnedEntityGroup.tsx",
+      "bytes": 2332
+    },
+    {
+      "path": "src/ui/components/PinnedItemsView.tsx",
+      "bytes": 3710
+    },
+    {
+      "path": "src/ui/components/PromptCard.tsx",
+      "bytes": 1240
+    },
+    {
+      "path": "src/ui/components/PromptCardEditorDialog.tsx",
+      "bytes": 3615
+    },
+    {
+      "path": "src/ui/components/PromptCardEditorPanel.tsx",
+      "bytes": 2504
+    },
+    {
+      "path": "src/ui/components/PromptCardEditorSections/AiSettingsSection.tsx",
+      "bytes": 2769
+    },
+    {
+      "path": "src/ui/components/PromptCardEditorSections/EmitSkeletonSection.tsx",
+      "bytes": 687
+    },
+    {
+      "path": "src/ui/components/PromptCardEditorSections/GameRulesSection.tsx",
+      "bytes": 655
+    },
+    {
+      "path": "src/ui/components/PromptCardEditorSections/PromptSection.tsx",
+      "bytes": 636
+    },
+    {
+      "path": "src/ui/components/PromptCardEditorSections/WorldStateInitSection.tsx",
+      "bytes": 693
+    },
+    {
+      "path": "src/ui/components/PromptCardList.tsx",
+      "bytes": 2485
+    },
+    {
+      "path": "src/ui/components/PromptCardListPanel.tsx",
+      "bytes": 1916
+    },
+    {
+      "path": "src/ui/components/ProtectedRoute.tsx",
+      "bytes": 1049
+    },
+    {
+      "path": "src/ui/components/SourceDumpPanel.tsx",
+      "bytes": 11356
+    },
+    {
+      "path": "src/ui/components/stackInstructions/DigestPolicyEditor.tsx",
+      "bytes": 4915
+    },
+    {
+      "path": "src/ui/components/stackInstructions/PolicyEditor.tsx",
+      "bytes": 3362
+    },
+    {
+      "path": "src/ui/components/stackInstructions/TokenPolicyEditor.tsx",
+      "bytes": 2279
+    },
+    {
+      "path": "src/ui/components/StackInstructionsEditor.tsx",
+      "bytes": 6277
+    },
+    {
+      "path": "src/ui/components/TurnNavigator.tsx",
+      "bytes": 1418
+    },
+    {
+      "path": "src/ui/components/WorldStateCategory.tsx",
+      "bytes": 4737
+    },
+    {
+      "path": "src/ui/components/WorldStateEntity.tsx",
+      "bytes": 3569
+    },
+    {
+      "path": "src/ui/components/WorldStateItemRow.tsx",
+      "bytes": 3818
+    },
+    {
+      "path": "src/ui/screens/CardLibraryScreen.tsx",
+      "bytes": 7323
+    },
+    {
+      "path": "src/ui/screens/GameLibraryScreen.tsx",
+      "bytes": 6351
+    },
+    {
+      "path": "src/ui/screens/GameScreen.tsx",
+      "bytes": 6818
+    },
+    {
+      "path": "src/ui/screens/LoginScreen.tsx",
+      "bytes": 1861
+    },
+    {
+      "path": "src/ui/screens/LogViewerScreen.tsx",
+      "bytes": 3346
+    },
+    {
+      "path": "src/ui/screens/PromptCardEditor.tsx",
+      "bytes": 7037
+    },
+    {
+      "path": "src/ui/screens/PromptCardManager.tsx",
+      "bytes": 3799
+    },
+    {
+      "path": "src/ui/screens/SettingsScreen.tsx",
+      "bytes": 10363
+    },
+    {
+      "path": "src/ui/screens/SourceDump.tsx",
+      "bytes": 4268
+    },
+    {
+      "path": "src/ui/screens/SourceDumpScreen.tsx",
+      "bytes": 299
+    },
+    {
+      "path": "src/ui/screens/WorldStateScreen.tsx",
+      "bytes": 8674
+    },
+    {
+      "path": "src/utils/debug.ts",
+      "bytes": 897
+    },
+    {
+      "path": "src/utils/diceRoller.ts",
+      "bytes": 1585
+    },
+    {
+      "path": "src/utils/formatDate.ts",
+      "bytes": 1284
+    },
+    {
+      "path": "src/utils/hash.ts",
+      "bytes": 2867
+    },
+    {
+      "path": "src/utils/hooks/useDialog.ts",
+      "bytes": 649
+    },
+    {
+      "path": "src/utils/hooks/useGameScreenLogic.ts",
+      "bytes": 7999
+    },
+    {
+      "path": "src/utils/hooks/useLogViewerLogic.ts",
+      "bytes": 1655
+    },
+    {
+      "path": "src/utils/hooks/useLongPress.ts",
+      "bytes": 2427
+    },
+    {
+      "path": "src/utils/hooks/usePromptCardManagerLogic.ts",
+      "bytes": 8482
+    },
+    {
+      "path": "src/utils/hooks/useSettingsLogic.ts",
+      "bytes": 7416
+    },
+    {
+      "path": "src/utils/hooks/useWorldStateViewLogic.ts",
+      "bytes": 9038
+    },
+    {
+      "path": "src/utils/jsonUtils.ts",
+      "bytes": 2380
+    },
+    {
+      "path": "src/utils/types.ts",
+      "bytes": 633
+    },
+    {
+      "path": "src/utils/uuid.ts",
+      "bytes": 243
+    },
+    {
+      "path": "src/vite-env.d.ts",
+      "bytes": 38
+    },
+    {
+      "path": "tsconfig.app.json",
+      "bytes": 702
+    },
+    {
+      "path": "tsconfig.json",
+      "bytes": 119
+    },
+    {
+      "path": "tsconfig.node.json",
+      "bytes": 630
+    },
+    {
+      "path": "vercel.json",
+      "bytes": 95
+    },
+    {
+      "path": "vite.config.ts",
+      "bytes": 835
+    },
+    {
+      "path": "vitest.config.ts",
+      "bytes": 486
+    }
+  ],
+  "groups": [
+    {
+      "name": ".devcontainer",
+      "fileCount": 2,
+      "byteCount": 1618,
+      "txt": "public/source-dump/folders/.devcontainer.txt",
+      "zip": "public/source-dump/folders/.devcontainer.zip",
+      "b64": "public/source-dump/folders/.devcontainer.b64.txt",
+      "zipBytes": 1169,
+      "b64Bytes": 1560
+    },
+    {
+      "name": ".idx",
+      "fileCount": 2,
+      "byteCount": 171,
+      "txt": "public/source-dump/folders/.idx.txt",
+      "zip": "public/source-dump/folders/.idx.zip",
+      "b64": "public/source-dump/folders/.idx.b64.txt",
+      "zipBytes": 415,
+      "b64Bytes": 556
+    },
+    {
+      "name": "(repo root)",
+      "fileCount": 15,
+      "byteCount": 343141,
+      "txt": "public/source-dump/folders/(repo root).txt",
+      "zip": "public/source-dump/folders/(repo root).zip",
+      "b64": "public/source-dump/folders/(repo root).b64.txt",
+      "zipBytes": 82082,
+      "b64Bytes": 109444
+    },
+    {
+      "name": "src",
+      "fileCount": 108,
+      "byteCount": 362075,
+      "txt": "public/source-dump/folders/src.txt",
+      "zip": "public/source-dump/folders/src.zip",
+      "b64": "public/source-dump/folders/src.b64.txt",
+      "zipBytes": 134574,
+      "b64Bytes": 179432
+    }
+  ]
+}

@@ -1,0 +1,977 @@
+# Group: src/utils/hooks
+# Files: 7
+
+@@FILE: src/utils/hooks/useDialog.ts =====
+// src/utils/hooks/useDialog.ts
+import { useState, useCallback } from 'react';
+
+/**
+ * A custom hook to manage the state of a dialog or modal.
+ * @param initialState - The initial open state of the dialog (defaults to false).
+ * @returns An object with { isOpen, open, close } properties for controlling the dialog.
+ */
+export const useDialog = (initialState = false) => {
+  const [isOpen, setIsOpen] = useState(initialState);
+
+  /**
+   * Opens the dialog.
+   */
+  const open = useCallback(() => setIsOpen(true), []);
+
+  /**
+   * Closes the dialog.
+   */
+  const close = useCallback(() => setIsOpen(false), []);
+
+  return { isOpen, open, close };
+};
+@@END_FILE@@
+
+@@FILE: src/utils/hooks/useGameScreenLogic.ts =====
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../../state/useAuthStore';
+import { useGameStateStore, selectCurrentGameState, selectConversationHistory } from '../../state/useGameStateStore';
+import { DiceRoller } from '../../utils/diceRoller';
+import { usePromptCardStore } from '../../state/usePromptCardStore';
+import { useSettingsStore } from '../../state/useSettingsStore';
+import { debugLog, errorLog } from '../../utils/debug';
+
+export const useGameScreenLogic = () => {
+  const navigate = useNavigate();
+  const { user } = useAuthStore();
+
+  const enableDebugLogging = useSettingsStore(state => state.enableDebugLogging);
+  const typingSpeedMs = useSettingsStore(state => state.textGenerationSpeedMs);
+
+  const currentSnapshot = useGameStateStore(state => state.currentSnapshot);
+  const currentGameState = useGameStateStore(selectCurrentGameState);
+  const conversationHistory = useGameStateStore(selectConversationHistory);
+  const narratorInputText = useGameStateStore(state => state.narratorInputText);
+  const gameLoading = useGameStateStore(state => state.gameLoading);
+  const isProcessingTurn = useGameStateStore(state => state.isProcessingTurn);
+  const gameError = useGameStateStore(state => state.gameError);
+  const activePromptCard = usePromptCardStore(state => state.activePromptCard);
+
+  const processPlayerAction = useGameStateStore(state => state.processPlayerAction);
+  const updateNarratorInputText = useGameStateStore(state => state.updateNarratorInputText); // Keep this one for the input text field
+
+  const [showRollDialog, setShowRollDialog] = useState(false);
+  const [rollFormula, setRollFormula] = useState("2d6");
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'info', // Initial value (no change needed here)
+  });
+
+  const [displayedCurrentNarration, setDisplayedCurrentNarration] = useState('');
+
+  const logContainerRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const isFirstPlayerAction = currentSnapshot?.conversationHistory?.length === 1;
+
+  useEffect(() => {
+    if (enableDebugLogging) {
+      debugLog(`[useGameScreenLogic.ts] useEffect (auto-scroll): conversationHistory changed. Count: ${conversationHistory.length}`);
+    }
+    if (logContainerRef.current) {
+      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+    }
+  }, [conversationHistory, enableDebugLogging, displayedCurrentNarration]);
+
+  useEffect(() => {
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    const fullNarration = currentGameState?.narration || '';
+    const enableStreaming = activePromptCard?.aiSettings?.streaming ?? true;
+
+    const shouldTypeOut = enableStreaming && fullNarration.length > 0 && !isProcessingTurn;
+    const shouldAnimateFirstTurn = isFirstPlayerAction && shouldTypeOut;
+
+    if (shouldAnimateFirstTurn) {
+      setDisplayedCurrentNarration('');
+      let i = 0;
+      const typeCharacter = () => {
+        if (i < fullNarration.length) {
+          setDisplayedCurrentNarration((prev) => prev + fullNarration.charAt(i));
+          i++;
+          typingTimeoutRef.current = setTimeout(typeCharacter, typingSpeedMs);
+        } else {
+          typingTimeoutRef.current = null;
+        }
+      };
+      typingTimeoutRef.current = setTimeout(typeCharacter, typingSpeedMs);
+    } else {
+      setDisplayedCurrentNarration(fullNarration);
+    }
+
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, [
+    currentGameState?.narration,
+    activePromptCard?.aiSettings?.streaming,
+    isProcessingTurn,
+    typingSpeedMs,
+    isFirstPlayerAction,
+  ]);
+
+  const showSnackbar = useCallback((message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
+    if (enableDebugLogging) debugLog(`[useGameScreenLogic.ts] Snackbar: "${message}" (${severity})`);
+    setSnackbar({ open: true, message, severity });
+  }, [enableDebugLogging]);
+
+  const handleSendAction = useCallback(async () => {
+    if (enableDebugLogging) debugLog(`[useGameScreenLogic.ts] handleSendAction: Input: "${narratorInputText}"`);
+    if (narratorInputText.trim() === '' || isProcessingTurn) {
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Skipping send — empty or already processing.');
+      return;
+    }
+    try {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      setDisplayedCurrentNarration(currentGameState?.narration || '');
+      await processPlayerAction(narratorInputText);
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] processPlayerAction completed.');
+    } catch (e) {
+      errorLog('[useGameScreenLogic.ts] Error in handleSendAction:', e);
+      showSnackbar(`Failed to process action: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
+    }
+  }, [narratorInputText, isProcessingTurn, processPlayerAction, showSnackbar, currentGameState?.narration, enableDebugLogging]);
+
+  const handleRollDice = useCallback(async () => {
+    if (enableDebugLogging) debugLog(`[useGameScreenLogic.ts] Rolling formula: ${rollFormula}`);
+    try {
+      const result = DiceRoller.roll(rollFormula);
+      const summary = DiceRoller.format(result);
+      if (enableDebugLogging) debugLog(`[useGameScreenLogic.ts] Dice result: ${summary}`);
+
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      setDisplayedCurrentNarration(currentGameState?.narration || '');
+
+      await processPlayerAction(`I roll the dice (${rollFormula}) and get the following result:\n${summary}`);
+      showSnackbar(`Rolled ${rollFormula}: ${summary}`, 'success');
+      setShowRollDialog(false);
+    } catch (e) {
+      errorLog('[useGameScreenLogic.ts] Error in handleRollDice:', e);
+      showSnackbar(`Failed to roll dice: ${e instanceof Error ? e.message : 'Invalid formula'}`, 'error');
+    }
+  }, [rollFormula, processPlayerAction, showSnackbar, currentGameState?.narration, enableDebugLogging]);
+
+  const handleOpenRollDialog = useCallback(() => {
+    if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Opening roll dialog.');
+    setShowRollDialog(true);
+  }, [enableDebugLogging]);
+
+  const handleKeyPress = useCallback((event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Enter pressed — sending action.');
+      event.preventDefault();
+      handleSendAction();
+    }
+  }, [handleSendAction, enableDebugLogging]);
+
+  const closeSnackbar = useCallback(() => {
+    if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Closing snackbar.');
+    setSnackbar(prev => ({ ...prev, open: false }));
+  }, [enableDebugLogging]);
+
+  return {
+    isReady: !!user && !!currentSnapshot && !!currentGameState,
+    isLoading: gameLoading,
+    isProcessingTurn,
+    gameError,
+    conversationHistory,
+    narratorInputText,
+    logContainerRef,
+    snackbar,
+    displayedCurrentNarration,
+    fullLatestNarration: currentGameState?.narration || '',
+    enableStreaming: activePromptCard?.aiSettings?.streaming ?? true,
+
+    rollDialog: {
+      open: showRollDialog,
+      formula: rollFormula,
+    },
+
+    handleGoToLogin: () => {
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Navigating to /login');
+      navigate('/login');
+    },
+    handleSendAction,
+    handleInputChange: updateNarratorInputText,
+    handleKeyPress,
+    handleRollDice,
+    handleOpenRollDialog,
+    handleCloseRollDialog: () => {
+      if (enableDebugLogging) debugLog('[useGameScreenLogic.ts] Closing roll dialog.');
+      setShowRollDialog(false);
+    },
+    handleRollFormulaChange: setRollFormula,
+    closeSnackbar,
+  };
+};
+
+@@END_FILE@@
+
+@@FILE: src/utils/hooks/useLogViewerLogic.ts =====
+// src/utils/hooks/useLogViewerLogic.ts
+import { useState, useEffect, useCallback } from 'react';
+import { useLogStore } from '../../state/useLogStore';
+import { useGameStateStore } from '../../state/useGameStateStore';
+import { LogViewMode } from '../../utils/types';
+
+export const useLogViewerLogic = () => {
+  // 1. Consume global stores
+  const { logEntries, selectedLogViewModes, isLoading, error, setLogEntries, setSelectedLogViewModes } = useLogStore();
+  const { currentSnapshot } = useGameStateStore();
+
+  // 2. Local UI state
+  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const isMenuOpen = Boolean(menuAnchorEl);
+
+  // 3. Data synchronization effect
+  useEffect(() => {
+    // When the game snapshot changes, update the logs in the log store
+    setLogEntries(currentSnapshot?.logs || []);
+  }, [currentSnapshot, setLogEntries]);
+
+  // 4. Handlers
+  const handleMenuClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    setMenuAnchorEl(event.currentTarget);
+  }, []);
+
+  const handleMenuClose = useCallback(() => {
+    setMenuAnchorEl(null);
+  }, []);
+
+  const handleCheckboxChange = useCallback((mode: LogViewMode) => {
+    const newSelection = selectedLogViewModes.includes(mode)
+      ? selectedLogViewModes.filter((m) => m !== mode)
+      : [...selectedLogViewModes, mode];
+    setSelectedLogViewModes(newSelection);
+  }, [selectedLogViewModes, setSelectedLogViewModes]);
+
+  // 5. Return Clean API
+  return {
+    logEntries,
+    selectedLogViewModes,
+    isLoading,
+    error,
+    menuAnchorEl,
+    isMenuOpen,
+    handleMenuClick,
+    handleMenuClose,
+    handleCheckboxChange,
+  };
+};
+@@END_FILE@@
+
+@@FILE: src/utils/hooks/useLongPress.ts =====
+// src/utils/hooks/useLongPress.ts
+
+import React, { useRef, useCallback } from 'react';
+
+/**
+ * Custom hook to detect long press events.
+ * @param onLongPress The callback function to execute on long press.
+ * @param onClick The callback function to execute on a regular click (optional).
+ * @param options Configuration options for long press.
+ * @param options.delay The duration in milliseconds for a press to be considered a long press (default: 500).
+ */
+export function useLongPress<T extends HTMLElement>(
+  onLongPress: (event: React.MouseEvent<T> | React.TouchEvent<T>) => void,
+  onClick?: (event: React.MouseEvent<T> | React.TouchEvent<T>) => void,
+  { delay = 500 } = {}
+) {
+  // Initialize useRef with null to satisfy the 'initialValue' requirement
+  // and extend the type to allow null, as a timeout reference might be null initially
+  const timeout = useRef<NodeJS.Timeout | null>(null);
+  // Initialize useRef with null and extend the type to allow null,
+  // as the target element might not be immediately available or might be cleared
+  const target = useRef<T | null>(null);
+
+  const start = useCallback(
+    (event: React.MouseEvent<T> | React.TouchEvent<T>) => {
+      // Stop the event from bubbling to parent elements
+      event.stopPropagation();
+
+      // Prevent context menu on long press on some browsers
+      event.preventDefault();
+
+      target.current = event.currentTarget as T;
+      timeout.current = setTimeout(() => {
+        onLongPress(event);
+        // Assign null instead of undefined, as the type for target.current is T | null
+        target.current = null; // Clear target after long press
+      }, delay);
+    },
+    [onLongPress, delay]
+  );
+
+  const clear = useCallback(
+    (event: React.MouseEvent<T> | React.TouchEvent<T>, shouldClick = true) => {
+      // Clear the timeout if it exists
+      if (timeout.current) {
+        clearTimeout(timeout.current);
+      }
+
+      if (shouldClick && onClick && target.current === event.currentTarget) {
+        onClick(event);
+      }
+      // Assign null instead of undefined
+      target.current = null;
+    },
+    [onClick]
+  );
+
+  return {
+    onMouseDown: start,
+    onTouchStart: start,
+    onMouseUp: (e: React.MouseEvent<T>) => clear(e),
+    onMouseLeave: (e: React.MouseEvent<T>) => clear(e, false),
+    onTouchEnd: (e: React.TouchEvent<T>) => clear(e),
+    onTouchCancel: (e: React.TouchEvent<T>) => clear(e, false),
+  };
+}
+@@END_FILE@@
+
+@@FILE: src/utils/hooks/usePromptCardManagerLogic.ts =====
+// src/utils/hooks/usePromptCardManagerLogic.ts
+import { useState, useEffect, useCallback } from 'react';
+import type { User } from 'firebase/auth';
+import { usePromptCardStore } from '../../state/usePromptCardStore';
+import { useGameStateStore } from '../../state/useGameStateStore';
+import { useSettingsStore } from '../../state/useSettingsStore';
+import type { PromptCard, NewPromptCardData } from '../../models';
+import {
+  defaultStackInstructions,
+  defaultAiSettingsInCard,
+  DEFAULT_FIRST_TURN_PROMPT_BLOCK,
+  DEFAULT_EMIT_SKELETON_STRING,
+} from '../../data/config/promptCardDefaults';
+import { useNavigate } from 'react-router-dom';
+
+export const usePromptCardManagerLogic = (user: User | null) => {
+  const navigate = useNavigate();
+
+  // 1. All state and store hooks are moved here
+  const {
+    promptCards,
+    activePromptCard,
+    isLoading,
+    error,
+    fetchPromptCards,
+    setActivePromptCard,
+    addPromptCard,
+    updatePromptCard,
+    duplicatePromptCard,
+    deletePromptCard,
+    importPromptCards,
+    exportPromptCard,
+  } = usePromptCardStore();
+
+  const { initializeGame } = useGameStateStore();
+  const { aiConnections, fetchAiConnections } = useSettingsStore();
+
+  const [localEditedCard, setLocalEditedCard] = useState<PromptCard | null>(null);
+  const [isCardDirty, setIsCardDirty] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [saveAsNewTitle, setSaveAsNewTitle] = useState('');
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({ open: false, message: '', severity: 'info' });
+
+  // 2. All useEffects are moved here
+  useEffect(() => {
+    if (user?.uid) {
+      fetchPromptCards(user.uid);
+      fetchAiConnections(user.uid);
+    }
+  }, [user?.uid, fetchPromptCards, fetchAiConnections]);
+
+  useEffect(() => {
+    setLocalEditedCard(activePromptCard ? { ...activePromptCard } : null);
+    setIsCardDirty(false);
+  }, [activePromptCard]);
+
+  // 3. All handler functions are moved here and wrapped in useCallback
+  const showSnackbar = useCallback((message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
+    setSnackbar({ open: true, message, severity });
+  }, []);
+
+  const handleCardSelect = useCallback((card: PromptCard) => {
+    if (isCardDirty) {
+      showSnackbar('Unsaved changes will be lost if you switch cards.', 'warning');
+    }
+    setActivePromptCard(card);
+  }, [isCardDirty, setActivePromptCard, showSnackbar]);
+
+  const handleLocalCardChange = useCallback((updatedCard: PromptCard) => {
+    setLocalEditedCard(updatedCard);
+    setIsCardDirty(JSON.stringify(updatedCard) !== JSON.stringify(activePromptCard));
+  }, [activePromptCard]);
+
+  const handleSaveCard = useCallback(async (saveAsNew: boolean = false) => {
+    if (!user?.uid || !localEditedCard) return;
+
+    try {
+      let savedCard: PromptCard | null = null;
+      if (saveAsNew) {
+        const newCardData: NewPromptCardData = {
+          ...localEditedCard,
+          title: saveAsNewTitle || `${localEditedCard.title} (Copy)`,
+        };
+        savedCard = await addPromptCard(user.uid, newCardData);
+      } else {
+        savedCard = await updatePromptCard(user.uid, localEditedCard.id, localEditedCard);
+      }
+
+      if (savedCard) {
+        setActivePromptCard(savedCard);
+        showSnackbar('Card saved successfully!', 'success');
+      }
+    } catch (e) {
+      showSnackbar(`Failed to save card: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
+    } finally {
+      setShowSaveDialog(false);
+      setSaveAsNewTitle('');
+    }
+  }, [user, localEditedCard, saveAsNewTitle, addPromptCard, updatePromptCard, setActivePromptCard, showSnackbar]);
+
+  const handleRevert = useCallback(() => {
+    if (activePromptCard) {
+      setLocalEditedCard({ ...activePromptCard });
+      setIsCardDirty(false);
+      showSnackbar('Changes reverted.', 'info');
+    }
+  }, [activePromptCard, showSnackbar]);
+
+  const handleNewCard = useCallback(async () => {
+    if (!user?.uid) {
+      showSnackbar('Must be logged in to create a new card.', 'error');
+      return;
+    }
+    const defaultConnectionId = aiConnections.length > 0 ? aiConnections[0].id : "";
+    const newCardData: NewPromptCardData = {
+      title: "New Prompt Card",
+      prompt: "This is a new prompt card. Describe the setting and your character's starting situation.",
+      description: null,
+      firstTurnOnlyBlock: DEFAULT_FIRST_TURN_PROMPT_BLOCK,
+      stackInstructions: defaultStackInstructions,
+      emitSkeleton: DEFAULT_EMIT_SKELETON_STRING,
+      worldStateInit: '',
+      gameRules: '',
+      aiSettings: { ...defaultAiSettingsInCard, selectedConnectionId: defaultConnectionId },
+      helperAiSettings: { ...defaultAiSettingsInCard, selectedConnectionId: defaultConnectionId },
+      isHelperAiEnabled: false,
+      tags: [],
+      isExample: false,
+      functionDefs: '',
+      isPublic: false,
+    };
+    const createdCard = await addPromptCard(user.uid, newCardData);
+    if (createdCard) {
+      setActivePromptCard(createdCard);
+      showSnackbar('New card created successfully!', 'success');
+    }
+  }, [user, aiConnections, addPromptCard, setActivePromptCard, showSnackbar]);
+
+  const handleDeleteCard = useCallback(async (cardId: string) => {
+    if (!user?.uid) return;
+    await deletePromptCard(user.uid, cardId);
+    showSnackbar('Card deleted successfully!', 'success');
+  }, [user, deletePromptCard, showSnackbar]);
+
+  const handleDuplicateCard = useCallback(async (cardId: string) => {
+    if (!user?.uid) return;
+    const duplicated = await duplicatePromptCard(user.uid, cardId);
+    if (duplicated) {
+      showSnackbar('Card duplicated successfully!', 'success');
+    }
+  }, [user, duplicatePromptCard, showSnackbar]);
+
+  const handleImport = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user?.uid) return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const content = e.target?.result as string;
+        const parsed = JSON.parse(content) as NewPromptCardData | NewPromptCardData[];
+        const cardsToImport = Array.isArray(parsed) ? parsed : [parsed];
+        await importPromptCards(user.uid, cardsToImport);
+        showSnackbar(`Successfully imported ${cardsToImport.length} cards!`, 'success');
+      } catch (err) {
+        showSnackbar(`Failed to import cards: ${err instanceof Error ? err.message : 'Invalid JSON'}`, 'error');
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = ''; // Reset file input
+  }, [user, importPromptCards, showSnackbar]);
+
+  const handleExport = useCallback(async (cardId: string) => {
+    if (!user?.uid) return;
+    const card = await exportPromptCard(user.uid, cardId);
+    if (card) {
+      const json = JSON.stringify(card, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `prompt_card_${card.title.replace(/\s/g, '_')}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showSnackbar(`Card "${card.title}" exported.`, 'success');
+    }
+  }, [user, exportPromptCard, showSnackbar]);
+
+  const handleStartGame = useCallback(async () => {
+    if (!user?.uid || !activePromptCard) return;
+    if (isCardDirty) {
+      showSnackbar('Please save changes before starting a game.', 'warning');
+      return;
+    }
+    await initializeGame(user.uid, activePromptCard.id);
+    navigate('/game');
+  }, [user, activePromptCard, isCardDirty, initializeGame, navigate, showSnackbar]);
+
+  // 4. Return a clean API for the component
+  return {
+    // State for Rendering
+    isLoading,
+    error,
+    promptCards,
+    activePromptCard,
+    localEditedCard,
+    isCardDirty,
+    aiConnections,
+    saveDialog: {
+      open: showSaveDialog,
+      title: saveAsNewTitle
+    },
+    snackbar,
+
+    // Functions for Event Handlers
+    handleCardSelect,
+    handleLocalCardChange,
+    handleSaveCard,
+    handleRevert,
+    handleNewCard,
+    handleDeleteCard,
+    handleDuplicateCard,
+    handleImport,
+    handleExport,
+    handleStartGame,
+    setSaveDialog: setShowSaveDialog,
+    setSaveAsNewTitle,
+    closeSnackbar: () => setSnackbar(prev => ({ ...prev, open: false })),
+  };
+};
+@@END_FILE@@
+
+@@FILE: src/utils/hooks/useSettingsLogic.ts =====
+// src/utils/hooks/useSettingsLogic.ts
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useAuthStore } from '../../state/useAuthStore';
+import { useSettingsStore } from '../../state/useSettingsStore';
+import type { AiConnection } from '../../models';
+import { aiClient } from '../../logic/aiClient';
+import { aiConnectionTemplates } from '../../data/config/aiConnectionTemplates';
+import type { ModelInfo } from '../../data/config/aiConnectionTemplates';
+import { useDialog } from './useDialog'; // <-- ADD IMPORT
+
+export const useSettingsLogic = () => {
+  const { user } = useAuthStore();
+  const settingsStore = useSettingsStore();
+
+  const [dialogStep, setDialogStep] = useState<'select' | 'details'>('select');
+  const [editingConnection, setEditingConnection] = useState<AiConnection | null>(null);
+  const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
+  const [isFetchingModels, setIsFetchingModels] = useState(false);
+  const [modelSearchTerm, setModelSearchTerm] = useState('');
+  
+
+  const connectionDialog = useDialog();
+  const modelInfoDialog = useDialog();
+
+  
+  const [testStatus, setTestStatus] = useState<{ text: string, type: 'success' | 'error' | 'info' } | null>(null);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({ open: false, message: '', severity: 'info' });
+  const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null);
+
+  useEffect(() => {
+    if (user?.uid) {
+      settingsStore.fetchAiConnections(user.uid);
+    }
+  }, [user?.uid, settingsStore.fetchAiConnections]);
+
+  const showSnackbar = useCallback((message: string, severity: 'success' | 'error' | 'info' | 'warning' = 'info') => {
+    setSnackbar({ open: true, message, severity });
+  }, []);
+
+  const handleOpenDialog = useCallback((connection?: AiConnection) => {
+    setDialogStep(connection ? 'details' : 'select');
+    setEditingConnection(connection ? { ...connection } : null);
+    
+    const templateKey = connection ? Object.keys(aiConnectionTemplates).find(k => aiConnectionTemplates[k].displayName === connection.displayName) : undefined;
+    const initialModels = templateKey ? aiConnectionTemplates[templateKey].commonModels : (connection ? [{ id: connection.modelSlug, name: connection.modelName }] : []);
+    
+    setAvailableModels(initialModels);
+    setModelSearchTerm('');
+    setTestStatus(null);
+    connectionDialog.open(); // <-- UPDATE TO USE HOOK
+  }, [connectionDialog]);
+
+  const handleOpenModelInfo = useCallback((model: ModelInfo) => {
+    setModelInfo(model);
+    modelInfoDialog.open(); // <-- UPDATE TO USE HOOK
+  }, [modelInfoDialog]);
+
+  const handleLoadTemplate = useCallback((templateKey: string) => {
+    const template = aiConnectionTemplates[templateKey] || {
+        displayName: 'Custom', modelName: '', modelSlug: '', apiUrl: '', apiToken: '', functionCallingEnabled: false,
+        userAgent: 'StoryForge/1.0', supportsModelDiscovery: false, commonModels: [],
+    };
+    setEditingConnection({
+      displayName: template.displayName,
+      modelName: template.modelName,
+      modelSlug: template.modelSlug,
+      apiUrl: template.apiUrl,
+      apiToken: template.apiToken,
+      functionCallingEnabled: template.functionCallingEnabled,
+      userAgent: template.userAgent || null,
+      id: '',
+      createdAt: '',
+      lastUpdated: '',
+    });
+    
+    setAvailableModels(template.commonModels);
+    setModelSearchTerm('');
+    setDialogStep('details');
+  }, []);
+
+  const handleFetchModels = useCallback(async () => {
+    if (!editingConnection?.apiToken || editingConnection.apiToken.includes('PASTE')) {
+      showSnackbar("Please enter a valid API key first.", "warning");
+      return;
+    }
+    setIsFetchingModels(true);
+    setTestStatus({ text: "Fetching models...", type: "info" });
+    try {
+      const models = await aiClient.listModels(editingConnection);
+      setAvailableModels(models);
+      setTestStatus({ text: `Success! Found ${models.length} models.`, type: "success" });
+    } catch (error) {
+      setTestStatus({ text: "Failed to fetch models. Check API Key and URL.", type: "error" });
+    } finally {
+      setIsFetchingModels(false);
+    }
+  }, [editingConnection, showSnackbar]);
+
+  const filteredModels = useMemo(() => {
+    if (!modelSearchTerm) {
+      return availableModels;
+    }
+    const lowercasedFilter = modelSearchTerm.toLowerCase();
+    return availableModels.filter(model =>
+      model.name.toLowerCase().includes(lowercasedFilter) ||
+      model.id.toLowerCase().includes(lowercasedFilter)
+    );
+  }, [availableModels, modelSearchTerm]);
+
+  const handleCloseDialog = useCallback(() => {
+    connectionDialog.close(); // <-- UPDATE TO USE HOOK
+  }, [connectionDialog]);
+  
+  const handleCloseModelInfo = useCallback(() => {
+    modelInfoDialog.close(); // <-- UPDATE TO USE HOOK
+  }, [modelInfoDialog]);
+
+  const handleUpdateEditingConnection = useCallback((updates: Partial<AiConnection>) => {
+    setEditingConnection(prev => prev ? ({ ...prev, ...updates }) : null);
+  }, []);
+
+  const handleTest = useCallback(async () => {
+    if (!editingConnection) return;
+    setTestStatus({ text: 'Testing...', type: 'info' });
+    const result = await aiClient.testConnection(editingConnection);
+    if (result.success) {
+      setTestStatus({ text: `✅ ${result.message}`, type: 'success' });
+    } else {
+      setTestStatus({ text: result.message, type: 'error' });
+    }
+  }, [editingConnection]);
+
+  const handleSaveAndTest = useCallback(async () => {
+    if (!user?.uid || !editingConnection) return;
+    try {
+      let savedConn: AiConnection | null;
+      if (editingConnection.id) {
+        savedConn = await settingsStore.updateAiConnection(user.uid, editingConnection);
+        showSnackbar('Connection updated.', 'success');
+      } else {
+        savedConn = await settingsStore.addAiConnection(user.uid, editingConnection);
+        showSnackbar('Connection added.', 'success');
+      }
+      
+      if (savedConn) {
+        setEditingConnection(savedConn);
+        await handleTest();
+      }
+    } catch (e) {
+      showSnackbar(`Failed to save: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
+    }
+  }, [user, editingConnection, settingsStore, showSnackbar, handleTest]);
+
+  const handleDelete = useCallback(async (connectionId: string) => {
+    if (!user?.uid || !window.confirm("Are you sure you want to delete this connection?")) return;
+    await settingsStore.deleteAiConnection(user.uid, connectionId);
+    showSnackbar('Connection deleted.', 'success');
+  }, [user, settingsStore, showSnackbar]);
+
+  const closeSnackbar = useCallback(() => setSnackbar(prev => ({ ...prev, open: false })), []);
+
+  return {
+    ...settingsStore,
+    isDialogOpen: connectionDialog.isOpen, // <-- UPDATE RETURN VALUE
+    openModelInfo: modelInfoDialog.isOpen, // <-- UPDATE RETURN VALUE
+    dialogStep,
+    editingConnection,
+    availableModels,
+    isFetchingModels,
+    testStatus,
+    snackbar,
+    templates: aiConnectionTemplates,
+    modelSearchTerm,
+    setModelSearchTerm,
+    filteredModels,
+    modelInfo,
+    handleOpenDialog,
+    handleCloseDialog,
+    handleLoadTemplate,
+    handleUpdateEditingConnection,
+    handleFetchModels,
+    handleSaveAndTest,
+    handleDelete,
+    closeSnackbar,
+    handleTest,
+    handleOpenModelInfo,
+    handleCloseModelInfo,
+  };
+};
+@@END_FILE@@
+
+@@FILE: src/utils/hooks/useWorldStateViewLogic.ts =====
+// src/utils/hooks/useWorldStateViewLogic.ts
+import { useState, useMemo, useCallback } from 'react';
+// IMPORT THE SELECTOR FOR PINNED KEYS
+import {
+    useGameStateStore,
+    selectWorldStatePinnedKeys,
+    selectCurrentGameState,
+  } from '../../state/useGameStateStore';
+import { flattenJsonObject, getNestedValue } from '../../utils/jsonUtils';
+import { debugLog, errorLog } from '../../utils/debug';
+
+interface GroupedWorldState {
+    [category: string]: {
+        [entity: string]: {
+            [variable: string]: any;
+        };
+    };
+}
+
+export const useWorldStateViewLogic = () => {
+    const gameState = useGameStateStore(selectCurrentGameState);
+    // 1. Get necessary state and actions from the store
+    const worldStatePinnedKeys = useGameStateStore(selectWorldStatePinnedKeys);
+    const {
+        toggleWorldStatePin, // Action to toggle pins
+        renameWorldCategory, // Action to rename categories
+        renameWorldEntity,   // Action to rename entities
+        deleteWorldCategory, // Action to delete categories
+        deleteWorldEntity,   // Action to delete entities
+        editWorldKeyValue,   // Action to edit key-value pairs
+        deleteWorldKey,      // Action to delete keys
+    } = useGameStateStore(); // Destructure actions directly
+
+    // 2. Declare and initialize all local UI state variables
+    const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+    const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
+    const [editingCategory, setEditingCategory] = useState<string | null>(null);
+    const [newCategoryName, setNewCategoryName] = useState('');
+    const [editingEntity, setEditingEntity] = useState<[string, string] | null>(null); // Stores [category, entity]
+    const [newEntityName, setNewEntityName] = useState('');
+
+    // --- KEEP EXISTING DEBUG LINES ---
+    debugLog('%c[useWorldStateViewLogic.ts] Hook re-executed.', 'color: #B8860B; font-weight: bold;');
+    debugLog('[useWorldStateViewLogic.ts] Received gameState prop from WorldStateScreen:', JSON.stringify(gameState, null, 2));
+    debugLog('[useWorldStateViewLogic.ts] Extracted worldState from prop (gameState?.worldState):', JSON.stringify(gameState?.worldState, null, 2));
+    debugLog('[useWorldStateViewLogic.ts] Extracted worldState keys length (gameState?.worldState):', Object.keys(gameState?.worldState || {}).length);
+    debugLog('[useWorldStateViewLogic.ts] Pinned keys directly from store (in logic):', worldStatePinnedKeys);
+    // --- END DEBUG LINES ---
+
+    const worldState = gameState?.worldState || {};
+    const flattenedWorld = useMemo(() => {
+        const flat = flattenJsonObject(worldState);
+        debugLog('[useWorldStateViewLogic.ts] Calculated flattenedWorld (inside useMemo):', JSON.stringify(flat, null, 2));
+        debugLog('[useWorldStateViewLogic.ts] Flattened World keys length (inside useMemo):', Object.keys(flat).length);
+        return flat;
+    }, [worldState]);
+
+    const groupedByCategory = useMemo(() => {
+        const grouped: GroupedWorldState = {};
+        for (const fullKey in flattenedWorld) {
+            const value = flattenedWorld[fullKey];
+            const parts = fullKey.split(".");
+            if (parts.length < 1) continue;
+
+            const category = parts[0];
+            const entity = (parts.length > 1 && (parts[1].startsWith('#') || parts[1].startsWith('@') || parts[1].startsWith('$'))) ? parts[1] : '@@_direct';
+            const variable = (entity === '@@_direct') ? parts.slice(1).join('.') : parts.slice(2).join('.');
+            if (!variable) continue;
+
+            grouped[category] = grouped[category] || {};
+            grouped[category][entity] = grouped[category][entity] || {};
+            grouped[category][entity][variable] = value;
+        }
+        for (const category in grouped) {
+            if (Object.keys(grouped[category]['@@_direct'] || {}).length === 0) {
+                delete grouped[category]['@@_direct'];
+            }
+        }
+        debugLog('[useWorldStateViewLogic.ts] Grouped by Category (inside useMemo):', JSON.stringify(grouped, null, 2));
+        debugLog('[useWorldStateViewLogic.ts] Grouped by Category keys length (inside useMemo):', Object.keys(grouped).length);
+        return grouped;
+    }, [flattenedWorld]);
+
+    // Utility to get all variable keys under a given path (entity or category)
+    const getAllChildVariableKeys = useCallback((basePath: string): string[] => {
+        const nestedData = getNestedValue(worldState, basePath.split('.'));
+        if (typeof nestedData !== 'object' || nestedData === null) return [];
+        // Flatten the nested data starting from the basePath to get its direct children keys
+        return Object.keys(flattenJsonObject(nestedData, basePath));
+    }, [worldState]);
+
+    // Memoized checks for pinning status
+    const isAnyChildPinned = useCallback((parentPath: string) => {
+        return getAllChildVariableKeys(parentPath).some(key => worldStatePinnedKeys.includes(key));
+    }, [getAllChildVariableKeys, worldStatePinnedKeys]);
+
+    const areAllChildrenPinned = useCallback((parentPath: string) => {
+        const childKeys = getAllChildVariableKeys(parentPath);
+        return childKeys.length > 0 && childKeys.every(key => worldStatePinnedKeys.includes(key));
+    }, [getAllChildVariableKeys, worldStatePinnedKeys]);
+
+    // Handlers for expanding/collapsing categories and entities
+    const handleToggleCategoryExpand = useCallback((category: string) => {
+        setExpandedCategories(prev => {
+            const newSet = new Set(prev);
+            newSet.has(category) ? newSet.delete(category) : newSet.add(category);
+            return newSet;
+        });
+    }, []);
+
+    const handleToggleEntityExpand = useCallback((category: string, entity: string) => {
+        const key = `${category}.${entity}`;
+        setExpandedEntities(prev => {
+            const newSet = new Set(prev);
+            newSet.has(key) ? newSet.delete(key) : newSet.add(key);
+            return newSet;
+        });
+    }, []);
+
+    // Handlers for pinning/unpinning
+    const handleToggleCategoryPin = useCallback((category: string) => {
+        toggleWorldStatePin(category, 'category');
+    }, [toggleWorldStatePin]);
+
+    const handleToggleEntityPin = useCallback((entityPath: string) => {
+        toggleWorldStatePin(entityPath, 'entity');
+    }, [toggleWorldStatePin]);
+
+    // Handlers for renaming category
+    const handleStartRenameCategory = useCallback((category: string) => {
+        setEditingCategory(category);
+        setNewCategoryName(category); // Initialize input with current name
+    }, []);
+
+    const handleConfirmRenameCategory = useCallback(async () => {
+        if (editingCategory && newCategoryName.trim() && newCategoryName !== editingCategory) {
+            await renameWorldCategory(editingCategory, newCategoryName.trim());
+        }
+        setEditingCategory(null); // Exit edit mode
+        setNewCategoryName(''); // Clear input
+    }, [editingCategory, newCategoryName, renameWorldCategory]);
+
+    // Handlers for renaming entity
+    const handleStartRenameEntity = useCallback((entityPathParts: [string, string]) => { // entityPathParts is [category, entity]
+        setEditingEntity(entityPathParts);
+        setNewEntityName(entityPathParts[1]); // Initialize input with current entity name
+    }, []);
+
+    const handleConfirmRenameEntity = useCallback(async () => {
+        if (editingEntity && newEntityName.trim() && newEntityName !== editingEntity[1]) {
+            await renameWorldEntity(editingEntity[0], editingEntity[1], newEntityName.trim());
+        }
+        setEditingEntity(null); // Exit edit mode
+        setNewEntityName(''); // Clear input
+    }, [editingEntity, newEntityName, renameWorldEntity]);
+
+    // Handler to cancel any edit operation
+    const cancelEdit = useCallback(() => {
+        setEditingCategory(null);
+        setEditingEntity(null);
+        setNewCategoryName('');
+        setNewEntityName('');
+    }, []);
+
+    // 5. Return the clean API
+    return {
+        // Derived Data
+        groupedByCategory,
+        worldStatePinnedKeys,
+        isAnyChildPinned,
+        areAllChildrenPinned,
+
+        // Local UI State
+        expandedCategories,
+        expandedEntities,
+        editingCategory,
+        newCategoryName,
+        editingEntity,
+        newEntityName,
+
+        // Handlers (from store and local)
+        handleToggleCategoryExpand,
+        handleToggleEntityExpand,
+        handleToggleCategoryPin,
+        handleToggleEntityPin,
+        handleStartRenameCategory,
+        handleConfirmRenameCategory,
+        setNewCategoryName,
+        handleStartRenameEntity,
+        handleConfirmRenameEntity,
+        setNewEntityName,
+        cancelEdit,
+
+        // Actions passed directly from store (for clarity)
+        deleteWorldCategory,
+        deleteWorldEntity,
+        editWorldKeyValue,
+        deleteWorldKey,
+        toggleWorldStatePin, // Ensure this is correctly passed if needed elsewhere
+    };
+};
+@@END_FILE@@

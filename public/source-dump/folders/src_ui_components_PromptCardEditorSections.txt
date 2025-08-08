@@ -1,0 +1,209 @@
+# Group: src/ui/components/PromptCardEditorSections
+# Files: 5
+
+@@FILE: src/ui/components/PromptCardEditorSections/AiSettingsSection.tsx =====
+// src/ui/components/PromptCardEditorSections/AiSettingsSection.tsx
+import React from 'react';
+import { Box, Typography, Slider, TextField } from '@mui/material';
+import type { AiSettings } from '../../../models';
+import { useSettingsStore } from '../../../state/useSettingsStore';
+
+interface AiSettingsSectionProps {
+  settings: AiSettings;
+  onChange: (newSettings: AiSettings) => void;
+}
+
+export const AiSettingsSection: React.FC<AiSettingsSectionProps> = ({ settings, onChange }) => {
+  const update = <K extends keyof AiSettings>(key: K, value: AiSettings[K]) => {
+    onChange({ ...settings, [key]: value });
+  };
+
+  const availableConnections = useSettingsStore((state) => state.aiConnections);
+  const selectedConnection = availableConnections.find(
+    (conn) => conn.id === settings.selectedConnectionId
+  );
+
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom>AI Settings</Typography>
+
+      <Box sx={{ mt: 2 }}>
+        <Typography gutterBottom>Model Name</Typography>
+        <TextField
+          fullWidth
+          value={selectedConnection?.modelName || "Unknown"}
+          disabled // 👈 Make this readonly
+        />
+      </Box>
+
+
+      <Box sx={{ mt: 3 }}>
+        <Typography gutterBottom>Temperature: {settings.temperature}</Typography>
+        <Slider
+          value={settings.temperature}
+          min={0}
+          max={1.5}
+          step={0.05}
+          onChange={(_, val) => update('temperature', val as number)}
+        />
+      </Box>
+
+      <Box sx={{ mt: 3 }}>
+        <Typography gutterBottom>Top P: {settings.topP}</Typography>
+        <Slider
+          value={settings.topP}
+          min={0}
+          max={1}
+          step={0.05}
+          onChange={(_, val) => update('topP', val as number)}
+        />
+      </Box>
+
+      <Box sx={{ mt: 3 }}>
+        <Typography gutterBottom>Max Tokens</Typography>
+        <TextField
+          type="number"
+          fullWidth
+          value={settings.maxTokens}
+          onChange={(e) => update('maxTokens', parseInt(e.target.value) || 0)}
+        />
+      </Box>
+
+      <Box sx={{ mt: 3 }}>
+        <Typography gutterBottom>Presence Penalty: {settings.presencePenalty}</Typography>
+        <Slider
+          value={settings.presencePenalty}
+          min={-2}
+          max={2}
+          step={0.1}
+          onChange={(_, val) => update('presencePenalty', val as number)}
+        />
+      </Box>
+
+      <Box sx={{ mt: 3 }}>
+        <Typography gutterBottom>Frequency Penalty: {settings.frequencyPenalty}</Typography>
+        <Slider
+          value={settings.frequencyPenalty}
+          min={-2}
+          max={2}
+          step={0.1}
+          onChange={(_, val) => update('frequencyPenalty', val as number)}
+        />
+      </Box>
+    </Box>
+  );
+};
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/PromptCardEditorSections/EmitSkeletonSection.tsx =====
+// src/ui/components/PromptCardEditorSections/EmitSkeletonSection.tsx
+import React from 'react';
+import { Box, Typography, TextField } from '@mui/material';
+
+interface EmitSkeletonSectionProps {
+  emitSkeleton: string;
+  onChange: (value: string) => void;
+}
+
+export const EmitSkeletonSection: React.FC<EmitSkeletonSectionProps> = ({ emitSkeleton, onChange }) => {
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom>Emit Skeleton</Typography>
+      <TextField
+        label="Emit Skeleton JSON"
+        multiline
+        fullWidth
+        minRows={6}
+        value={emitSkeleton}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </Box>
+  );
+};
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/PromptCardEditorSections/GameRulesSection.tsx =====
+// src/ui/components/PromptCardEditorSections/GameRulesSection.tsx
+import React from 'react';
+import { Box, Typography, TextField } from '@mui/material';
+
+interface GameRulesSectionProps {
+  gameRules: string;
+  onChange: (value: string) => void;
+}
+
+export const GameRulesSection: React.FC<GameRulesSectionProps> = ({ gameRules, onChange }) => {
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom>Game Rules</Typography>
+      <TextField
+        label="Rules Text"
+        multiline
+        fullWidth
+        minRows={6}
+        value={gameRules}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </Box>
+  );
+};
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/PromptCardEditorSections/PromptSection.tsx =====
+// src/ui/components/PromptCardEditorSections/PromptSection.tsx
+import React from 'react';
+import { Box, Typography, TextField } from '@mui/material';
+
+interface PromptSectionProps {
+  prompt: string;
+  onChange: (value: string) => void;
+}
+
+export const PromptSection: React.FC<PromptSectionProps> = ({ prompt, onChange }) => {
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom>Core Prompt</Typography>
+      <TextField
+        label="Prompt Text"
+        multiline
+        fullWidth
+        minRows={6}
+        value={prompt}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </Box>
+  );
+};
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/PromptCardEditorSections/WorldStateInitSection.tsx =====
+// src/ui/components/PromptCardEditorSections/WorldStateInitSection.tsx
+import React from 'react';
+import { Box, Typography, TextField } from '@mui/material';
+
+interface WorldStateInitSectionProps {
+  worldState: string;
+  onChange: (value: string) => void;
+}
+
+export const WorldStateInitSection: React.FC<WorldStateInitSectionProps> = ({ worldState, onChange }) => {
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom>Initial World State</Typography>
+      <TextField
+        label="World State JSON"
+        multiline
+        fullWidth
+        minRows={8}
+        value={worldState}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </Box>
+  );
+};
+
+@@END_FILE@@

@@ -1,14 +1,60 @@
 // dump-src.js
 import fs from 'fs';
+import fsp from 'fs/promises';
 import path from 'path';
 import chokidar from 'chokidar';
+import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+import AdmZip from 'adm-zip';
+import ignore from 'ignore';
 
-const SRC_DIR = path.join(process.cwd(), 'src');
-const OUT_FILE = path.join(process.cwd(), 'public', 'source-dump.txt');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 
+const REPO_ROOT = process.cwd();
+const SRC_DIR = path.join(REPO_ROOT, 'src');
+const PUBLIC_DIR = path.join(REPO_ROOT, 'public');
+const OUT_FILE = path.join(PUBLIC_DIR, 'source-dump.txt');
+const FOLDERS_DIR = path.join(PUBLIC_DIR, 'source-dump', 'folders');
+
+const BEGIN_SIG = '@@FILE: ';
+const END_SIG = '@@END_FILE@@';
+
+// Load .gitignore
+const ig = ignore();
+ig.add('public/source-dump');
+ig.add('public/source-dump.txt');
+ig.add('public/source-dump.zip');
+ig.add('public/source-dump.b64.txt');
+ig.add('public/source-dump-manifest.json');
+
+const gitignorePath = path.join(REPO_ROOT, '.gitignore');
+if (fs.existsSync(gitignorePath)) {
+  ig.add(fs.readFileSync(gitignorePath, 'utf8').split('\n'));
+}
+
+async function ensureDir(dir) {
+  await fsp.mkdir(dir, { recursive: true });
+}
+
+function relUnix(p) {
+  return p
+    .replace(/\\/g, '/')
+    .replace(REPO_ROOT.replace(/\\/g, '/'), '')
+    .replace(/^\/+/, '');
+}
+
+// Walk directory and skip .gitignore matches
 function walkDir(dir, callback) {
   fs.readdirSync(dir, { withFileTypes: true }).forEach((entry) => {
     const fullPath = path.join(dir, entry.name);
+    const relPath = relUnix(fullPath);
+
+    if (ig.ignores(relPath)) {
+      console.log(`🚨 Skipped (gitignore): ${relPath}`);
+      return;
+    }
+
     if (entry.isDirectory()) {
       callback(fullPath, true);
       walkDir(fullPath, callback);
@@ -18,31 +64,132 @@ function walkDir(dir, callback) {
   });
 }
 
-function dumpSource() {
-  let output = '';
+async function writeZipFromFiles(zipPath, filePaths) {
+  const zip = new AdmZip();
+  for (const relPath of filePaths) {
+    const absPath = path.join(REPO_ROOT, relPath);
+    zip.addLocalFile(absPath, path.dirname(relPath));
+  }
+  zip.writeZip(zipPath);
+  return (await fsp.stat(zipPath)).size;
+}
 
-  walkDir(SRC_DIR, (fullPath, isDir) => {
-    const relPath = path.relative(process.cwd(), fullPath).replace(/\\/g, '/');
-    if (isDir) {
-      output += `@@FOLDER: ${relPath}\n`;
-    } else {
-      output += `@@FILE: ${relPath}\n`;
+async function writeBase64File(zipPath, b64Path) {
+  const buf = await fsp.readFile(zipPath);
+  const b64 = buf.toString('base64');
+  await fsp.writeFile(b64Path, b64, 'utf8');
+  return b64.length;
+}
+
+// Group by all ancestor folders
+function groupByAllFolders(files) {
+  const map = new Map();
+  const add = (folderKey, file) => {
+    if (!map.has(folderKey)) map.set(folderKey, []);
+    map.get(folderKey).push(file);
+  };
+
+  for (const f of files) {
+    const parts = f.path.split('/');
+    if (parts.length === 1) {
+      add('', f);
+      continue;
+    }
+    for (let i = 1; i < parts.length; i++) {
+      const folder = parts.slice(0, i).join('/');
+      add(folder, f);
+    }
+  }
+
+  for (const [, arr] of map) {
+    arr.sort((a, b) => a.path.localeCompare(b.path));
+  }
+  return map;
+}
+
+async function writeGroupArtifacts(groups) {
+  const meta = [];
+  await ensureDir(FOLDERS_DIR);
+
+  for (const [folderPath, arr] of groups.entries()) {
+    const displayName = folderPath || '(repo root)';
+    const safe = displayName.replace(/[^\w.\- ()]/g, '_');
+    const txtPath = path.join(FOLDERS_DIR, `${safe}.txt`);
+    const zipPath = path.join(FOLDERS_DIR, `${safe}.zip`);
+    const b64Path = path.join(FOLDERS_DIR, `${safe}.b64.txt`);
+
+    const chunks = [];
+    chunks.push(`# Group: ${displayName}`);
+    chunks.push(`# Files: ${arr.length}`);
+    chunks.push('');
+    for (const { path: rp } of arr) {
+      const ap = path.join(REPO_ROOT, rp);
+      let content;
       try {
-        const fileContent = fs.readFileSync(fullPath, 'utf8');
-        output += fileContent + '\n';
-      } catch (err) {
-        output += `// ERROR reading file: ${err.message}\n`;
+        content = await fsp.readFile(ap, 'utf8');
+      } catch {
+        const buf = await fsp.readFile(ap);
+        content = `[[BINARY FILE, BASE64 ENCODED]]\n${buf.toString('base64')}`;
       }
+      chunks.push(`${BEGIN_SIG}${rp} =====`);
+      chunks.push(content);
+      chunks.push(END_SIG);
+      chunks.push('');
+    }
+    await fsp.writeFile(txtPath, chunks.join('\n'), 'utf8');
+
+    const zipBytes = await writeZipFromFiles(zipPath, arr.map(f => f.path));
+    const b64Bytes = await writeBase64File(zipPath, b64Path);
+
+    meta.push({
+      name: displayName,
+      fileCount: arr.length,
+      byteCount: arr.reduce((a, b) => a + (b.bytes || 0), 0),
+      txt: relUnix(txtPath),
+      zip: relUnix(zipPath),
+      b64: relUnix(b64Path),
+      zipBytes,
+      b64Bytes
+    });
+  }
+
+  meta.sort((a, b) => a.name.localeCompare(b.name));
+  return meta;
+}
+
+async function buildOnce() {
+  const files = [];
+  walkDir(SRC_DIR, (fullPath, isDir) => {
+    if (!isDir) {
+      const relPath = path.relative(REPO_ROOT, fullPath).replace(/\\/g, '/');
+      const stats = fs.statSync(fullPath);
+      files.push({ path: relPath, bytes: stats.size });
     }
   });
 
+  const groups = groupByAllFolders(files);
+  const groupsMeta = await writeGroupArtifacts(groups);
+
+  let output = '';
+  for (const { path: relPath } of files) {
+    output += `${BEGIN_SIG}${relPath}\n`;
+    try {
+      output += fs.readFileSync(path.join(REPO_ROOT, relPath), 'utf8') + '\n';
+    } catch (err) {
+      output += `// ERROR reading file: ${err.message}\n`;
+    }
+    output += END_SIG + '\n';
+  }
+
+  await ensureDir(path.dirname(OUT_FILE));
   fs.writeFileSync(OUT_FILE, output, 'utf8');
   console.log(`✅ Source dump updated: ${new Date().toLocaleTimeString()}`);
+  console.log(`[dump-src] Folders: ${groupsMeta.length} -> ${relUnix(FOLDERS_DIR)}`);
 }
 
 if (process.argv.includes('--watch')) {
-  dumpSource();
-  chokidar.watch(SRC_DIR, { ignoreInitial: true }).on('all', () => dumpSource());
+  buildOnce();
+  chokidar.watch(SRC_DIR, { ignoreInitial: true }).on('all', () => buildOnce());
 } else {
-  dumpSource();
+  buildOnce();
 }

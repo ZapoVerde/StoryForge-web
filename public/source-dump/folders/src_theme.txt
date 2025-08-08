@@ -1,0 +1,161 @@
+# Group: src/theme
+# Files: 1
+
+@@FILE: src/theme/index.ts =====
+// src/theme/index.ts
+import { createTheme } from '@mui/material/styles';
+
+/* --------------------------
+   BRAND & COLOR VARIABLES
+   -------------------------- */
+
+// Backgrounds - Light
+const BG_LIGHT_DEFAULT = '#FAFAFA'; // soft warm white
+const BG_LIGHT_PAPER = '#FFFFFF';   // pure white
+
+// Backgrounds - Dark
+const BG_DARK_DEFAULT = '#121212';  // deep black
+const BG_DARK_PAPER = '#1E1E1E';    // dark grey
+
+// Text - Light
+const TEXT_LIGHT_PRIMARY = '#1A1A1A'; // rich near-black
+const TEXT_LIGHT_SECONDARY = '#555555'; // medium grey
+
+// Text - Dark
+const TEXT_DARK_PRIMARY = '#F5F5F5'; // soft white
+const TEXT_DARK_SECONDARY = '#BBBBBB'; // medium light grey
+
+// Primary Accent (actions, highlights)
+const BRAND_PRIMARY_LIGHT = '#A84300'; // muted burnt orange
+const BRAND_PRIMARY_DARK = '#FF8C42';  // warm muted orange
+
+// Secondary Accent
+const BRAND_SECONDARY_LIGHT = '#8B5E3C'; // warm brown
+const BRAND_SECONDARY_DARK = '#D4A373';  // warm beige
+
+// Dividers
+const DIVIDER_LIGHT = '#E0E0E0';
+const DIVIDER_DARK = '#333333';
+
+// Custom UI colors
+const PINNED_ENTITY_LIGHT = 'rgba(168, 67, 0, 0.85)'; // burnt orange translucent
+// Much darker burnt orange, less opacity
+const PINNED_ENTITY_DARK = 'rgba(140, 80, 40, 0.4)';
+
+
+const CHIP_BG_LIGHT = 'rgba(255,255,255,0.7)';
+const CHIP_BG_DARK = 'rgba(0,0,0,0.4)';
+
+// Frosted translucency
+const FROSTED_LIGHT = 'rgba(255,255,255,0.6)';
+const FROSTED_DARK = 'rgba(30,30,30,0.4)';
+
+
+
+/* --------------------------
+   THEME EXTENSIONS
+   -------------------------- */
+declare module '@mui/material/styles' {
+  interface Palette {
+    pinnedEntity: Palette['primary'];
+    chipBackground: Palette['primary'];
+    frostedSurface: { light: string; dark: string };
+  }
+  interface PaletteOptions {
+    pinnedEntity?: PaletteOptions['primary'];
+    chipBackground?: PaletteOptions['primary'];
+    frostedSurface?: { light: string; dark: string };
+  }
+}
+
+/* --------------------------
+   THEME FACTORY
+   -------------------------- */
+export const getAppTheme = (mode: 'light' | 'dark') => {
+  const isLight = mode === 'light';
+
+  return createTheme({
+    palette: {
+      mode,
+      primary: {
+        main: isLight ? BRAND_PRIMARY_LIGHT : BRAND_PRIMARY_DARK,
+      },
+      secondary: {
+        main: isLight ? BRAND_SECONDARY_LIGHT : BRAND_SECONDARY_DARK,
+      },
+      background: {
+        default: isLight ? BG_LIGHT_DEFAULT : BG_DARK_DEFAULT,
+        paper: isLight ? BG_LIGHT_PAPER : BG_DARK_PAPER,
+      },
+      text: {
+        primary: isLight ? TEXT_LIGHT_PRIMARY : TEXT_DARK_PRIMARY,
+        secondary: isLight ? TEXT_LIGHT_SECONDARY : TEXT_DARK_SECONDARY,
+      },
+
+      // Custom palette extensions
+      pinnedEntity: {
+        main: isLight ? PINNED_ENTITY_LIGHT : PINNED_ENTITY_DARK
+      },
+      chipBackground: {
+        main: isLight ? CHIP_BG_LIGHT : CHIP_BG_DARK,
+      },
+      frostedSurface: {
+        light: FROSTED_LIGHT,
+        dark: FROSTED_DARK,
+      },
+    },
+
+    shape: {
+      borderRadius: 8,
+    },
+
+    typography: {
+      fontFamily: `"Roboto", "Arial", sans-serif`,
+      h6: { fontWeight: 600 },
+    },
+
+    components: {
+      MuiPaper: {
+        styleOverrides: {
+          root: ({ theme }) => ({
+            backgroundColor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
+          }),
+        },
+      },
+      MuiCard: {
+        styleOverrides: {
+          root: ({ theme }) => ({
+            backgroundColor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
+          }),
+        },
+      },
+      MuiDialog: {
+        styleOverrides: {
+          paper: ({ theme }) => ({
+            backgroundColor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.divider}`,
+          }),
+        },
+      },
+      MuiChip: {
+        styleOverrides: {
+          root: ({ theme }) => ({
+            backgroundColor: theme.palette.chipBackground.main,
+            color: theme.palette.text.primary,
+          }),
+        },
+      },
+      MuiButton: {
+        styleOverrides: {
+          root: () => ({
+            borderRadius: 8,
+          }),
+        },
+      },
+    },
+  });
+};
+
+@@END_FILE@@

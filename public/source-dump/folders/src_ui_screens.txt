@@ -1,0 +1,1665 @@
+# Group: src/ui/screens
+# Files: 11
+
+@@FILE: src/ui/screens/CardLibraryScreen.tsx =====
+// src/ui/screens/PromptCardLibraryScreen.tsx
+// RENAMED from GameLibraryScreen.tsx
+
+import React, { useEffect, useState } from 'react';
+import {
+  Box,
+  Typography,
+  Button,
+  AppBar,
+  Toolbar,
+  IconButton,
+  List,
+  ListItem,
+  ListItemText,
+  Paper,
+  Divider,
+  CircularProgress,
+  Alert,
+  TextField,
+  InputAdornment,
+} from '@mui/material';
+import MenuIcon from '@mui/icons-material/Menu';
+import SearchIcon from '@mui/icons-material/Search';
+import AddIcon from '@mui/icons-material/Add';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import { usePromptCardStore } from '../../state/usePromptCardStore';
+import { useAuthStore } from '../../state/useAuthStore';
+import { useGameStateStore } from '../../state/useGameStateStore';
+import type { PromptCard } from '../../models';
+import Snackbar from '@mui/material/Snackbar';
+import { useNavigate } from 'react-router-dom';
+
+
+interface PromptCardLibraryScreenProps { // RENAMED interface
+  onNavToggle: () => void;
+  // onNavigateToEditor: (cardId?: string) => void; // To navigate to editor with a specific card
+}
+
+const PromptCardLibraryScreen: React.FC<PromptCardLibraryScreenProps> = ({ onNavToggle }) => { // RENAMED component
+  const { user } = useAuthStore();
+  const navigate = useNavigate();
+  const {
+    promptCards,
+    isLoading,
+    error,
+    fetchPromptCards,
+    setActivePromptCard,
+    deletePromptCard,
+  } = usePromptCardStore();
+  const { initializeGame } = useGameStateStore();
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'info'>('info');
+
+
+  useEffect(() => {
+    if (user?.uid) {
+      fetchPromptCards(user.uid);
+    }
+  }, [user?.uid, fetchPromptCards]);
+
+  const filteredCards = promptCards.filter(card =>
+    card.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    card.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    card.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  const handleEditCard = (card: PromptCard) => {
+    setActivePromptCard(card);
+    // Navigate to PromptCardManager/Editor screen
+    navigate('/cards'); // Navigate to the PromptCardManager
+    setSnackbarMessage(`Editing "${card.title}"`);
+    setSnackbarSeverity('info');
+    console.log(`Navigating to editor for card: ${card.id}`);
+  };
+
+  const handleDeleteCard = async (cardId: string) => {
+    if (!user?.uid) return;
+    try {
+      await deletePromptCard(user.uid, cardId);
+      setSnackbarMessage('Card deleted successfully!');
+      setSnackbarSeverity('success');
+    } catch (e) {
+      setSnackbarMessage(`Failed to delete card: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      setSnackbarSeverity('error');
+    }
+  };
+
+  const handleStartGame = async (card: PromptCard) => {
+    if (!user?.uid) {
+      setSnackbarMessage('Must be logged in to start a game.');
+      setSnackbarSeverity('error');
+      return;
+    }
+    try {
+      // First, set the active card, then initialize game
+      setActivePromptCard(card);
+      await initializeGame(user.uid, card.id);
+      setSnackbarMessage(`Game "${card.title}" initialized! Navigating to game...`);
+      setSnackbarSeverity('success');
+      navigate('/game'); // Navigate to the GameScreen
+      console.log(`Game "${card.title}" started! Navigating to GameScreen.`);
+    } catch (e) {
+      setSnackbarMessage(`Failed to start game: ${e instanceof Error ? e.message : 'Unknown error'}`);
+      setSnackbarSeverity('error');
+    }
+  };
+
+
+  if (isLoading && !promptCards.length) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress />
+        <Typography variant="h6" ml={2}>Loading Prompt Card Library...</Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
+      <AppBar position="static" elevation={1}>
+        <Toolbar>
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+            Prompt Card Library
+          </Typography>
+          <IconButton edge="end" color="inherit" aria-label="menu" onClick={onNavToggle}>
+            <MenuIcon />
+          </IconButton>
+        </Toolbar>
+      </AppBar>
+
+      {error && (
+        <Alert severity="error" sx={{ m: 2 }}>
+          Error: {error}
+        </Alert>
+      )}
+
+      <Box sx={{ p: 2 }}>
+        <TextField
+          fullWidth
+          label="Search Cards"
+          variant="outlined"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ mb: 2 }}
+        />
+      </Box>
+
+      <Paper elevation={1} sx={{ flexGrow: 1, m: 2, overflowY: 'auto' }}>
+        {filteredCards.length === 0 ? (
+          <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
+            <Typography variant="body1" color="text.secondary">
+              {searchTerm ? "No cards match your search." : "No cards available. Go to Prompt Cards Manager to create one!"}
+            </Typography>
+            <Button variant="contained" startIcon={<AddIcon />} sx={{ mt: 2 }} onClick={() => navigate('/cards')}>
+              Go to Prompt Card Manager
+            </Button>
+          </Box>
+        ) : (
+          <List>
+            {filteredCards.map((card) => (
+              <React.Fragment key={card.id}>
+                <ListItem
+                  secondaryAction={
+                    <Box>
+                      <IconButton edge="end" aria-label="start-game" onClick={() => handleStartGame(card)}>
+                        <PlayArrowIcon color="primary" />
+                      </IconButton>
+                      <IconButton edge="end" aria-label="edit-card" onClick={() => handleEditCard(card)}>
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton edge="end" aria-label="delete-card" onClick={() => handleDeleteCard(card.id)}>
+                        <DeleteIcon color="error" />
+                      </IconButton>
+                    </Box>
+                  }
+                >
+                  <ListItemText
+                    primary={card.title}
+                    secondary={card.description || 'No description'}
+                    primaryTypographyProps={{ fontWeight: 'medium' }}
+                  />
+                </ListItem>
+                <Divider component="li" />
+              </React.Fragment>
+            ))}
+          </List>
+        )}
+      </Paper>
+      <Snackbar
+        open={!!snackbarMessage}
+        autoHideDuration={6000}
+        onClose={() => setSnackbarMessage(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setSnackbarMessage(null)} severity={snackbarSeverity} sx={{ width: '100%' }}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
+    </Box>
+  );
+};
+
+export default PromptCardLibraryScreen;
+@@END_FILE@@
+
+@@FILE: src/ui/screens/GameLibraryScreen.tsx =====
+import React, { useEffect, useState } from 'react';
+import {
+  Box,
+  Typography,
+  Button,
+  AppBar,
+  Toolbar,
+  List,
+  ListItem,
+  ListItemText,
+  Paper,
+  Divider,
+  CircularProgress,
+  Alert,
+  IconButton,
+  Snackbar,
+} from '@mui/material';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import DeleteIcon from '@mui/icons-material/Delete';
+import { useAuthStore } from '../../state/useAuthStore';
+import { useGameStateStore } from '../../state/useGameStateStore';
+import { gameRepository } from '../../data/repositories/gameRepository';
+import { useNavigate } from 'react-router-dom';
+import type { GameSnapshot } from '../../models';
+import { formatIsoDateForDisplay } from '../../utils/formatDate';
+
+const GameLibraryScreen: React.FC = () => {
+  const { user } = useAuthStore();
+  const navigate = useNavigate();
+  const { loadGame, gameLoading } = useGameStateStore();
+
+  const [savedGames, setSavedGames] = useState<GameSnapshot[]>([]);
+  const [loadingSavedGames, setLoadingSavedGames] = useState(true);
+  const [savedGamesError, setSavedGamesError] = useState<string | null>(null);
+  const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'info' | 'warning'>('info');
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+
+  const fetchSavedGames = async (userId: string) => {
+    setLoadingSavedGames(true);
+    setSavedGamesError(null);
+    try {
+      const games = await gameRepository.getAllGameSnapshots(userId);
+      setSavedGames(games);
+    } catch (e: any) {
+      setSavedGamesError(e.message || 'Failed to fetch saved games.');
+    } finally {
+      setLoadingSavedGames(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.uid) {
+      fetchSavedGames(user.uid);
+    }
+  }, [user?.uid]);
+
+  const showSnackbar = (
+    message: string,
+    severity: 'success' | 'error' | 'info' | 'warning' = 'info'
+  ) => {
+    setSnackbarMessage(message);
+    setSnackbarSeverity(severity);
+    setSnackbarOpen(true);
+  };
+
+  const handleSnackbarClose = (event?: React.SyntheticEvent | Event, reason?: string) => {
+    if (reason === 'clickaway') return;
+    setSnackbarOpen(false);
+  };
+
+  const handleLoadGame = async (snapshotId: string) => {
+    if (!user?.uid) {
+      showSnackbar('Must be logged in to load a game.', 'error');
+      return;
+    }
+    try {
+      await loadGame(user.uid, snapshotId);
+      showSnackbar('Game loaded successfully! Navigating to game...', 'success');
+      navigate('/game');
+    } catch (e) {
+      showSnackbar(
+        `Failed to load game: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        'error'
+      );
+    }
+  };
+
+  const handleDeleteGame = async (snapshotId: string) => {
+    if (!user?.uid) return;
+    try {
+      await gameRepository.deleteGameSnapshot(user.uid, snapshotId);
+      fetchSavedGames(user.uid);
+      showSnackbar('Game deleted successfully!', 'success');
+    } catch (e) {
+      showSnackbar(
+        `Failed to delete game: ${e instanceof Error ? e.message : 'Unknown error'}`,
+        'error'
+      );
+    }
+  };
+
+  if (loadingSavedGames || gameLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress />
+        <Typography variant="h6" ml={2}>
+          Loading Games...
+        </Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h5" component="h1">
+          Game Library (Saved Games)
+        </Typography>
+      </Box>
+
+      {savedGamesError && (
+        <Alert
+          severity="error"
+          sx={{
+            m: 2,
+            backgroundColor: (theme) => theme.palette.background.paper,
+            color: (theme) => theme.palette.text.primary,
+          }}
+        >
+          Error: {savedGamesError}
+        </Alert>
+      )}
+
+      <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}>
+        <Button
+          variant="contained"
+          color="primary"
+          sx={{ mt: 2 }}
+          onClick={() => navigate('/cards')}
+        >
+          Start New Game (Select Prompt Card)
+        </Button>
+      </Box>
+
+      <Paper
+        elevation={1}
+        sx={{
+          flexGrow: 1,
+          m: 2,
+          overflowY: 'auto',
+          backgroundColor: (theme) => theme.palette.background.paper,
+        }}
+      >
+        {savedGames.length === 0 ? (
+          <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
+            <Typography variant="body1" color="text.secondary">
+              No saved games found. Start a new one!
+            </Typography>
+          </Box>
+        ) : (
+          <List>
+            {savedGames.map((game) => (
+              <React.Fragment key={game.id}>
+                <ListItem
+                  secondaryAction={
+                    <Box>
+                      <IconButton edge="end" aria-label="load-game" onClick={() => handleLoadGame(game.id)}>
+                        <PlayArrowIcon sx={{ color: (theme) => theme.palette.primary.main }} />
+                      </IconButton>
+                      <IconButton edge="end" aria-label="delete-game" onClick={() => handleDeleteGame(game.id)}>
+                        <DeleteIcon sx={{ color: (theme) => theme.palette.error.main }} />
+                      </IconButton>
+                    </Box>
+                  }
+                >
+                  <ListItemText
+                    primary={game.title}
+                    secondary={`Turn: ${game.currentTurn} | Last Saved: ${formatIsoDateForDisplay(game.updatedAt)}`}
+                    primaryTypographyProps={{ fontWeight: 'medium' }}
+                  />
+                </ListItem>
+                <Divider component="li" />
+              </React.Fragment>
+            ))}
+          </List>
+        )}
+      </Paper>
+
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
+    </Box>
+  );
+};
+
+export default GameLibraryScreen;
+
+@@END_FILE@@
+
+@@FILE: src/ui/screens/GameScreen.tsx =====
+// src/ui/screens/GameScreen.tsx
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Box, Paper, Typography, TextField, IconButton, Stack, Divider,
+  CircularProgress, Button, Fab,
+  Dialog, DialogActions, DialogContent, DialogTitle,
+  Snackbar, Alert
+} from '@mui/material';
+
+import type {AlertColor} from '@mui/material';
+import SendIcon from '@mui/icons-material/Send';
+import CasinoIcon from '@mui/icons-material/Casino';
+import { TurnNavigator } from '../components/TurnNavigator';
+import { useGameStateStore, selectConversationHistory } from '../../state/useGameStateStore';
+import { usePromptCardStore } from '../../state/usePromptCardStore';
+import { PinnedItemsView } from '../components/PinnedItemsView';
+import { DiceRoller } from '../../utils/diceRoller';
+import { useLongPress } from '../../utils/hooks/useLongPress';
+
+export const GameScreen: React.FC = () => {
+  const {
+    gameLoading,
+    isProcessingTurn,
+    processTurn,
+    currentSnapshot,    
+    maxTurn,            
+    navigateToTurn,   
+  } = useGameStateStore();
+
+  const conversationHistory = useGameStateStore(selectConversationHistory);
+  const activePromptCard = usePromptCardStore((state) => state.activePromptCard);
+
+  const [userInput, setUserInput] = useState('');
+  const logEndRef = useRef<HTMLDivElement>(null);
+
+  const [isRollDialogOpen, setIsRollDialogOpen] = useState(false);
+  const [rollFormula, setRollFormula] = useState('1d20');
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' as AlertColor });
+
+  const showSnackbar = (message: string, severity: AlertColor = 'info') => {
+    setSnackbar({ open: true, message, severity });
+  };
+  const closeSnackbar = () => setSnackbar(prev => ({ ...prev, open: false }));
+
+  const handleQuickRoll = useCallback(async () => {
+    if (isProcessingTurn) return;
+    try {
+      const result = DiceRoller.roll(rollFormula);
+      const summary = DiceRoller.format(result);
+      const actionString = `(The player quickly rolls ${rollFormula}. Result: ${summary})`;
+      await processTurn(actionString);
+      showSnackbar(`Rolled ${rollFormula}: ${summary}`, 'success');
+    } catch (e) {
+      showSnackbar("Invalid dice formula. Long-press the dice icon to fix it.", 'error');
+    }
+  }, [rollFormula, isProcessingTurn, processTurn]);
+
+  const handleOpenRollDialog = () => setIsRollDialogOpen(true);
+  const handleCloseRollDialog = () => setIsRollDialogOpen(false);
+  
+  const handleRollFromDialog = useCallback(async () => {
+    await handleQuickRoll();
+    handleCloseRollDialog();
+  }, [handleQuickRoll]);
+  
+  const longPressProps = useLongPress(
+    handleOpenRollDialog,
+    handleQuickRoll,
+    { delay: 400 }
+  );
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [conversationHistory]);
+
+  const handleSubmit = useCallback(async () => {
+    if (!userInput.trim() || isProcessingTurn) return;
+    await processTurn(userInput);
+    setUserInput('');
+  }, [userInput, isProcessingTurn, processTurn]);
+
+  const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  }, [handleSubmit]);
+
+  if (gameLoading || !activePromptCard) {
+    return (
+      <Box sx={{ p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+        <CircularProgress />
+        <Typography variant="h6" ml={2}>Loading Game...</Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', p: 2 }}>
+      <PinnedItemsView />
+      <Divider sx={{ my: 1 }} />
+      {/* ADD TURN NAVIGATOR HERE */}
+      {activePromptCard?.historyBrowsingEnabled && currentSnapshot && maxTurn !== null && (
+        <TurnNavigator
+          currentTurn={currentSnapshot.currentTurn}
+          maxTurn={maxTurn}
+          onNavigate={navigateToTurn}
+          isLoading={isProcessingTurn || gameLoading}
+        />
+      )}
+      <Box sx={{ flex: 1, overflowY: 'auto', px: 1, pb: 8 }}>
+        {conversationHistory.map((msg, index) => (
+          <Paper key={index} elevation={0} sx={{ p: 1.5, mb: 1.5, backgroundColor: 'transparent' }}>
+            <Typography variant="body2" sx={{ fontWeight: 'bold', color: msg.role === 'user' ? 'primary.main' : 'secondary.main' }}>
+              {msg.role === 'user' ? 'You' : 'Narrator'}
+            </Typography>
+            <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+              {msg.content}
+            </Typography>
+          </Paper>
+        ))}
+        {isProcessingTurn && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+            <CircularProgress size={30} />
+          </Box>
+        )}
+        <div ref={logEndRef} />
+      </Box>
+
+      <Fab
+        color="secondary"
+        aria-label="roll dice"
+        {...longPressProps}
+        sx={{
+          position: 'absolute',
+          bottom: 120, 
+          right: 32,
+        }}
+      >
+        <CasinoIcon />
+      </Fab>
+
+      <Dialog open={isRollDialogOpen} onClose={handleCloseRollDialog}>
+        <DialogTitle>Set Dice Formula</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Dice Formula"
+            type="text"
+            fullWidth
+            variant="standard"
+            value={rollFormula}
+            onChange={(e) => setRollFormula(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleRollFromDialog()}
+            placeholder="e.g., 2d6+3"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseRollDialog}>Cancel</Button>
+          <Button onClick={handleRollFromDialog} variant="contained">Roll</Button>
+        </DialogActions>
+      </Dialog>
+      
+      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={closeSnackbar}>
+        <Alert onClose={closeSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+
+      <Paper elevation={3} sx={{ p: 1, mt: 1 }}>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <TextField
+            fullWidth
+            placeholder="What do you do next?"
+            multiline
+            minRows={1}
+            maxRows={5}
+            value={userInput}
+            onChange={(e) => setUserInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            disabled={isProcessingTurn}
+          />
+          <IconButton onClick={handleSubmit} color="primary" disabled={isProcessingTurn || !userInput.trim()}>
+            <SendIcon />
+          </IconButton>
+        </Stack>
+      </Paper>
+    </Box>
+  );
+};
+@@END_FILE@@
+
+@@FILE: src/ui/screens/LoginScreen.tsx =====
+import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom'; // Add this
+import { useAuthStore } from '../../state/useAuthStore';
+
+const styles: { [key: string]: React.CSSProperties } = {
+  container: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '100vh',
+    backgroundColor: '#f0f2f5',
+    fontFamily: 'Arial, sans-serif',
+    padding: '20px',
+  },
+  button: {
+    padding: '10px 20px',
+    fontSize: '16px',
+    backgroundColor: '#4285F4',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    marginTop: '20px',
+    transition: 'background-color 0.3s ease',
+  },
+  errorText: {
+    color: 'red',
+    marginTop: '10px',
+  },
+};
+
+
+const LoginScreen: React.FC = () => {
+  const { user, isLoading, error, signIn, signOut } = useAuthStore();
+  const navigate = useNavigate(); // Add this
+
+  // ✅ Redirect out of login screen if user is authenticated
+  useEffect(() => {
+    if (user) {
+      navigate('/library', { replace: true });
+    }
+  }, [user, navigate]);
+
+  if (isLoading) {
+    return (
+      <div style={styles.container}>
+        <h2>Loading Authentication Status...</h2>
+      </div>
+    );
+  }
+
+  if (user) {
+    return (
+      <div style={styles.container}>
+        <h2>Welcome, {user.displayName || user.email}!</h2>
+        <p>Your User ID: {user.uid}</p>
+        <button onClick={signOut} style={styles.button}>
+          Sign Out
+        </button>
+      </div>
+    );
+  } else {
+    return (
+      <div style={styles.container}>
+        <h2>Please Log In to StoryForge</h2>
+        {error && <p style={styles.errorText}>Error: {error}</p>}
+        <button onClick={signIn} style={styles.button}>
+          Sign in with Google
+        </button>
+      </div>
+    );
+  }
+};
+export default LoginScreen;
+@@END_FILE@@
+
+@@FILE: src/ui/screens/LogViewerScreen.tsx =====
+// src/ui/screens/LogViewerScreen.tsx
+
+import React, { useState, useEffect } from 'react';
+import {
+  Box, Typography, Paper, Alert, Fab, Popover,
+  List, ListItem, ListItemIcon, ListItemText, Checkbox
+} from '@mui/material';
+import TuneIcon from '@mui/icons-material/Tune'; // A more fitting icon for "views/filters"
+import { useLogStore } from '../../state/useLogStore';
+import { useGameStateStore } from '../../state/useGameStateStore';
+import { LogViewMode } from '../../utils/types';
+import { DetailedLogTurnView } from '../components/DetailedLogTurnView';
+
+export const LogViewerScreen: React.FC = () => {
+  const { logEntries, selectedLogViewModes, setLogEntries, setSelectedLogViewModes } = useLogStore();
+  const currentSnapshot = useGameStateStore(state => state.currentSnapshot);
+
+  // The critical synchronization effect
+  useEffect(() => {
+    setLogEntries(currentSnapshot?.logs || []);
+  }, [currentSnapshot, setLogEntries]);
+
+  // State for the Popover menu
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const isMenuOpen = Boolean(anchorEl);
+
+  const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleCheckboxChange = (mode: LogViewMode) => {
+    const newSelection = selectedLogViewModes.includes(mode)
+      ? selectedLogViewModes.filter((m) => m !== mode)
+      : [...selectedLogViewModes, mode];
+    setSelectedLogViewModes(newSelection);
+  };
+
+  return (
+    // Use position relative to anchor the floating button
+    <Box sx={{ position: 'relative', height: '100%', p: 2 }}>
+      <Typography variant="h5" component="h1" sx={{ mb: 2, textAlign: 'center' }}>
+        Game Log
+      </Typography>
+
+      <Paper elevation={2} sx={{ height: 'calc(100% - 60px)', overflowY: 'auto' }}>
+        {logEntries.length === 0 ? (
+          <Box sx={{ p: 4, textAlign: 'center' }}>
+            <Typography color="text.secondary">No log entries to display.</Typography>
+          </Box>
+        ) : (
+          logEntries.map((entry) => (
+            <Box key={entry.turnNumber} sx={{ p: 1 }}>
+              <DetailedLogTurnView
+                entry={entry}
+                selectedLogViewModes={selectedLogViewModes}
+              />
+            </Box>
+          ))
+        )}
+      </Paper>
+
+      {/* Floating Action Button (FAB) for the menu */}
+      <Fab
+        color="primary"
+        aria-label="log views"
+        onClick={handleMenuClick}
+        sx={{ position: 'absolute', bottom: 32, right: 32 }}
+      >
+        <TuneIcon />
+      </Fab>
+
+      {/* Popover Menu - Non-blocking */}
+      <Popover
+        open={isMenuOpen}
+        anchorEl={anchorEl}
+        onClose={handleMenuClose}
+        anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Paper sx={{ width: 320 }}>
+          <List dense>
+          {logEntries.map((entry) => (
+            <Box key={entry.turnNumber} sx={{ p: 1 }}>
+              <DetailedLogTurnView // <-- This is the main component to use
+                entry={entry}
+                selectedLogViewModes={selectedLogViewModes}
+              />
+            </Box>
+          ))}
+          </List>
+        </Paper>
+      </Popover>
+    </Box>
+  );
+};
+@@END_FILE@@
+
+@@FILE: src/ui/screens/PromptCardEditor.tsx =====
+// src/ui/screens/PromptCardEditor.tsx
+import React from 'react';
+import { Box, Divider, FormControlLabel, Switch, TextField } from '@mui/material';
+import type { PromptCard, AiConnection } from '../../models';
+
+// Import the more complex, reusable editor components
+import { AiSettingsEditor } from '../components/AiSettingsEditor';
+import { StackInstructionsEditor } from '../components/StackInstructionsEditor';
+import { CollapsibleSection } from '../components/CollapsibleSection';
+import { InfoDialog } from '../components/InfoDialog';
+
+// Import constants for placeholders
+import {
+  DEFAULT_FIRST_TURN_PROMPT_BLOCK,
+  DEFAULT_EMIT_SKELETON_STRING,
+} from '../../data/config/promptCardDefaults';
+
+interface PromptCardEditorProps {
+  card: PromptCard;
+  onCardChange: (updatedCard: PromptCard) => void;
+  availableConnections: AiConnection[];
+}
+
+const PromptCardEditor: React.FC<PromptCardEditorProps> = ({
+  card,
+  onCardChange,
+  availableConnections,
+}) => {
+  // A single handler to update the parent component's state
+  const handleFieldChange = (updates: Partial<PromptCard>) => {
+    onCardChange({ ...card, ...updates });
+  };
+
+  return (
+    <Box sx={{ p: 2, pb: 4 }}>
+      {/* --- Title & Description Section (Merged) --- */}
+      <CollapsibleSection title="Title & Description" initiallyExpanded={true}>
+        <TextField
+          fullWidth
+          label="Title"
+          value={card.title}
+          onChange={(e) => handleFieldChange({ title: e.target.value })}
+          sx={{ mb: 2 }}
+        />
+        <TextField
+          fullWidth
+          label="Description"
+          multiline
+          minRows={2}
+          value={card.description || ''}
+          onChange={(e) => handleFieldChange({ description: e.target.value || null })}
+          placeholder="Optional: A short description for this card (not sent to AI)."
+        />
+      </CollapsibleSection>
+
+      {/* --- Core Prompt Section (Merged) --- */}
+      <CollapsibleSection title="AI Prompt" initiallyExpanded={true}>
+        <TextField
+          fullWidth
+          multiline
+          minRows={5}
+          label="Core Scenario / Persona Prompt"
+          value={card.prompt}
+          onChange={(e) => handleFieldChange({ prompt: e.target.value })}
+        />
+      </CollapsibleSection>
+
+      {/* --- First Turn Section (Merged) --- */}
+      <CollapsibleSection title="First Turn Scene Setup" initiallyExpanded={false}>
+        <TextField
+          fullWidth
+          multiline
+          minRows={4}
+          label="Intro scene shown only on turn 1"
+          value={card.firstTurnOnlyBlock}
+          onChange={(e) => handleFieldChange({ firstTurnOnlyBlock: e.target.value })}
+          placeholder={DEFAULT_FIRST_TURN_PROMPT_BLOCK}
+        />
+      </CollapsibleSection>
+
+      {/* --- Emit Skeleton Section (Merged) --- */}
+      <CollapsibleSection title="Emit & Tagging Skeleton" initiallyExpanded={false}>
+        <TextField
+          fullWidth
+          multiline
+          minRows={6}
+          label="AI Output Structure & Rules"
+          value={card.emitSkeleton}
+          onChange={(e) => handleFieldChange({ emitSkeleton: e.target.value })}
+          placeholder={DEFAULT_EMIT_SKELETON_STRING}
+        />
+      </CollapsibleSection>
+
+      {/* --- World State Init Section (Merged) --- */}
+      <CollapsibleSection title="World State Initialization" initiallyExpanded={false}>
+        <TextField
+          fullWidth
+          multiline
+          minRows={5}
+          label="Initial World State (JSON)"
+          value={card.worldStateInit}
+          onChange={(e) => handleFieldChange({ worldStateInit: e.target.value })}
+          placeholder="{}"
+        />
+      </CollapsibleSection>
+
+      {/* --- Game Rules Section (Merged) --- */}
+      <CollapsibleSection title="Game Rules Skeleton" initiallyExpanded={false}>
+        <TextField
+          fullWidth
+          multiline
+          minRows={5}
+          label="Game Rules"
+          value={card.gameRules}
+          onChange={(e) => handleFieldChange({ gameRules: e.target.value })}
+          placeholder="Rules for the AI to follow during gameplay."
+        />
+      </CollapsibleSection>
+
+      {/* --- AI Settings Section (Uses Reusable Component) --- */}
+      <AiSettingsEditor
+        label="Primary AI Settings"
+        settings={card.aiSettings}
+        onSettingsChange={(aiSettings) => handleFieldChange({ aiSettings })}
+        availableConnections={availableConnections}
+      />
+
+      {/* --- Helper AI Settings Section (Uses Reusable Component) --- */}
+      <CollapsibleSection title="Helper AI Settings" initiallyExpanded={false}>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={card.isHelperAiEnabled}
+              onChange={(e) => handleFieldChange({ isHelperAiEnabled: e.target.checked })}
+            />
+          }
+          label={<>Enable Helper AI <InfoDialog title="Enable Helper AI" content="Toggle to enable a secondary AI call for specific tasks."/></>}
+          sx={{ mb: 2 }}
+        />
+        <Divider sx={{ mb: 2 }} />
+        <Box sx={{ opacity: card.isHelperAiEnabled ? 1 : 0.5, pointerEvents: card.isHelperAiEnabled ? 'auto' : 'none' }}>
+          <AiSettingsEditor
+            label="" // No label for the nested editor
+            settings={card.helperAiSettings}
+            onSettingsChange={(helperAiSettings) => handleFieldChange({ helperAiSettings })}
+            availableConnections={availableConnections}
+          />
+        </Box>
+      </CollapsibleSection>
+      
+      {/* --- Function Definitions Section (Merged) --- */}
+      <CollapsibleSection title="Function Definitions" initiallyExpanded={false}>
+        <TextField
+          fullWidth
+          multiline
+          minRows={6}
+          label="Function Definitions (JSON)"
+          value={card.functionDefs}
+          onChange={(e) => handleFieldChange({ functionDefs: e.target.value })}
+          placeholder="e.g., { 'name': 'action', 'parameters': { ... } }"
+        />
+      </CollapsibleSection>
+
+      {/* --- Stack Instructions Section (Uses Reusable Component) --- */}
+      <StackInstructionsEditor
+        stackInstructions={card.stackInstructions}
+        onStackInstructionsChange={(stackInstructions) => handleFieldChange({ stackInstructions })}
+      />
+
+      {/* --- Metadata Section (Merged) --- */}
+       <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={card.isPublic}
+              onChange={(e) => handleFieldChange({ isPublic: e.target.checked })}
+            />
+          }
+          label="Make Public (visible to others)"
+        />
+        <FormControlLabel
+          control={
+            <Switch
+              checked={card.isExample}
+              onChange={(e) => handleFieldChange({ isExample: e.target.checked })}
+            />
+          }
+          label="Is Example Card (for showcase)"
+        />
+      </Box>
+    </Box>
+  );
+};
+
+export default PromptCardEditor;
+@@END_FILE@@
+
+@@FILE: src/ui/screens/PromptCardManager.tsx =====
+// src/ui/screens/PromptCardManager.tsx
+import React from 'react';
+import {
+  Box, Typography, Paper, CircularProgress, Alert, Dialog,
+  DialogTitle, DialogContent, DialogActions, Button, TextField, Snackbar,
+} from '@mui/material';
+import { useAuthStore } from '../../state/useAuthStore';
+import { usePromptCardManagerLogic } from '../../utils/hooks/usePromptCardManagerLogic';
+import { PromptCardListPanel } from '../components/PromptCardListPanel';
+import { PromptCardEditorPanel } from '../components/PromptCardEditorPanel';
+
+const PromptCardManager: React.FC = () => {
+  const { user } = useAuthStore();
+  const {
+    isLoading, error, promptCards, activePromptCard, localEditedCard, isCardDirty,
+    aiConnections, saveDialog, snackbar,
+    handleCardSelect, handleLocalCardChange, handleSaveCard, handleRevert,
+    handleNewCard, handleDeleteCard, handleDuplicateCard, handleImport,
+    handleExport, handleStartGame, setSaveDialog, setSaveAsNewTitle, closeSnackbar,
+  } = usePromptCardManagerLogic(user);
+
+  if (isLoading && !promptCards.length) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress />
+        <Typography variant="h6" ml={2}>Loading Prompt Cards...</Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', p: 2 }}>
+      <Typography variant="h5" component="h1" sx={{ mb: 2 }}>
+        Prompt Cards Manager
+      </Typography>
+
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+      <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden', gap: 2 }}>
+        <Paper elevation={1} sx={{ flex: 1, minWidth: 300, maxWidth: 450, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+          <PromptCardListPanel
+            cards={promptCards}
+            activeCardId={activePromptCard?.id || null}
+            onSelectCard={handleCardSelect}
+            onDeleteCard={handleDeleteCard}
+            onDuplicateCard={handleDuplicateCard}
+            onExportCard={handleExport}
+            onNewCard={handleNewCard}
+            onImport={handleImport}
+          />
+        </Paper>
+
+        <Paper elevation={1} sx={{ flex: 2, minWidth: 400, overflowY: 'auto' }}>
+          <PromptCardEditorPanel
+            localEditedCard={localEditedCard}
+            isCardDirty={isCardDirty}
+            availableConnections={aiConnections}
+            onCardChange={handleLocalCardChange}
+            onRevert={handleRevert}
+            onSave={() => handleSaveCard(false)}
+            onSaveAs={() => setSaveDialog(true)}
+            onStartGame={handleStartGame}
+          />
+        </Paper>
+      </Box>
+
+      <Dialog open={saveDialog.open} onClose={() => setSaveDialog(false)}>
+        <DialogTitle>Save As New Card</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="New Title"
+            type="text"
+            fullWidth
+            variant="outlined"
+            value={saveDialog.title}
+            onChange={(e) => setSaveAsNewTitle(e.target.value)}
+            placeholder={`${localEditedCard?.title} (Copy)`}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSaveDialog(false)}>Cancel</Button>
+          <Button onClick={() => handleSaveCard(true)}>Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={closeSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert onClose={closeSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </Box>
+  );
+};
+
+export default PromptCardManager;
+@@END_FILE@@
+
+@@FILE: src/ui/screens/SettingsScreen.tsx =====
+// src/ui/screens/SettingsScreen.tsx
+import React from 'react';
+import {
+  Box, Typography, Button, Paper, Divider, CircularProgress, Alert, TextField, Switch, FormControlLabel,
+  Snackbar, Dialog, DialogTitle, DialogContent, DialogActions, ListItemButton,
+  Stack, Select, MenuItem, InputLabel, FormControl, Card, CardActionArea, Grid,
+  ListSubheader, InputAdornment, ListItemText, Tooltip, List, ListItem, IconButton
+} from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import SearchIcon from '@mui/icons-material/Search';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import WifiTetheringIcon from '@mui/icons-material/WifiTethering';
+import { useSettingsLogic } from '../../utils/hooks/useSettingsLogic';
+import { CollapsibleSection } from '../components/CollapsibleSection';
+
+const SettingsScreen: React.FC = () => {
+  const {
+    aiConnections, selectedConnectionId, isLoadingConnections, connectionsError,
+    useDummyNarrator, themeMode, setUseDummyNarrator, setThemeMode,
+    isDialogOpen, dialogStep, editingConnection, isFetchingModels, testStatus, snackbar, templates,
+    setModelSearchTerm, filteredModels,
+    handleOpenDialog, handleCloseDialog, handleLoadTemplate, handleUpdateEditingConnection, 
+    handleFetchModels, handleSaveAndTest, handleDelete, closeSnackbar, setSelectedConnectionId, handleTest,
+    modelInfo, openModelInfo, handleOpenModelInfo, handleCloseModelInfo,
+  } = useSettingsLogic();
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h5" component="h1">Settings</Typography>
+      </Box>
+
+      {connectionsError && <Alert severity="error" sx={{ m: 2 }}>Error: {connectionsError}</Alert>}
+      
+      {isLoadingConnections && aiConnections.length === 0 && <CircularProgress sx={{ m: 2 }} />}
+
+      <Paper sx={{ mt: 2, p: 2 }}>
+        <Typography variant="h6" gutterBottom>Global Settings</Typography>
+        <FormControlLabel control={<Switch checked={useDummyNarrator} onChange={(e) => setUseDummyNarrator(e.target.checked)} />} label="Use Dummy Narrator (for offline testing)" />
+        <Divider sx={{ my: 1 }} />
+        <FormControlLabel control={<Switch checked={themeMode === 'dark'} onChange={(e) => setThemeMode(e.target.checked ? 'dark' : 'light')} />} label="Dark Mode" />
+      </Paper>
+      
+      <Typography variant="h6" sx={{ mt: 3, mb: 1 }}>AI Connections</Typography>
+      <Paper elevation={1} sx={{ flexGrow: 1, overflowY: 'auto' }}>
+        <List>
+            {aiConnections.map((conn) => (
+              <React.Fragment key={conn.id}>
+                <ListItem
+                  disablePadding
+                  secondaryAction={
+                    <Box>
+                      <IconButton edge="end" aria-label="edit" onClick={() => handleOpenDialog(conn)}><EditIcon fontSize="small" /></IconButton>
+                      <IconButton edge="end" aria-label="delete" onClick={() => handleDelete(conn.id)}><DeleteIcon fontSize="small" color="error" /></IconButton>
+                    </Box>
+                  }
+                >
+                  <ListItemButton selected={selectedConnectionId === conn.id} onClick={() => setSelectedConnectionId(conn.id)}>
+                    <ListItemText primary={conn.displayName} secondary={`${conn.modelName} (${conn.apiUrl.substring(0, 30)}...)`} />
+                  </ListItemButton>
+                </ListItem>
+                <Divider />
+              </React.Fragment>
+            ))}
+          </List>
+      </Paper>
+      <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()} sx={{ mt: 2 }}>
+        Add New Connection
+      </Button>
+
+      <Dialog open={isDialogOpen} onClose={handleCloseDialog} fullWidth maxWidth="md" transitionDuration={{ enter: 200, exit: 0 }}>
+        <DialogTitle>
+          {dialogStep === 'select' ? 'Add a New Connection' : (editingConnection?.displayName || 'Connection Details')}
+        </DialogTitle>
+        <DialogContent>
+          {dialogStep === 'select' && (
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <Typography>Start with a template for a popular provider.</Typography>
+              <Grid container spacing={2}>
+                {Object.entries(templates).filter(([key]) => key !== 'custom').map(([key, template]) => (
+                  <Grid item xs={12} sm={6} key={key}>
+                    <Card variant="outlined">
+                      <CardActionArea onClick={() => handleLoadTemplate(key)} sx={{ p: 2, textAlign: 'center' }}>
+                        <Typography variant="h6">{template.displayName}</Typography>
+                      </CardActionArea>
+                    </Card>
+                  </Grid>
+                ))}
+              </Grid>
+              <Divider>OR</Divider>
+              <Button variant="outlined" onClick={() => handleLoadTemplate('custom')}>Start with a Blank Custom Connection</Button>
+            </Stack>
+          )}
+
+          {dialogStep === 'details' && editingConnection && (
+            // ... (The rest of the dialog content is correct)
+            <Stack spacing={2.5} sx={{ mt: 1 }}>
+              <TextField label="Connection Name" value={editingConnection.displayName} onChange={(e) => handleUpdateEditingConnection({ displayName: e.target.value })} autoFocus fullWidth />
+              <TextField label="API Token (Key)" value={editingConnection.apiToken} onChange={(e) => handleUpdateEditingConnection({ apiToken: e.target.value })} fullWidth type="password" />
+
+              <FormControl fullWidth>
+                <InputLabel id="model-select-label">Model</InputLabel>
+                <Select
+                  labelId="model-select-label"
+                  value={editingConnection.modelSlug}
+                  label="Model"
+                  onChange={(e) => {
+                    const selectedModel = filteredModels.find(m => m.id === e.target.value);
+                    handleUpdateEditingConnection({ modelSlug: e.target.value, modelName: selectedModel?.name || e.target.value });
+                  }}
+                  MenuProps={{ autoFocus: false }}
+                >
+                  <ListSubheader>
+                    <TextField size="small" autoFocus placeholder="Type to filter models..." fullWidth
+                      InputProps={{startAdornment: (<InputAdornment position="start"><SearchIcon /></InputAdornment>)}}
+                      onChange={(e) => setModelSearchTerm(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
+                  </ListSubheader>
+                  {filteredModels.map(model => (
+                    <MenuItem key={model.id} value={model.id}>
+                      <Tooltip title={model.description || 'No description available.'} placement="right" enterDelay={500}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                          <ListItemText primary={model.name} secondary={model.id} />
+                          <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleOpenModelInfo(model); }} sx={{ display: { xs: 'flex', md: 'none' } }}>
+                            <InfoOutlinedIcon fontSize="small" />
+                          </IconButton>
+                        </Box>
+                      </Tooltip>
+                    </MenuItem>
+                  ))}
+                  {filteredModels.length === 0 && <MenuItem disabled>No models match your search.</MenuItem>}
+                </Select>
+              </FormControl>
+              
+              {templates[editingConnection.displayName.toLowerCase()]?.supportsModelDiscovery && (
+                <Button onClick={handleFetchModels} disabled={isFetchingModels} variant="outlined">
+                  {isFetchingModels ? <CircularProgress size={24} /> : `Fetch All ${editingConnection.displayName} Models`}
+                </Button>
+              )}
+              
+              <CollapsibleSection title="Advanced Options" initiallyExpanded={false}>
+                 <Stack spacing={2.5} sx={{mt: 2}}>
+                    <TextField label="API URL" value={editingConnection.apiUrl} onChange={(e) => handleUpdateEditingConnection({ apiUrl: e.target.value })} fullWidth />
+                    <TextField label="User Agent" value={editingConnection.userAgent || ''} onChange={(e) => handleUpdateEditingConnection({ userAgent: e.target.value })} fullWidth />
+                    <FormControlLabel control={<Switch checked={editingConnection.functionCallingEnabled} onChange={(e) => handleUpdateEditingConnection({ functionCallingEnabled: e.target.checked })} />}
+                        label="Function Calling Enabled" />
+                 </Stack>
+              </CollapsibleSection>
+              
+              {testStatus && <Alert severity={testStatus.type} sx={{ mt: 1 }}>{testStatus.text}</Alert>}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: '16px 24px' }}>
+          <Button onClick={handleCloseDialog}>Cancel</Button>
+          {dialogStep === 'details' && (
+            <Stack direction="row" spacing={1}>
+              <Button onClick={handleTest} startIcon={<WifiTetheringIcon />}>Test</Button>
+              <Button onClick={handleSaveAndTest} variant="contained">Save Connection</Button>
+            </Stack>
+          )}
+        </DialogActions>
+      </Dialog>
+      
+      <Dialog open={openModelInfo} onClose={handleCloseModelInfo}>
+        <DialogTitle>{modelInfo?.name}</DialogTitle>
+        <DialogContent>
+            <Typography variant="body1">{modelInfo?.description || "No description available."}</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{mt: 2, display: 'block'}}>ID: {modelInfo?.id}</Typography>
+        </DialogContent>
+        <DialogActions>
+            <Button onClick={handleCloseModelInfo}>Close</Button>
+        </DialogActions>
+      </Dialog>
+      
+      <Snackbar open={snackbar.open} autoHideDuration={6000} onClose={closeSnackbar}>
+        <Alert onClose={closeSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}</Alert>
+      </Snackbar>
+    </Box>
+  );
+};
+
+export default SettingsScreen;
+@@END_FILE@@
+
+@@FILE: src/ui/screens/SourceDump.tsx =====
+import React, { useEffect, useState } from 'react';
+import { debugLog, errorLog } from '../../utils/debug';
+
+// Small reusable copy button
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      errorLog('Copy failed', err);
+    }
+  };
+  return (
+    <button
+      onClick={handleCopy}
+      style={{
+        marginLeft: '6px',
+        fontSize: '0.8rem',
+        cursor: 'pointer',
+        background: 'none',
+        border: '1px solid #ccc',
+        borderRadius: '4px',
+        padding: '2px 5px',
+      }}
+    >
+      {copied ? '✅' : '📋'}
+    </button>
+  );
+}
+
+function FolderView({
+  name,
+  node,
+  level = 0,
+}: {
+  name: string;
+  node: any;
+  level?: number;
+}) {
+  const [open, setOpen] = useState(true);
+
+  const isFolder = typeof node === 'object';
+  if (!isFolder) return null;
+
+  const folderIndent = { paddingLeft: `${level * 1.2}rem` };
+
+  // Gather folder text for copy
+  const folderText = node.__files
+    ? node.__files.map((f: any) => f.content).join('\n')
+    : '';
+
+  return (
+    <div style={{ ...folderIndent }}>
+      <div
+        style={{
+          cursor: 'pointer',
+          userSelect: 'none',
+          fontWeight: 'bold',
+        }}
+        onClick={() => setOpen(!open)}
+      >
+        {open ? '📂' : '📁'} {name}
+        {folderText && <CopyButton text={folderText} />}
+      </div>
+
+      {open && (
+        <>
+          {node.__files &&
+            node.__files.map((file: any) => (
+              <div key={file.name} style={{ paddingLeft: '1.5rem' }}>
+                📄 {file.name}
+                <CopyButton text={file.content} />
+              </div>
+            ))}
+          {Object.entries(node)
+            .filter(([k]) => k !== '__files')
+            .map(([childName, childNode]) => (
+              <FolderView
+                key={childName}
+                name={childName}
+                node={childNode}
+                level={level + 1}
+              />
+            ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+export default function SourceDump() {
+  const [dumpText, setDumpText] = useState('');
+  const [tree, setTree] = useState<any>(null);
+
+  useEffect(() => {
+    fetch(`/source-dump.txt?_=${Date.now()}`)
+      .then((res) => res.text())
+      .then((text) => {
+        setDumpText(text);
+        setTree(parseDumpToTree(text));
+      });
+  }, []);
+
+  if (!dumpText) return <div>Loading...</div>;
+
+  return (
+    <div style={{ padding: '1rem', fontFamily: 'monospace' }}>
+      <h2>
+        📋 Copy Entire Repo
+        <CopyButton text={dumpText} />
+      </h2>
+
+      {tree && <FolderView name="src" node={tree.src || tree} />}
+
+      <hr style={{ margin: '2rem 0' }} />
+      <h3>Full Dump:</h3>
+      <pre
+        style={{
+          whiteSpace: 'pre-wrap',
+          fontSize: '0.85rem',
+          maxHeight: '400px',
+          overflow: 'auto',
+        }}
+      >
+        {dumpText}
+      </pre>
+    </div>
+  );
+}
+
+function parseDumpToTree(dump: string) {
+  const lines = dump.split('\n');
+  const root: any = { __files: [] };;
+  let currentFolder: string[] = [];
+  let currentFile: { name: string; content: string } | null = null;
+
+  const ensureFolder = (pathParts: string[]) => {
+    let node = root;
+    for (const part of pathParts) {
+      if (!node[part]) node[part] = { __files: [] };
+      node = node[part];
+    }
+    return node;
+  };
+
+  for (let line of lines) {
+    if (line.startsWith('@@FOLDER:')) {
+      const folderPath = line.replace('@@FOLDER: ', '').trim();
+      currentFolder = folderPath.split('/').slice(1); // remove 'src'
+      ensureFolder(currentFolder);
+    } else if (line.startsWith('@@FILE:')) {
+      const filePath = line.replace('@@FILE: ', '').trim();
+      const parts = filePath.split('/');
+      const fileName = parts.pop()!;
+      currentFolder = parts.slice(1);
+      const folderNode = ensureFolder(currentFolder);
+      currentFile = { name: fileName, content: '' };
+      folderNode.__files.push(currentFile);
+    } else {
+      if (currentFile) currentFile.content += line + '\n';
+    }
+  }
+
+  return root;
+}
+
+@@END_FILE@@
+
+@@FILE: src/ui/screens/SourceDumpScreen.tsx =====
+// src/ui/screens/SourceDumpScreen.tsx
+import React from 'react';
+import { Box } from '@mui/material';
+import { SourceDumpPanel } from '../components/SourceDumpPanel';
+
+const SourceDumpScreen: React.FC = () => {
+return (
+<Box p={1}>
+<SourceDumpPanel />
+</Box>
+);
+};
+
+export default SourceDumpScreen;
+@@END_FILE@@
+
+@@FILE: src/ui/screens/WorldStateScreen.tsx =====
+// src/ui/screens/WorldStateScreen.tsx
+import React, { useState, useMemo, useCallback } from 'react';
+import {
+  Box, Typography, Button, Paper, 
+  Alert, Dialog, DialogTitle, DialogContent,
+  DialogActions, TextField,
+} from '@mui/material';
+import {
+  useGameStateStore,
+  selectWorldStatePinnedKeys,
+  selectCurrentGameState,
+} from '../../state/useGameStateStore';
+import { flattenJsonObject, getNestedValue } from '../../utils/jsonUtils';
+import { WorldStateCategory } from '../components/WorldStateCategory';
+
+const WorldStateScreen: React.FC = () => {
+  // --- Start of Co-located Logic (from the old useWorldStateViewLogic hook) ---
+
+  const gameState = useGameStateStore(selectCurrentGameState);
+  const worldStatePinnedKeys = useGameStateStore(selectWorldStatePinnedKeys);
+  const {
+    toggleWorldStatePin, renameWorldCategory, renameWorldEntity,
+    deleteWorldCategory, deleteWorldEntity, editWorldKeyValue, deleteWorldKey,
+  } = useGameStateStore();
+
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
+  const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [editingEntity, setEditingEntity] = useState<[string, string] | null>(null);
+  const [newEntityName, setNewEntityName] = useState('');
+
+  const worldState = gameState?.worldState || {};
+
+  const flattenedWorld = useMemo(() => flattenJsonObject(worldState), [worldState]);
+
+  const groupedByCategory = useMemo(() => {
+    const grouped: Record<string, Record<string, Record<string, any>>> = {};
+    Object.keys(flattenedWorld).forEach(fullKey => {
+      const value = flattenedWorld[fullKey];
+      const parts = fullKey.split(".");
+      if (parts.length < 1) return;
+
+      const category = parts[0];
+      const entity = (parts.length > 1 && /^[#@$]/.test(parts[1])) ? parts[1] : '@@_direct';
+      const variable = (entity === '@@_direct') ? parts.slice(1).join('.') : parts.slice(2).join('.');
+      if (!variable && entity !== '@@_direct') return; // Skip if entity has no variables
+
+      grouped[category] = grouped[category] || {};
+      grouped[category][entity] = grouped[category][entity] || {};
+      grouped[category][entity][variable] = value;
+    });
+    // Clean up empty direct keys
+    Object.keys(grouped).forEach(category => {
+      if (grouped[category]['@@_direct'] && Object.keys(grouped[category]['@@_direct']).length === 0) {
+        delete grouped[category]['@@_direct'];
+      }
+    });
+    return grouped;
+  }, [flattenedWorld]);
+
+  const getAllChildVariableKeys = useCallback((basePath: string): string[] => {
+    const nestedData = getNestedValue(worldState, basePath.split('.'));
+    if (typeof nestedData !== 'object' || nestedData === null) return [];
+    return Object.keys(flattenJsonObject(nestedData, basePath));
+  }, [worldState]);
+
+  const isAnyChildPinned = useCallback((parentPath: string) => {
+    return getAllChildVariableKeys(parentPath).some(key => worldStatePinnedKeys.includes(key));
+  }, [getAllChildVariableKeys, worldStatePinnedKeys]);
+
+  const areAllChildrenPinned = useCallback((parentPath: string) => {
+    const childKeys = getAllChildVariableKeys(parentPath);
+    return childKeys.length > 0 && childKeys.every(key => worldStatePinnedKeys.includes(key));
+  }, [getAllChildVariableKeys, worldStatePinnedKeys]);
+
+  const handleToggleCategoryExpand = useCallback((category: string) => {
+    setExpandedCategories(prev => {
+      const newSet = new Set(prev);
+      newSet.has(category) ? newSet.delete(category) : newSet.add(category);
+      return newSet;
+    });
+  }, []);
+
+  const handleToggleEntityExpand = useCallback((entityPath: string) => {
+    setExpandedEntities(prev => {
+      const newSet = new Set(prev);
+      newSet.has(entityPath) ? newSet.delete(entityPath) : newSet.add(entityPath);
+      return newSet;
+    });
+  }, []);
+  
+  const handleToggleCategoryPin = useCallback((category: string) => toggleWorldStatePin(category, 'category'), [toggleWorldStatePin]);
+  const handleToggleEntityPin = useCallback((entityPath: string) => toggleWorldStatePin(entityPath, 'entity'), [toggleWorldStatePin]);
+  const handleToggleVariablePin = useCallback((key: string) => toggleWorldStatePin(key, 'variable'), [toggleWorldStatePin]);
+
+  const handleStartRenameCategory = useCallback((category: string) => { setEditingCategory(category); setNewCategoryName(category); }, []);
+  const handleStartRenameEntity = useCallback((category: string, entity: string) => { setEditingEntity([category, entity]); setNewEntityName(entity); }, []);
+
+  const cancelEdit = useCallback(() => { setEditingCategory(null); setEditingEntity(null); }, []);
+
+  const handleConfirmRenameCategory = useCallback(async () => {
+    if (editingCategory && newCategoryName.trim() && newCategoryName !== editingCategory) {
+      await renameWorldCategory(editingCategory, newCategoryName.trim());
+    }
+    cancelEdit();
+  }, [editingCategory, newCategoryName, renameWorldCategory, cancelEdit]);
+
+  const handleConfirmRenameEntity = useCallback(async () => {
+    if (editingEntity && newEntityName.trim() && newEntityName !== editingEntity[1]) {
+      await renameWorldEntity(editingEntity[0], editingEntity[1], newEntityName.trim());
+    }
+    cancelEdit();
+  }, [editingEntity, newEntityName, renameWorldEntity, cancelEdit]);
+
+  // --- End of Co-located Logic ---
+
+  const { gameError } = useGameStateStore();
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', p: 2 }}>
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h5" component="h1">World State</Typography>
+      </Box>
+
+      {gameError && (<Alert severity="error" sx={{ m: 2 }}>{gameError}</Alert>)}
+
+      {Object.keys(groupedByCategory).length === 0 ? (
+        <Box sx={{ p: 3, textAlign: 'center', mt: 4 }}>
+          <Typography variant="body1" color="text.secondary">No world state data available.</Typography>
+        </Box>
+      ) : (
+        <Paper elevation={1} sx={{ flexGrow: 1, m: 2, p: 2, overflowY: 'auto' }}>
+          {Object.entries(groupedByCategory).map(([categoryName, entities]) => (
+            <WorldStateCategory
+              key={categoryName}
+              categoryName={categoryName}
+              entities={entities}
+              isExpanded={expandedCategories.has(categoryName)}
+              areAllChildrenPinned={areAllChildrenPinned(categoryName)}
+              isAnyChildPinned={isAnyChildPinned(categoryName)}
+              expandedEntities={expandedEntities}
+              worldStatePinnedKeys={worldStatePinnedKeys}
+              onToggleExpand={() => handleToggleCategoryExpand(categoryName)}
+              onTogglePin={() => handleToggleCategoryPin(categoryName)}
+              onStartRename={() => handleStartRenameCategory(categoryName)}
+              onDelete={() => deleteWorldCategory(categoryName)}
+              onToggleEntityExpand={handleToggleEntityExpand}
+              onToggleEntityPin={handleToggleEntityPin}
+              onStartRenameEntity={handleStartRenameEntity}
+              onDeleteEntity={deleteWorldEntity}
+              onDeleteKey={deleteWorldKey}
+              onEditKey={editWorldKeyValue}
+              onToggleVariablePin={handleToggleVariablePin}
+            />
+          ))}
+        </Paper>
+      )}
+
+      {/* Dialogs for renaming */}
+      <Dialog open={!!editingCategory} onClose={cancelEdit}>
+        <DialogTitle>Rename Category</DialogTitle>
+        <DialogContent>
+          <TextField autoFocus margin="dense" label="New Category Name" fullWidth variant="outlined" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleConfirmRenameCategory()} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelEdit}>Cancel</Button>
+          <Button onClick={handleConfirmRenameCategory}>Rename</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!editingEntity} onClose={cancelEdit}>
+        <DialogTitle>Rename Entity</DialogTitle>
+        <DialogContent>
+          <TextField autoFocus margin="dense" label="New Entity Name" fullWidth variant="outlined" value={newEntityName} onChange={(e) => setNewEntityName(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleConfirmRenameEntity()} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelEdit}>Cancel</Button>
+          <Button onClick={handleConfirmRenameEntity}>Rename</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default WorldStateScreen;
+@@END_FILE@@

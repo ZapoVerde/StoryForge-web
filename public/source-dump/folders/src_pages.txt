@@ -1,3 +1,7 @@
+# Group: src/pages
+# Files: 1
+
+@@FILE: src/pages/SourceDump.tsx =====
 //SourceDump.tsx
 import React, { useEffect, useState } from 'react';
 
@@ -25,3 +29,5 @@ const SourceDump: React.FC = () => {
 };
 
 export default SourceDump;
+
+@@END_FILE@@

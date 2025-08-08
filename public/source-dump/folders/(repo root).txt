@@ -1,3 +1,292 @@
+# Group: (repo root)
+# Files: 15
+
+===== BEGIN FILE: .gitignore =====
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.env
+.env
+
+===== END FILE
+
+===== BEGIN FILE: .prettierrc =====
+{
+  "semi": true,
+  "singleQuote": true,
+  "trailingComma": "es5",
+  "printWidth": 100,
+  "tabWidth": 2,
+  "useTabs": false
+}
+===== END FILE
+
+===== BEGIN FILE: dump-src.js =====
+// dump-src.js
+import fs from 'fs';
+import fsp from 'fs/promises';
+import path from 'path';
+import chokidar from 'chokidar';
+import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+import AdmZip from 'adm-zip';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+
+const REPO_ROOT = process.cwd();
+const SRC_DIR = path.join(REPO_ROOT, 'src');
+const PUBLIC_DIR = path.join(REPO_ROOT, 'public');
+const OUT_FILE = path.join(PUBLIC_DIR, 'source-dump.txt');
+const FOLDERS_DIR = path.join(PUBLIC_DIR, 'source-dump', 'folders');
+
+const BEGIN_SIG = '@@FILE: ';
+const END_SIG = '@@END_FILE@@';
+
+async function ensureDir(dir) {
+  await fsp.mkdir(dir, { recursive: true });
+}
+
+function relUnix(p) {
+  return p.replace(/\\/g, '/').replace(REPO_ROOT.replace(/\\/g, '/'), '').replace(/^\/+/, '');
+}
+
+function walkDir(dir, callback) {
+  fs.readdirSync(dir, { withFileTypes: true }).forEach((entry) => {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      callback(fullPath, true);
+      walkDir(fullPath, callback);
+    } else {
+      callback(fullPath, false);
+    }
+  });
+}
+
+async function writeZipFromFiles(zipPath, filePaths) {
+  const zip = new AdmZip();
+  for (const relPath of filePaths) {
+    const absPath = path.join(REPO_ROOT, relPath);
+    zip.addLocalFile(absPath, path.dirname(relPath));
+  }
+  zip.writeZip(zipPath);
+  return (await fsp.stat(zipPath)).size;
+}
+
+async function writeBase64File(zipPath, b64Path) {
+  const buf = await fsp.readFile(zipPath);
+  const b64 = buf.toString('base64');
+  await fsp.writeFile(b64Path, b64, 'utf8');
+  return b64.length;
+}
+
+// NEW: group by all folders and subfolders
+function groupByAllFolders(files) {
+  const map = new Map();
+  const add = (folderKey, file) => {
+    if (!map.has(folderKey)) map.set(folderKey, []);
+    map.get(folderKey).push(file);
+  };
+
+  for (const f of files) {
+    const parts = f.path.split('/');
+
+    // file in repo root
+    if (parts.length === 1) {
+      add('', f);
+      continue;
+    }
+
+    // add to each ancestor folder (src, src/ui, src/ui/components, etc.)
+    for (let i = 1; i < parts.length; i++) {
+      const folder = parts.slice(0, i).join('/');
+      add(folder, f);
+    }
+  }
+
+  for (const [, arr] of map) {
+    arr.sort((a, b) => a.path.localeCompare(b.path));
+  }
+
+  return map;
+}
+
+async function writeGroupArtifacts(groups) {
+  const meta = [];
+  await ensureDir(FOLDERS_DIR);
+
+  for (const [folderPath, arr] of groups.entries()) {
+    const displayName = folderPath || '(repo root)';
+    const safe = displayName.replace(/[^\w.\- ()]/g, '_');
+    const txtPath = path.join(FOLDERS_DIR, `${safe}.txt`);
+    const zipPath = path.join(FOLDERS_DIR, `${safe}.zip`);
+    const b64Path = path.join(FOLDERS_DIR, `${safe}.b64.txt`);
+
+    const chunks = [];
+    chunks.push(`# Group: ${displayName}`);
+    chunks.push(`# Files: ${arr.length}`);
+    chunks.push('');
+    for (const { path: rp } of arr) {
+      const ap = path.join(REPO_ROOT, rp);
+      let content;
+      try {
+        content = await fsp.readFile(ap, 'utf8');
+      } catch {
+        const buf = await fsp.readFile(ap);
+        content = `[[BINARY FILE, BASE64 ENCODED]]\n${buf.toString('base64')}`;
+      }
+      chunks.push(`${BEGIN_SIG}${rp} =====`);
+      chunks.push(content);
+      chunks.push(END_SIG);
+      chunks.push('');
+    }
+    const txtAll = chunks.join('\n');
+    await fsp.writeFile(txtPath, txtAll, 'utf8');
+
+    const zipBytes = await writeZipFromFiles(zipPath, arr.map(f => f.path));
+    const b64Bytes = await writeBase64File(zipPath, b64Path);
+
+    meta.push({
+      name: displayName,
+      fileCount: arr.length,
+      byteCount: arr.reduce((a, b) => a + (b.bytes || 0), 0),
+      txt: relUnix(txtPath),
+      zip: relUnix(zipPath),
+      b64: relUnix(b64Path),
+      zipBytes,
+      b64Bytes
+    });
+  }
+
+  meta.sort((a, b) => a.name.localeCompare(b.name));
+  return meta;
+}
+
+async function buildOnce() {
+  const files = [];
+  walkDir(SRC_DIR, (fullPath, isDir) => {
+    if (!isDir) {
+      const relPath = path.relative(REPO_ROOT, fullPath).replace(/\\/g, '/');
+      const stats = fs.statSync(fullPath);
+      files.push({ path: relPath, bytes: stats.size });
+    }
+  });
+
+  const groups = groupByAllFolders(files);
+  const groupsMeta = await writeGroupArtifacts(groups);
+
+  let output = '';
+  for (const { path: relPath } of files) {
+    output += `${BEGIN_SIG}${relPath}\n`;
+    try {
+      output += fs.readFileSync(path.join(REPO_ROOT, relPath), 'utf8') + '\n';
+    } catch (err) {
+      output += `// ERROR reading file: ${err.message}\n`;
+    }
+    output += END_SIG + '\n';
+  }
+
+  await ensureDir(path.dirname(OUT_FILE));
+  fs.writeFileSync(OUT_FILE, output, 'utf8');
+  console.log(`✅ Source dump updated: ${new Date().toLocaleTimeString()}`);
+  console.log(`[dump-src] Folders: ${groupsMeta.length} -> ${relUnix(FOLDERS_DIR)}`);
+}
+
+if (process.argv.includes('--watch')) {
+  buildOnce();
+  chokidar.watch(SRC_DIR, { ignoreInitial: true }).on('all', () => buildOnce());
+} else {
+  buildOnce();
+}
+
+===== END FILE
+
+===== BEGIN FILE: eslint.config.js =====
+import js from '@eslint/js'
+import globals from 'globals'
+import reactHooks from 'eslint-plugin-react-hooks'
+import reactRefresh from 'eslint-plugin-react-refresh'
+import tseslint from 'typescript-eslint'
+import { globalIgnores } from 'eslint/config'
+
+export default tseslint.config([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      js.configs.recommended,
+      tseslint.configs.recommended,
+      reactHooks.configs['recommended-latest'],
+      reactRefresh.configs.vite,
+    ],
+    languageOptions: {
+      ecmaVersion: 2020,
+      globals: globals.browser,
+    },
+  },
+])
+
+===== END FILE
+
+===== BEGIN FILE: firestore.rules =====
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Lock down all documents by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Allow users to read and write ONLY their own data
+    match /users/{userId}/{allChildren=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
+===== END FILE
+
+===== BEGIN FILE: index.html =====
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>StoryForge</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="theme-color" content="#121212" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
+===== END FILE
+
+===== BEGIN FILE: package-lock.json =====
 {
   "name": "storyforge",
   "version": "0.0.0",
@@ -9317,3 +9606,280 @@
     }
   }
 }
+
+===== END FILE
+
+===== BEGIN FILE: package.json =====
+{
+  "name": "storyforge",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dump:once": "node dump-src.js",
+    "dump:watch": "node dump-src.js --watch",
+    "vite-dev": "vite",
+    "dev": "npm-run-all --parallel dump:watch \"vite-dev -- {@}\"",
+    "build": "npm run dump:once && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^7.3.1",
+    "@mui/lab": "^7.0.0-beta.16",
+    "@mui/material": "^7.3.1",
+    "@mui/x-tree-view": "^7.29.1",
+    "@types/node": "^24.2.0",
+    "adm-zip": "^0.5.16",
+    "chokidar": "^4.0.3",
+    "firebase": "^12.0.0",
+    "immer": "^10.1.1",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-router-dom": "^7.7.1",
+    "react-virtualized": "^9.22.6",
+    "uuid": "^11.1.0",
+    "zustand": "^5.0.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.32.0",
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.7",
+    "@types/react-router-dom": "^5.3.3",
+    "@types/uuid": "^10.0.0",
+    "@vitejs/plugin-react-swc": "^3.11.0",
+    "archiver": "^7.0.1",
+    "c8": "^10.1.3",
+    "eslint": "^9.32.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "fast-glob": "^3.3.2",
+    "globals": "^16.3.0",
+    "ignore": "^5.3.2",
+    "jsdom": "^26.1.0",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.6.2",
+    "rollup-plugin-visualizer": "^6.0.3",
+    "typescript": "~5.9.2",
+    "typescript-eslint": "^8.39.0",
+    "vite": "^7.0.6",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": "22"
+  }
+}
+
+===== END FILE
+
+===== BEGIN FILE: README.md =====
+# React + TypeScript + Vite
+
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+
+Currently, two official plugins are available:
+
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+
+## Expanding the ESLint configuration
+
+If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+
+```js
+export default tseslint.config([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+
+      // Remove tseslint.configs.recommended and replace with this
+      ...tseslint.configs.recommendedTypeChecked,
+      // Alternatively, use this for stricter rules
+      ...tseslint.configs.strictTypeChecked,
+      // Optionally, add this for stylistic rules
+      ...tseslint.configs.stylisticTypeChecked,
+
+      // Other configs...
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
+```
+
+You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+
+```js
+// eslint.config.js
+import reactX from 'eslint-plugin-react-x'
+import reactDom from 'eslint-plugin-react-dom'
+
+export default tseslint.config([
+  globalIgnores(['dist']),
+  {
+    files: ['**/*.{ts,tsx}'],
+    extends: [
+      // Other configs...
+      // Enable lint rules for React
+      reactX.configs['recommended-typescript'],
+      // Enable lint rules for React DOM
+      reactDom.configs.recommended,
+    ],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.node.json', './tsconfig.app.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+      // other options...
+    },
+  },
+])
+```
+
+===== END FILE
+
+===== BEGIN FILE: tsconfig.app.json =====
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  },
+  "include": ["src"]
+}
+
+===== END FILE
+
+===== BEGIN FILE: tsconfig.json =====
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}
+
+===== END FILE
+
+===== BEGIN FILE: tsconfig.node.json =====
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  },
+  "include": ["vite.config.ts"]
+}
+
+===== END FILE
+
+===== BEGIN FILE: vercel.json =====
+{
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+===== END FILE
+
+===== BEGIN FILE: vite.config.ts =====
+// vite.config.ts
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react-swc';
+
+
+import { visualizer } from 'rollup-plugin-visualizer';
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    // These make sure local dev matches your package.json `vite-dev` script
+    host: '0.0.0.0',
+    port: 5173,
+  },
+  preview: {
+    // This is the important part for Vercel
+    // It tells Vite's preview server (used in production static builds) to
+    // fall back to index.html for all unknown routes
+    host: '0.0.0.0',
+    port: 4173,
+    strictPort: true,
+  },
+  build: {
+    outDir: 'dist',
+  },
+  // Enable SPA fallback for dev + preview servers
+  // Vite doesn't have a direct `historyApiFallback` option in config,
+  // but setting up rewrites in preview works the same way.
+  optimizeDeps: {},
+});
+===== END FILE
+
+===== BEGIN FILE: vitest.config.ts =====
+// vitest.config.ts
+
+import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react-swc'; // <-- CRUCIAL CHANGE HERE
+
+export default defineConfig({
+  plugins: [react()], // This line is now correct
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    coverage: {
+      provider: 'c8',
+      reporter: ['text', 'json', 'html'],
+      exclude: ['node_modules/', 'src/main.tsx', 'src/App.tsx']
+    },
+    // include: ['**/*.test.ts', '**/*.test.tsx'],
+  },
+});
+===== END FILE

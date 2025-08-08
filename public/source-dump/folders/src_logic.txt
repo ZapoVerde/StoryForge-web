@@ -1,0 +1,1886 @@
+# Group: src/logic
+# Files: 15
+
+@@FILE: src/logic/aiClient.ts =====
+// src/logic/aiClient.ts
+
+import type { ModelInfo } from '../data/config/aiConnectionTemplates';
+import type { Message, AiSettings, AiConnection } from '../models';
+import { debugLog, errorLog } from '../utils/debug';
+
+/**
+ * Interface defining the contract for an AI client.
+ */
+export interface IAiClient {
+  /**
+   * Sends a completion request to the AI API.
+   * @param connection The AiConnection details (URL, API key).
+   * @param messages The array of messages forming the conversation context.
+   * @param settings The AI settings for this specific call (temperature, etc.).
+   * @returns A Promise that resolves with the raw stringified JSON of the AI's response.
+   */
+  generateCompletion(
+    connection: AiConnection,
+    messages: Message[],
+    settings: AiSettings
+  ): Promise<string>;
+
+  /**
+   * Tests an AI connection by making a minimal API call.
+   * @param connection The AiConnection details to test.
+   * @returns A Promise that resolves to an object with success status and a descriptive message.
+   */
+  testConnection(connection: AiConnection): Promise<{ success: boolean, message: string }>;
+
+  /**
+   * Fetches a list of available models from the provider.
+   * @param connection A partial connection object with apiUrl and apiToken.
+   * @returns A Promise resolving with an array of ModelInfo objects.
+   */
+  listModels(connection: Pick<AiConnection, 'apiUrl' | 'apiToken'>): Promise<ModelInfo[]>;
+}
+
+/**
+ * Concrete implementation of IAiClient using the browser's fetch API.
+ */
+class AiClient implements IAiClient {
+  async generateCompletion(
+    connection: AiConnection,
+    messages: Message[],
+    settings: AiSettings
+  ): Promise<string> {
+    if (!connection.apiToken || connection.apiToken.includes('PASTE') || connection.apiToken === "MISSING_API_KEY") {
+      throw new Error("API key is missing or is a placeholder. Please set it in Settings.");
+    }
+
+    const apiUrl = new URL("chat/completions", connection.apiUrl).href;
+    const requestBody = {
+      model: connection.modelSlug,
+      messages: messages,
+      temperature: settings.temperature,
+      top_p: settings.topP,
+      max_tokens: settings.maxTokens,
+      presence_penalty: settings.presencePenalty,
+      frequency_penalty: settings.frequencyPenalty,
+      stream: false,
+    };
+
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${connection.apiToken}` },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        let specificError = `Request failed with status ${response.status}.`;
+        switch (response.status) {
+          case 401: specificError = "Authentication error (401). Your API Key is likely invalid or expired."; break;
+          case 403: specificError = "Permission denied (403). Your API key may not have access to this model."; break;
+          case 404: specificError = `Model not found (404). Check if the API URL is correct and the model slug '${connection.modelSlug}' is valid.`; break;
+          case 429: specificError = "Rate limit exceeded (429). You are sending requests too quickly. Please wait and try again."; break;
+          case 500: specificError = "AI Server Error (500). The provider is having issues. Please try again later."; break;
+        }
+        throw new Error(`${specificError} Details: ${errorBody.substring(0, 200)}...`);
+      }
+
+      const responseJson = await response.json();
+      return JSON.stringify(responseJson);
+    } catch (error: unknown) {
+        if (error instanceof Error) {
+            throw new Error(`AI API call failed: ${error.message}`);
+        }
+        throw new Error(`An unknown error occurred during the AI API call.`);
+    }
+  }
+
+  async testConnection(connection: AiConnection): Promise<{ success: boolean, message: string }> {
+    if (!connection.apiToken || connection.apiToken.includes('PASTE') || connection.apiToken === "MISSING_API_KEY") {
+      return { success: false, message: "API Key is missing or is a placeholder." };
+    }
+
+    const apiUrl = new URL("chat/completions", connection.apiUrl).href;
+    const testMessage: Message[] = [{ role: 'user', content: 'hello' }];
+    const requestBody = { model: connection.modelSlug, messages: testMessage, max_tokens: 10 };
+
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${connection.apiToken}` },
+        body: JSON.stringify(requestBody),
+      });
+
+      if (response.ok) {
+        return { success: true, message: `Success! Received response from model.` };
+      } else {
+        const errorBody = await response.text();
+        let specificError = `Request failed with status ${response.status}.`;
+        switch (response.status) {
+          case 401: specificError = "Authentication error (401). Your API Key is invalid."; break;
+          case 404: specificError = `Model not found (404). Check API URL and Model Slug.`; break;
+          case 403: specificError = "Permission denied (403). Key may not have access to this model."; break;
+          default: specificError = `Error ${response.status}: ${errorBody.substring(0, 100)}`;
+        }
+        return { success: false, message: `❌ ${specificError}` };
+      }
+    } catch (error) {
+      return { success: false, message: `❌ Network Error: Could not reach the API endpoint. Check the URL and your connection.` };
+    }
+  }
+
+  async listModels(connection: Pick<AiConnection, 'apiUrl' | 'apiToken'>): Promise<ModelInfo[]> {
+    if (!connection.apiToken || connection.apiToken.includes('PASTE')) {
+      throw new Error("An API key is required to fetch models.");
+    }
+    
+    const modelsUrl = new URL("models", connection.apiUrl).href;
+
+    try {
+      const response = await fetch(modelsUrl, { 
+        method: 'GET', 
+        headers: { 'Authorization': `Bearer ${connection.apiToken}` }
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch models with status ${response.status}`);
+      }
+      const json = await response.json();
+      
+      // The data structure varies between APIs (e.g., json.data for OpenAI)
+      const modelList = json.data || json.models || [];
+
+      return modelList
+        .map((model: any) => ({ 
+          id: model.id, 
+          name: model.name || model.id // Use 'name' if available (like OpenRouter), otherwise fall back to 'id'
+        }))
+        .sort((a: ModelInfo, b: ModelInfo) => a.name.localeCompare(b.name));
+
+    } catch (error) {
+      errorLog("Failed to list models:", error);
+      throw error;
+    }
+  }
+}
+
+// Export a singleton instance of the AI client.
+export const aiClient = new AiClient();
+@@END_FILE@@
+
+@@FILE: src/logic/cardManager.ts =====
+// src/logic/cardManager.ts
+
+import type { PromptCard, NewPromptCardData, StackInstructions} from '../models';
+import { generateUuid } from '../utils/uuid';
+import { generateContentHash, getPromptCardContentForHash } from '../utils/hash';
+import { promptCardRepository } from '../data/repositories/promptCardRepository';
+import type { IPromptCardRepository } from '../data/repositories/promptCardRepository';
+
+import { debugLog, errorLog } from '../utils/debug';
+import {
+  defaultAiSettingsInCard,
+  defaultStackInstructions,
+  DEFAULT_FIRST_TURN_PROMPT_BLOCK,
+  DEFAULT_EMIT_SKELETON_STRING,
+} from '../data/config/promptCardDefaults';
+
+/**
+ * Interface defining the contract for the Card Manager.
+ * This can be useful for testing or providing different implementations (e.g., a mock manager).
+ */
+export interface ICardManager {
+  /**
+   * Creates a brand new PromptCard with default values for unspecified fields.
+   * Generates new IDs and hash, sets creation/update timestamps.
+   * @param userId The ID of the user creating the card.
+   * @param data The initial data for the new card.
+   * @returns A Promise resolving with the newly created PromptCard.
+   */
+  createNewPromptCard(userId: string, data: NewPromptCardData): Promise<PromptCard>;
+
+  /**
+   * Updates an existing PromptCard. Recalculates the content hash and updates the timestamp.
+   * @param userId The ID of the user owning the card.
+   * @param cardId The ID of the card to update.
+   * @param updates The partial PromptCard data to apply.
+   * @returns A Promise resolving with the updated PromptCard or null if not found.
+   */
+  updatePromptCard(userId: string, cardId: string, updates: Partial<PromptCard>): Promise<PromptCard | null>;
+
+  /**
+   * Duplicates an existing PromptCard, creating a new card with a new ID
+   * but linking it to the original's lineage (parentId, rootId).
+   * @param userId The ID of the user performing the duplication.
+   * @param sourceCardId The ID of the card to duplicate.
+   * @returns A Promise resolving with the new, duplicated PromptCard or null if source not found.
+   */
+  duplicatePromptCard(userId: string, sourceCardId: string): Promise<PromptCard | null>;
+
+  /**
+   * Deletes a PromptCard.
+   * @param userId The ID of the user owning the card.
+   * @param cardId The ID of the card to delete.
+   * @returns A Promise resolving when the card is deleted.
+   */
+  deletePromptCard(userId: string, cardId: string): Promise<void>;
+
+  /**
+   * Retrieves a single PromptCard.
+   * @param userId The ID of the user.
+   * @param cardId The ID of the card.
+   * @returns A Promise resolving with the PromptCard or null if not found.
+   */
+  getPromptCard(userId: string, cardId: string): Promise<PromptCard | null>;
+
+  /**
+   * Retrieves all PromptCards for a user.
+   * @param userId The ID of the user.
+   * @returns A Promise resolving with an array of PromptCards.
+   */
+  getAllPromptCards(userId: string): Promise<PromptCard[]>;
+
+  /**
+   * Exports a single PromptCard for sharing/download.
+   * This might involve stripping user-specific metadata like ownerId for public sharing.
+   * For now, it simply returns the card, but can be extended.
+   * @param userId The ID of the user exporting.
+   * @param cardId The ID of the card to export.
+   * @returns A Promise resolving with the PromptCard or null.
+   */
+  exportPromptCard(userId: string, cardId: string): Promise<PromptCard | null>;
+
+  /**
+   * Imports PromptCards from a provided list (e.g., from a JSON file).
+   * This involves generating new IDs, re-calculating hashes, setting ownerId,
+   * and linking lineage appropriately.
+   * @param userId The ID of the user importing.
+   * @param importedCardsData An array of NewPromptCardData (or similar) from the import source.
+   * @returns A Promise resolving with an array of the newly imported PromptCards.
+   */
+  importPromptCards(userId: string, importedCardsData: NewPromptCardData[]): Promise<PromptCard[]>;
+}
+
+/**
+ * Concrete implementation of ICardManager.
+ */
+export class PromptCardManager implements ICardManager {
+  constructor(private repo: IPromptCardRepository) {}
+
+  private async buildPromptCard(userId: string, data: NewPromptCardData, existingCard?: PromptCard): Promise<PromptCard> {
+    const now = new Date().toISOString();
+    let cardId: string;
+    let rootId: string;
+    let parentId: string | null;
+    let createdAt: string;
+
+    if (existingCard) {
+      // This path is for updates, or duplicating where we are basing off an existing structure
+      cardId = existingCard.id;
+      rootId = existingCard.rootId;
+      parentId = existingCard.parentId; // Parent ID remains the same for updates
+      createdAt = existingCard.createdAt;
+    } else {
+      // This path is for new creations or imports that need new IDs
+      cardId = generateUuid();
+      rootId = cardId; // For brand new cards, rootId is its own ID
+      parentId = null; // No parent for brand new cards
+      createdAt = now;
+    }
+
+    // Handle stackInstructions: if provided as string, parse it; otherwise use object or default.
+    let parsedStackInstructions: StackInstructions;
+    if (typeof data.stackInstructions === 'string') {
+      try {
+        parsedStackInstructions = JSON.parse(data.stackInstructions);
+      } catch (e) {
+        errorLog("Error parsing stackInstructions string for new card, falling back to default:", e);
+        parsedStackInstructions = defaultStackInstructions;
+      }
+    } else if (data.stackInstructions) {
+      parsedStackInstructions = data.stackInstructions;
+    } else {
+      parsedStackInstructions = defaultStackInstructions;
+    }
+
+    // Construct the card with defaults applied where data is missing
+    const tempCard: PromptCard = {
+      id: cardId,
+      rootId: rootId,
+      parentId: parentId,
+      ownerId: userId,
+      createdAt: createdAt,
+      updatedAt: now, // Always update timestamp on creation/modification
+      title: data.title,
+      prompt: data.prompt,
+      description: data.description ?? null,
+      firstTurnOnlyBlock: data.firstTurnOnlyBlock ?? DEFAULT_FIRST_TURN_PROMPT_BLOCK,
+      stackInstructions: parsedStackInstructions,
+      emitSkeleton: data.emitSkeleton ?? DEFAULT_EMIT_SKELETON_STRING,
+      worldStateInit: data.worldStateInit ?? "",
+      gameRules: data.gameRules ?? "",
+      aiSettings: { ...defaultAiSettingsInCard, ...data.aiSettings },
+      helperAiSettings: { ...defaultAiSettingsInCard, ...data.helperAiSettings },
+      isHelperAiEnabled: data.isHelperAiEnabled ?? false, // NEW: Initialize with default false
+      tags: data.tags ?? [],
+      isExample: data.isExample ?? false,
+      functionDefs: data.functionDefs ?? "",
+      isPublic: data.isPublic ?? false, // Default to private for new user-created cards
+      contentHash: '', // Will be calculated below
+      historyBrowsingEnabled: data.historyBrowsingEnabled ?? true, // <-- ADD THIS (default to true)
+    };
+
+    // Calculate content hash AFTER all content fields are finalized
+    tempCard.contentHash = generateContentHash(getPromptCardContentForHash(tempCard));
+
+    return tempCard;
+  }
+
+  async createNewPromptCard(userId: string, data: NewPromptCardData): Promise<PromptCard> {
+    const newCard = await this.buildPromptCard(userId, data);
+    await this.repo.savePromptCard(userId, newCard);
+    return newCard;
+  }
+
+  async updatePromptCard(userId: string, cardId: string, updates: Partial<PromptCard>): Promise<PromptCard | null> {
+    const existingCard = await this.repo.getPromptCard(userId, cardId);
+    if (!existingCard) {
+      return null;
+    }
+
+    // Apply updates
+    const updatedCardData = { ...existingCard, ...updates };
+
+    // Re-calculate hash based on potentially changed content fields
+    const newContentHash = generateContentHash(getPromptCardContentForHash(updatedCardData));
+    updatedCardData.contentHash = newContentHash;
+    updatedCardData.updatedAt = new Date().toISOString(); // Update timestamp on modification
+
+    await this.repo.savePromptCard(userId, updatedCardData);
+    return updatedCardData;
+  }
+
+  async duplicatePromptCard(userId: string, sourceCardId: string): Promise<PromptCard | null> {
+    const sourceCard = await this.repo.getPromptCard(userId, sourceCardId);
+    if (!sourceCard) {
+      debugLog(`Source card with ID ${sourceCardId} not found for duplication.`);
+      return null;
+    }
+
+    const newId = generateUuid();
+    const now = new Date().toISOString();
+
+    const duplicatedCard: PromptCard = {
+      ...sourceCard, // Copy all existing fields
+      id: newId, // Assign new ID
+      rootId: sourceCard.rootId, // Root remains the same
+      parentId: sourceCard.id, // New parent is the source card
+      ownerId: userId, // Ensure new owner is current user
+      createdAt: now, // New creation timestamp for the duplicate
+      updatedAt: now, // New update timestamp
+      isExample: false, // Duplicates are user-owned, not examples
+      isPublic: false, // Duplicates are private by default
+      // isHelperAiEnabled will be copied correctly from sourceCard by the spread operator
+    };
+
+    // Recalculate hash for the duplicated card in case any content fields were implicitly changed
+    // (e.g., if a previous source card had an older version of stack instructions that parsed differently).
+    // Or just for robustness.
+    duplicatedCard.contentHash = generateContentHash(getPromptCardContentForHash(duplicatedCard));
+
+    await this.repo.savePromptCard(userId, duplicatedCard);
+    debugLog(`Card ${sourceCardId} duplicated to ${newId}`);
+    return duplicatedCard;
+  }
+
+  async deletePromptCard(userId: string, cardId: string): Promise<void> {
+    await this.repo.deletePromptCard(userId, cardId);
+  }
+
+  async getPromptCard(userId: string, cardId: string): Promise<PromptCard | null> {
+    return this.repo.getPromptCard(userId, cardId);
+  }
+
+  async getAllPromptCards(userId: string): Promise<PromptCard[]> {
+    return this.repo.getAllPromptCards(userId);
+  }
+
+  async exportPromptCard(userId: string, cardId: string): Promise<PromptCard | null> {
+    const card = await this.repo.getPromptCard(userId, cardId);
+    if (card) {
+      // For export, you might want to strip or transform sensitive/user-specific fields.
+      // For MVP, we return the full card.
+      // E.g., delete card.ownerId; // if it's meant for public template export
+    }
+    return card;
+  }
+
+  async importPromptCards(userId: string, importedCardsData: NewPromptCardData[]): Promise<PromptCard[]> {
+    const importedAndProcessedCards: PromptCard[] = [];
+    for (const data of importedCardsData) {
+      // For imported cards, we generate a new UUID.
+      // The parentId and rootId logic for imports needs careful consideration:
+      // If the imported card explicitly defines a lineage, we might keep it.
+      // If it's a "fresh" import, its rootId becomes its own new ID, parentId is null.
+      // For now, let's treat all imports as new roots by default for simplicity,
+      // and re-establish lineage if a more complex import format is defined later.
+      // OR, if `NewPromptCardData` from import includes original IDs, we could preserve root/parent
+      // For MVP, let's assume they are new root cards.
+      const newCard = await this.buildPromptCard(userId, data);
+      importedAndProcessedCards.push(newCard);
+    }
+    await this.repo.importPromptCards(userId, importedAndProcessedCards);
+   debugLog(`Imported ${importedAndProcessedCards.length} cards.`);
+    return importedAndProcessedCards;
+  }
+}
+
+// Export a singleton instance of the manager
+export const promptCardManager = new PromptCardManager(promptCardRepository);
+@@END_FILE@@
+
+@@FILE: src/logic/ContextStackAssembler.ts =====
+// src/logic/ContextStackAssembler.ts
+import { StackMode, FilterMode } from '../models';
+
+import type {
+  PromptCard,
+  GameState,
+  LogEntry,
+  Message,
+  SceneState,
+  DigestLine,
+} from '../models';
+import type { IContextStackAssembler } from './IContextStackAssembler';
+import { getNestedValue } from '../utils/jsonUtils'; // Assuming you have this utility function
+import { debugLog, errorLog } from '../utils/debug';
+
+
+export class ContextStackAssembler implements IContextStackAssembler {
+  public assembleContext(card: PromptCard, gameState: GameState, logEntries: LogEntry[]): Message[] {
+    const messages: Message[] = [];
+    const { stackInstructions } = card;
+
+    // 1. World State Context
+    if (stackInstructions.worldStatePolicy.enabled) {
+      messages.push({ role: "system", content: `## Current World State\n\`\`\`json\n${JSON.stringify(gameState.worldState, null, 2)}\n\`\`\`` });
+    }
+
+    // 2. Known Entities
+    if (stackInstructions.knownEntitiesPolicy.enabled) {
+      const knownEntities = this.extractKnownEntities(gameState, stackInstructions.knownEntitiesPolicy.n);
+      if (knownEntities.length > 0) {
+        messages.push({ role: "system", content: `## Known Entities\n${knownEntities.join('\n')}` });
+      }
+    }
+
+    // 3. Digest Context
+    if (stackInstructions.digestPolicy.enabled) {
+      const relevantDigests = this.getRelevantDigests(logEntries, gameState, card.stackInstructions);
+      if (relevantDigests.length > 0) {
+        messages.push({ role: "system", content: `## Game Summary Digest\n${relevantDigests.map(d => d.text).join('\n')}` });
+      }
+    }
+
+    // 4. Expression Log
+    if (stackInstructions.expressionLogPolicy.enabled) {
+      // Placeholder for complex expression logic
+    }
+
+    return messages;
+  }
+  
+  private getSceneTags(scene: SceneState, worldState: Record<string, any>): string[] {
+    const tags = new Set<string>();
+    if (scene.location?.startsWith('@')) tags.add(scene.location);
+    scene.present.forEach(path => {
+      const entity = getNestedValue(worldState, path.split('.'));
+      if (entity?.tag) tags.add(entity.tag);
+    });
+    return Array.from(tags);
+  }
+
+  private extractKnownEntities(gameState: GameState, limit: number): string[] {
+    const entities = new Set(this.getSceneTags(gameState.scene, gameState.worldState));
+    return Array.from(entities).slice(0, limit);
+  }
+
+  private getRelevantDigests(logs: LogEntry[], gameState: GameState, instructions: PromptCard['stackInstructions']): DigestLine[] {
+    const relevantDigests: DigestLine[] = [];
+    const sceneTags = this.getSceneTags(gameState.scene, gameState.worldState);
+    for (const log of logs) {
+      for (const digest of log.digestLines) {
+        const rule = instructions.digestEmission[digest.importance];
+        if (!rule || rule.mode === StackMode.NEVER) continue;
+        const meetsCondition = (rule.mode === StackMode.ALWAYS) || (rule.mode === StackMode.FIRST_N && log.turnNumber <= rule.n) || (rule.mode === StackMode.AFTER_N && log.turnNumber >= rule.n);
+        if (meetsCondition) {
+          let include = true;
+          if (instructions.digestPolicy.filtering === FilterMode.SCENE_ONLY) include = digest.tags?.some(tag => sceneTags.includes(tag)) ?? false;
+          else if (instructions.digestPolicy.filtering === FilterMode.TAGGED) include = (digest.tags?.length ?? 0) > 0;
+          if (include) relevantDigests.push(digest);
+        }
+      }
+    }
+    return relevantDigests;
+  }
+}
+@@END_FILE@@
+
+@@FILE: src/logic/deltaParser.ts =====
+// src/logic/deltaParser.ts
+import type { DeltaInstruction, DeltaMap,DigestLine, ParsedNarrationOutput} from '../models';
+import { debugLog, errorLog } from '../utils/debug';
+
+// Exported Marker constants
+export const DELTA_MARKER = "@delta";
+export const DIGEST_MARKER = "@digest";
+export const SCENE_MARKER = "@scene";
+
+/**
+ * Extracts a JSON object from a string, handling potential parsing errors.
+ * This function expects the *raw JSON string*, not lines including fences.
+ * @param jsonString The raw JSON string.
+ * @returns A JSON object, or an empty object on error.
+ */
+function extractJsonObject(jsonString: string): Record<string, unknown> {
+  const text = jsonString.trim();
+  if (!text) return {};
+  try {
+    const parsed = JSON.parse(text);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? parsed : {};
+  } catch (e: unknown) {
+    errorLog("Failed to parse JSON object:", e, "\nText:", text);
+    return {};
+  }
+}
+
+/**
+ * Extracts a JSON array from a string, handling potential parsing errors.
+ * This function expects the *raw JSON string*, not lines including fences.
+ * @param jsonString The raw JSON string.
+ * @returns A JSON array, or an empty array on error.
+ */
+function extractJsonArray(jsonString: string): unknown[] {
+  const text = jsonString.trim();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e: unknown) {
+    errorLog("Failed to parse JSON array:", e, "\nText:", text);
+    return [];
+  }
+}
+
+/**
+ * Extracts content from a markdown-fenced JSON block.
+ * Looks for ```json and ```. Also includes a fallback for unfenced blocks
+ * if a JSON start character is found immediately after the marker.
+ * @param lines The full array of lines from AI output.
+ * @param startIndex The index of the marker line (e.g., @delta).
+ * @returns The raw JSON string content, or an empty string if not found.
+ */
+function extractFencedJsonBlock(lines: string[], startIndex: number): string {
+    if (startIndex < 0 || startIndex >= lines.length) {
+        return "";
+    }
+
+    let jsonLines: string[] = [];
+    let inJsonBlock = false;
+    let fenceFound = false;
+
+    // Start searching from the line *after* the marker
+    for (let i = startIndex + 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        if (line.startsWith("```")) {
+            if (!inJsonBlock) {
+                // Found opening fence
+                inJsonBlock = true;
+                fenceFound = true;
+                // If there's content *after* ```json on the same line
+                const contentAfterFence = line.substring(line.indexOf('{'));
+                if(contentAfterFence.startsWith('{') || contentAfterFence.startsWith('[')) {
+                    jsonLines.push(contentAfterFence);
+                }
+                continue;
+            } else {
+                // Found closing fence
+                break;
+            }
+        }
+
+        if (inJsonBlock) {
+            jsonLines.push(lines[i]);
+        } else if (!fenceFound && (line.startsWith("{") || line.startsWith("["))) {
+            // If no fence was found yet, but we encounter a JSON start,
+            // assume it's an unfenced block and start capturing.
+            // This is a fallback for AIs that don't use fences.
+            inJsonBlock = true;
+            jsonLines.push(lines[i]);
+        } else if (inJsonBlock && !fenceFound && !line.startsWith("{") && !line.startsWith("[")) {
+            // If we're in an unfenced block but encounter a non-JSON line, stop.
+            break;
+        }
+    }
+
+    return jsonLines.join('\n').trim();
+}
+
+/**
+ * Parses a key-value pair from the AI's delta JSON into a DeltaInstruction.
+ * Corresponds to `DeltaInstruction.fromJsonElement` from the old project.
+ * The raw key is expected to be in the format `+player.gold` or `=npcs.goblin.hp`.
+ * @param rawKey The raw key from the JSON, e.g., "+player.gold".
+ * @param value The JSON value associated with the key.
+ * @returns A DeltaInstruction object or null if parsing fails.
+ */
+function parseSingleDelta(rawKey: string, value: unknown): DeltaInstruction | null {
+  const op = rawKey.charAt(0);
+  const path = rawKey.substring(1); // The rest of the key, e.g., "player.gold"
+
+  switch (op) {
+    case '+':
+      return { op: 'add', key: path, value: value };
+    case '=':
+      return { op: 'assign', key: path, value: value };
+    case '!':
+      return { op: 'declare', key: path, value: value };
+    case '-':
+      return { op: 'delete', key: path };
+    default:
+      console.warn(`Invalid delta operation character '${op}' in key '${rawKey}'`);
+      return null;
+  }
+}
+
+/**
+ * Parses the raw AI response string into a structured ParsedNarrationOutput object.
+ * This function replicates the logic of `NarrationParser.extractJsonAndCleanNarration`.
+ * @param rawAiOutput The full, raw string from the AI model.
+ * @returns A ParsedNarrationOutput object.
+ */
+export function parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput {
+  const lines = rawAiOutput.split('\n');
+
+  const deltaIndex = lines.findIndex(line => line.trim() === DELTA_MARKER);
+  const digestIndex = lines.findIndex(line => line.trim() === DIGEST_MARKER);
+  const sceneIndex = lines.findIndex(line => line.trim() === SCENE_MARKER);
+
+  const firstMarkerIndex = [deltaIndex, digestIndex, sceneIndex]
+    .filter(index => index !== -1)
+    .reduce((min, current) => Math.min(min, current), lines.length);
+
+  const prose = lines.slice(0, firstMarkerIndex).join('\n').trim();
+
+  // Use the new helper to extract the raw JSON strings
+  const deltaJsonString = extractFencedJsonBlock(lines, deltaIndex);
+  const digestJsonString = extractFencedJsonBlock(lines, digestIndex);
+  const sceneJsonString = extractFencedJsonBlock(lines, sceneIndex);
+
+  const deltaJson = extractJsonObject(deltaJsonString);
+  const digestJson = extractJsonArray(digestJsonString);
+  const sceneJson = extractJsonObject(sceneJsonString);
+
+  // --- Parse Deltas ---
+  const deltas: DeltaMap = {};
+  for (const key in deltaJson) {
+    const instruction = parseSingleDelta(key, deltaJson[key]);
+    if (instruction) {
+      deltas[key] = instruction;
+    }
+  }
+
+  // --- Parse Digest Lines ---
+  const digestLines: DigestLine[] = digestJson.map((item) => {
+    const { text = '', importance } = item as { text?: string; importance?: number };
+    const finalImportance = typeof importance === 'number' ? importance : 3;
+    // Extract tags from text using regex, as in original NarrationParser
+    const tagPattern = /[#@$][a-zA-Z0-9_]+/g;
+    const tags = text.match(tagPattern) || [];
+    return { text, importance: finalImportance, tags };
+  }).filter(line => line.text); // Filter out empty lines
+
+  return {
+    prose,
+    deltas,
+    digestLines,
+    scene: sceneJson,
+  };
+}
+@@END_FILE@@
+
+@@FILE: src/logic/gameSession.ts =====
+import type { IGameRepository } from '../data/repositories/gameRepository';
+import type { IPromptCardRepository } from '../data/repositories/promptCardRepository';
+import type { GameSnapshot, PromptCard, AiConnection, LogEntry  } from '../models';
+import { formatIsoDateForDisplay } from '../utils/formatDate';
+import { generateUuid } from '../utils/uuid';
+import type { ITurnProcessor } from './ITurnProcessor';
+import type { ISnapshotUpdater } from './ISnapshotUpdater';
+import { debugLog, errorLog } from '../utils/debug';
+
+/**
+ * Defines the contract for the stateless GameSession service.
+ * Its purpose is to calculate game state transitions, not to hold state itself.
+ */
+export interface IGameSession {
+  initializeGame(userId: string, card: PromptCard): GameSnapshot;
+  
+  processPlayerAction(
+    snapshot: GameSnapshot,
+    card: PromptCard,
+    action: string,
+    useDummyNarrator: boolean,
+    aiConnections: AiConnection[]
+  ): Promise<GameSnapshot>;
+
+  renameWorldCategory(snapshot: GameSnapshot, oldName: string, newName: string): GameSnapshot;
+  renameWorldEntity(snapshot: GameSnapshot, category: string, oldName: string, newName: string): GameSnapshot;
+  deleteWorldCategory(snapshot: GameSnapshot, category: string): GameSnapshot;
+  deleteWorldEntity(snapshot: GameSnapshot, category: string, entity: string): GameSnapshot;
+  editWorldKeyValue(snapshot: GameSnapshot, key: string, value: any): GameSnapshot;
+  deleteWorldKey(snapshot: GameSnapshot, key: string): GameSnapshot;
+  toggleWorldStatePin(snapshot: GameSnapshot, keyPath: string, type: 'variable' | 'entity' | 'category'): GameSnapshot;
+}
+
+/**
+ * A stateless service that calculates game state transitions.
+ * It does not hold any internal state like currentSnapshot.
+ */
+export class GameSession implements IGameSession {
+  constructor(
+    private turnProcessor: ITurnProcessor,
+    private snapshotUpdater: ISnapshotUpdater
+  ) {
+    debugLog('[gameSession.ts] Stateless GameSession service instantiated.');
+  }
+
+  public initializeGame(userId: string, card: PromptCard): GameSnapshot {
+    debugLog(`[gameSession.ts] initializeGame: Creating new snapshot for User=${userId}, Card=${card.id}`);
+    
+    let initialWorldState = {};
+    try {
+      if (card.worldStateInit) initialWorldState = JSON.parse(card.worldStateInit);
+    } catch (e) {
+      errorLog("[gameSession.ts] initializeGame: Failed to parse worldStateInit JSON:", e);
+      initialWorldState = {};
+    }
+    const gameId = generateUuid();
+    const now = new Date().toISOString();
+
+    // CREATE THE "TURN 0" LOG ENTRY
+    const turnZeroLog: LogEntry = {
+      turnNumber: 0,
+      timestamp: now,
+      userInput: "[GAME START]",
+      narratorOutput: card.firstTurnOnlyBlock,
+      prose: card.firstTurnOnlyBlock, // Merging initial text into both fields
+      digestLines: [],
+      deltas: null,
+      contextSnapshot: "Initial game state setup.",
+      tokenUsage: null,
+      apiRequestBody: null,
+      apiResponseBody: null,
+      apiUrl: null,
+      latencyMs: null,
+      aiSettings: card.aiSettings,
+      errorFlags: [],
+      modelSlugUsed: "N/A",
+    };
+
+    const initialSnapshot: GameSnapshot = {
+      id: generateUuid(),
+      gameId: gameId,    // Timeline ID
+      userId: userId,
+      promptCardId: card.id,
+      title: `Game with ${card.title} - ${formatIsoDateForDisplay(now)}`,
+      createdAt: now,
+      updatedAt: now,
+      currentTurn: 1, // The NEXT turn to be played is Turn 1
+      gameState: {
+        narration: card.firstTurnOnlyBlock,
+        worldState: initialWorldState,
+        scene: { location: null, present: [] },
+      },
+      conversationHistory: [
+        { role: 'assistant', content: card.firstTurnOnlyBlock },
+      ],
+      logs: [turnZeroLog], // SEED THE LOGS with our new Turn 0 entry
+      worldStatePinnedKeys: [],
+    };
+
+    debugLog(`[gameSession.ts] initializeGame: NEW game initialized with ID ${initialSnapshot.id}. Set for Turn 1.`);
+    return initialSnapshot;
+  }
+
+  public async processPlayerAction(
+    snapshot: GameSnapshot,
+    card: PromptCard,
+    action: string,
+    useDummyNarrator: boolean,
+    aiConnections: AiConnection[]
+  ): Promise<GameSnapshot> {
+    debugLog(`[gameSession.ts] processPlayerAction: Starting for action: "${action.substring(0, 50)}..." on snapshot ${snapshot.id}`);
+
+    if (!snapshot || !card) {
+      errorLog('[gameSession.ts] processPlayerAction: Snapshot or Card is missing.');
+      throw new Error("Cannot process player action: Snapshot and Card are required.");
+    }
+
+    const isFirstPlayerAction = snapshot.currentTurn === 0 && snapshot.logs.length === 0;
+
+    const turnResult = await this.turnProcessor.processPlayerTurn(
+      snapshot.userId,
+      card,
+      snapshot.gameState,
+      snapshot.logs,
+      snapshot.conversationHistory,
+      action,
+      snapshot.currentTurn,
+      useDummyNarrator,
+      aiConnections,
+      isFirstPlayerAction
+    );
+
+    debugLog('[gameSession.ts] processPlayerAction: Calling snapshotUpdater to apply turn result.');
+    const newSnapshot = this.snapshotUpdater.applyTurnResultToSnapshot(snapshot, {
+      ...turnResult,
+      playerAction: action,
+    });
+
+    debugLog(`[gameSession.ts] processPlayerAction: new snapshot ${newSnapshot.id} created.`);
+    return newSnapshot;
+  }
+
+  public renameWorldCategory(snapshot: GameSnapshot, oldName: string, newName: string): GameSnapshot {
+    return this.snapshotUpdater.applyCategoryRename(snapshot, oldName, newName);
+  }
+
+  public renameWorldEntity(snapshot: GameSnapshot, category: string, oldName: string, newName: string): GameSnapshot {
+    return this.snapshotUpdater.applyEntityRename(snapshot, category, oldName, newName);
+  }
+
+  public deleteWorldCategory(snapshot: GameSnapshot, category: string): GameSnapshot {
+    return this.snapshotUpdater.applyCategoryDelete(snapshot, category);
+  }
+
+  public deleteWorldEntity(snapshot: GameSnapshot, category: string, entity: string): GameSnapshot {
+    return this.snapshotUpdater.applyEntityDelete(snapshot, category, entity);
+  }
+
+  public editWorldKeyValue(snapshot: GameSnapshot, key: string, value: any): GameSnapshot {
+    return this.snapshotUpdater.applyKeyValueEdit(snapshot, key, value);
+  }
+
+  public deleteWorldKey(snapshot: GameSnapshot, key: string): GameSnapshot {
+    return this.snapshotUpdater.applyKeyDelete(snapshot, key);
+  }
+
+  public toggleWorldStatePin(snapshot: GameSnapshot, keyPath: string, type: 'variable' | 'entity' | 'category'): GameSnapshot {
+    return this.snapshotUpdater.applyPinToggle(snapshot, keyPath, type);
+  }
+}
+
+@@END_FILE@@
+
+@@FILE: src/logic/gameSessionServices.ts =====
+// src/logic/gameSessionServices.ts
+import { GameStateManager } from './GameStateManager.ts';
+import { SnapshotUpdater } from './SnapshotUpdater.ts'; // CORRECTED
+import { TurnProcessor } from './TurnProcessor.ts';
+import { aiClient } from './aiClient.ts';
+import { logManager } from './logManager.ts';
+import { promptBuilder } from './promptBuilder.ts';
+
+// Instantiate all the core logic services here to be used by GameSession
+const gameStateManager = new GameStateManager();
+export const snapshotUpdater = new SnapshotUpdater(gameStateManager);
+export const turnProcessor = new TurnProcessor(aiClient, promptBuilder, logManager);
+@@END_FILE@@
+
+@@FILE: src/logic/GameStateManager.ts =====
+// src/logic/GameStateManager.ts
+
+import type { IGameStateManager } from './IGameStateManager';
+import { produce } from 'immer'; // For immutable updates
+import type { GameState, DeltaMap } from '../models';
+/**
+ * Manages the mutable aspects of the game state (world state and scene).
+ * All mutations here are designed to be immutable, returning new state objects.
+ */
+export class GameStateManager implements IGameStateManager {
+
+  /**
+   * Applies delta instructions to the worldState within a given GameState.
+   * @param gameState The current game state to modify.
+   * @param deltas The map of delta instructions to apply.
+   * @returns A new GameState object with deltas applied (immutable update).
+   */
+  public applyDeltasToGameState(gameState: GameState, deltas: DeltaMap): GameState {
+    return produce(gameState, draft => {
+      const updatedWorld = draft.worldState; // immer makes this a mutable draft
+
+      for (const fullKey in deltas) {
+        const instruction = deltas[fullKey];
+        const parts = instruction.key.split('.');
+
+        let currentLevel: Record<string, any> = updatedWorld;
+        for (let i = 0; i < parts.length - 1; i++) {
+          const part = parts[i];
+          if (!currentLevel[part] || typeof currentLevel[part] !== 'object' || Array.isArray(currentLevel[part])) {
+            currentLevel[part] = {};
+          }
+          currentLevel = currentLevel[part];
+        }
+
+        const lastPart = parts[parts.length - 1];
+
+        switch (instruction.op) {
+          case 'add':
+            const prevAddValue = typeof currentLevel[lastPart] === 'number' ? currentLevel[lastPart] : 0;
+            const addValue = typeof instruction.value === 'number' ? instruction.value : 0;
+            currentLevel[lastPart] = prevAddValue + addValue;
+            break;
+          case 'assign':
+            currentLevel[lastPart] = instruction.value;
+            break;
+          case 'declare':
+            if (!(lastPart in currentLevel)) {
+              currentLevel[lastPart] = instruction.value;
+            }
+            break;
+          case 'delete':
+            delete currentLevel[lastPart];
+            break;
+        }
+      }
+    });
+  }
+
+  /**
+   * Updates the scene state within a given GameState based on parsed AI output or inferred deltas.
+   * @param gameState The current game state to modify.
+   * @param parsedScene The parsed scene object from AI output.
+   * @param deltas The delta map (for inference if no explicit scene).
+   * @returns A new GameState object with updated scene (immutable update).
+   */
+  public updateSceneState(
+    gameState: GameState,
+    parsedScene: Record<string, any> | null | undefined,
+    deltas: DeltaMap
+  ): GameState {
+    return produce(gameState, draft => {
+      let newLocation: string | null = draft.scene.location;
+      let newPresent: string[] = [...draft.scene.present];
+
+      if (parsedScene) {
+        if (parsedScene.location !== undefined) {
+          newLocation = typeof parsedScene.location === 'string' ? parsedScene.location : null;
+        }
+        if (Array.isArray(parsedScene.present)) {
+          newPresent = parsedScene.present.filter((item: any) => typeof item === 'string');
+        }
+      } else {
+        if ((!newLocation && newPresent.length === 0) && deltas) {
+          const inferredPresent = new Set<string>();
+          for (const fullKey in deltas) {
+            const instruction = deltas[fullKey];
+            if (instruction.op === 'declare') {
+              const parts = instruction.key.split('.');
+              if (parts.length >= 2) {
+                const category = parts[0];
+                const entity = parts[1];
+                const valueObj = instruction.value as Record<string, any>;
+                if (valueObj && (valueObj.tag === "character" || valueObj.tag === "location")) {
+                  inferredPresent.add(`${category}.${entity}`);
+                }
+              }
+              if (instruction.key === "world.location" && typeof instruction.value === 'string') {
+                newLocation = instruction.value;
+              }
+            }
+          }
+          newPresent = Array.from(inferredPresent);
+        }
+      }
+
+      draft.scene.location = newLocation;
+      draft.scene.present = newPresent;
+    });
+  }
+
+  // --- World State Direct Modification Methods (Immutable) ---
+
+  public renameCategory(currentWorldState: Record<string, any>, currentPinnedKeys: string[], oldName: string, newName: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] } {
+    const updatedWorldState = produce(currentWorldState, draft => {
+      if (draft[oldName]) {
+        draft[newName] = draft[oldName];
+        delete draft[oldName];
+      }
+    });
+
+    const updatedPinnedKeys = currentPinnedKeys.map(key =>
+      key.startsWith(oldName + '.') ? `${newName}${key.substring(oldName.length)}` : key
+    );
+    return { updatedWorldState, updatedPinnedKeys };
+  }
+
+  public renameEntity(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string, oldName: string, newName: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] } {
+    const updatedWorldState = produce(currentWorldState, draft => {
+      const categoryObj = draft[category];
+      if (categoryObj && categoryObj[oldName]) {
+        categoryObj[newName] = categoryObj[oldName];
+        delete categoryObj[oldName];
+      }
+    });
+
+    const oldEntityPath = `${category}.${oldName}`;
+    const newEntityPath = `${category}.${newName}`;
+    const updatedPinnedKeys = currentPinnedKeys.map(key =>
+      key.startsWith(oldEntityPath + '.') ? `${newEntityPath}${key.substring(oldEntityPath.length)}` : key
+    );
+    return { updatedWorldState, updatedPinnedKeys };
+  }
+
+  public deleteCategory(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] } {
+    const updatedWorldState = produce(currentWorldState, draft => {
+      delete draft[category];
+    });
+    const updatedPinnedKeys = currentPinnedKeys.filter(key => !key.startsWith(category + '.'));
+    return { updatedWorldState, updatedPinnedKeys };
+  }
+
+  public deleteEntity(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string, entity: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] } {
+    const updatedWorldState = produce(currentWorldState, draft => {
+      const categoryObj = draft[category];
+      if (categoryObj && categoryObj[entity]) {
+        delete categoryObj[entity];
+      }
+    });
+    const entityPath = `${category}.${entity}`;
+    const updatedPinnedKeys = currentPinnedKeys.filter(key => !key.startsWith(entityPath + '.'));
+    return { updatedWorldState, updatedPinnedKeys };
+  }
+
+  public editKeyValue(currentWorldState: Record<string, any>, key: string, value: any): Record<string, any> {
+    return produce(currentWorldState, draft => {
+      const parts = key.split('.');
+      let current: any = draft;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        if (!current[part] || typeof current[part] !== 'object') {
+          current[part] = {};
+        }
+        current = current[part];
+      }
+      current[parts[parts.length - 1]] = value;
+    });
+  }
+
+  public deleteKey(currentWorldState: Record<string, any>, currentPinnedKeys: string[], key: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] } {
+    const updatedWorldState = produce(currentWorldState, draft => {
+      const parts = key.split('.');
+      let current: any = draft;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        if (!(part in current)) {
+          return; // Path doesn't exist, nothing to delete
+        }
+        current = current[part];
+      }
+      delete current[parts[parts.length - 1]];
+    });
+    const updatedPinnedKeys = currentPinnedKeys.filter(pk => pk !== key);
+    return { updatedWorldState, updatedPinnedKeys };
+  }
+}
+@@END_FILE@@
+
+@@FILE: src/logic/IContextStackAssembler.ts =====
+// src/logic/IContextStackAssembler.ts
+import type { PromptCard, GameState, LogEntry, Message } from '../models';
+
+/**
+ * Defines the contract for a service that assembles the dynamic parts
+ * of an AI prompt's context based on StackInstructions.
+ */
+export interface IContextStackAssembler {
+  /**
+   * Assembles the full dynamic context stack based on the rules in the prompt card.
+   * @param card The active PromptCard containing the StackInstructions.
+   * @param gameState The current GameState.
+   * @param logEntries The history of log entries for the session.
+   * @returns An array of Message objects representing the assembled context.
+   */
+  assembleContext(
+    card: PromptCard,
+    gameState: GameState,
+    logEntries: LogEntry[]
+  ): Message[];
+}
+
+
+@@END_FILE@@
+
+@@FILE: src/logic/IGameStateManager.ts =====
+// src/logic/IGameStateManager.ts
+
+import type { GameState, DeltaMap } from '../models';
+
+/**
+ * Defines the contract for managing the mutable state of the game (worldState and scene).
+ * This manager operates on GameState objects and does not directly interact with repositories.
+ */
+export interface IGameStateManager {
+  /**
+   * Applies delta instructions to the worldState within a given GameState.
+   * @param gameState The current game state to modify.
+   * @param deltas The map of delta instructions to apply.
+   * @returns A new GameState object with deltas applied (immutable update).
+   */
+  applyDeltasToGameState(gameState: GameState, deltas: DeltaMap): GameState;
+
+  /**
+   * Updates the scene state within a given GameState based on parsed AI output or inferred deltas.
+   * @param gameState The current game state to modify.
+   * @param parsedScene The parsed scene object from AI output.
+   * @param deltas The delta map (for inference if no explicit scene).
+   * @returns A new GameState object with updated scene (immutable update).
+   */
+  updateSceneState(gameState: GameState, parsedScene: Record<string, any> | null | undefined, deltas: DeltaMap): GameState;
+
+  // Methods for direct world state modification (now immutable operations)
+  renameCategory(currentWorldState: Record<string, any>, currentPinnedKeys: string[], oldName: string, newName: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] };
+  renameEntity(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string, oldName: string, newName: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] };
+  deleteCategory(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] };
+  deleteEntity(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string, entity: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] };
+  editKeyValue(currentWorldState: Record<string, any>, key: string, value: any): Record<string, any>;
+  deleteKey(currentWorldState: Record<string, any>, currentPinnedKeys: string[], key: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] };
+}
+@@END_FILE@@
+
+@@FILE: src/logic/ISnapshotUpdater.ts =====
+// src/logic/ISnapshotUpdater.ts
+import type { GameSnapshot, ParsedNarrationOutput, LogEntry } from '../models';
+
+export interface ITurnResult {
+  parsedOutput: ParsedNarrationOutput;
+  logEntry: LogEntry;
+  playerAction?: string; // Include the player's action for conversation history
+}
+
+export interface ISnapshotUpdater {
+  /**
+   * Applies the result of a processed turn to a game snapshot.
+   * This handles updating game state from deltas, scene changes, adding logs,
+   * updating conversation history, and incrementing the turn counter.
+   * @param snapshot The current GameSnapshot.
+   * @param turnResult The result from the TurnProcessor.
+   * @returns A new, updated GameSnapshot.
+   */
+  applyTurnResultToSnapshot(snapshot: GameSnapshot, turnResult: ITurnResult): GameSnapshot;
+
+  /**
+   * Applies a direct world state category rename to the snapshot.
+   * @returns A new, updated GameSnapshot.
+   */
+  applyCategoryRename(snapshot: GameSnapshot, oldName: string, newName: string): GameSnapshot;
+
+  /**
+   * Applies a direct world state entity rename to the snapshot.
+   * @returns A new, updated GameSnapshot.
+   */
+  applyEntityRename(snapshot: GameSnapshot, category: string, oldName: string, newName: string): GameSnapshot;
+  applyCategoryDelete(snapshot: GameSnapshot, category: string): GameSnapshot;
+  applyEntityDelete(snapshot: GameSnapshot, category: string, entity: string): GameSnapshot;
+  applyKeyValueEdit(snapshot: GameSnapshot, key: string, value: any): GameSnapshot;
+  applyKeyDelete(snapshot: GameSnapshot, key: string): GameSnapshot;
+  applyPinToggle(snapshot: GameSnapshot, keyPath: string, type: 'variable' | 'entity' | 'category'): GameSnapshot;
+}
+@@END_FILE@@
+
+@@FILE: src/logic/ITurnProcessor.ts =====
+// src/logic/ITurnProcessor.ts
+
+import type {
+  PromptCard,
+  GameState,
+  LogEntry,
+  Message,
+  AiConnection,
+  ParsedNarrationOutput,
+  TokenSummary
+} from '../models';
+
+/**
+ * Defines the contract for processing individual game turns, including AI interaction.
+ */
+export interface ITurnProcessor {
+  /**
+   * Processes a player's action, generating the AI response and updating conversation history/logs.
+   * Handles both the initial turn and subsequent turns.
+   *
+   * @param userId The ID of the current user.
+   * @param card The PromptCard used for the game.
+   * @param currentGameState The current game state before the turn.
+   * @param logs The current game logs.
+   * @param conversationHistory The current conversation history.
+   * @param action The player's input string.
+   * @param turnNumber The current turn number.
+   * @param useDummyNarrator Flag to use a dummy AI.
+   * @param aiConnections User's configured AI connections.
+   * @param isFirstPlayerAction True if this is the first player input after game start.
+   */
+  processPlayerTurn(
+    userId: string,
+    card: PromptCard,
+    currentGameState: GameState,
+    logs: LogEntry[],
+    conversationHistory: Message[],
+    action: string,
+    turnNumber: number,
+    useDummyNarrator: boolean,
+    aiConnections: AiConnection[],
+    isFirstPlayerAction: boolean // <-- PATCHED
+  ): Promise<{
+    parsedOutput: ParsedNarrationOutput;
+    logEntry: LogEntry;
+    aiRawOutput: string;
+    tokenUsage: TokenSummary | null;
+  }>;
+}
+
+@@END_FILE@@
+
+@@FILE: src/logic/logManager.ts =====
+// src/logic/logManager.ts
+
+import { DELTA_MARKER } from './deltaParser'; // Import DELTA_MARKER
+import type { 
+  AiSettings, 
+  ParsedNarrationOutput, 
+  LogEntry,
+  DeltaMap,
+  DigestLine, 
+  TokenSummary, 
+  LogErrorFlag 
+} from '../models';
+
+/**
+ * Interface defining the contract for the Log Manager.
+ */
+export interface ILogManager {
+ /**
+  * Assembles a complete LogEntry for a single turn of the game.
+  * This centralizes the logic from TurnLogAssembler and DigestManager.addParsedLines.
+  * @param params An object containing all necessary data for the log entry.
+  * @returns A fully constructed LogEntry object.
+  */
+ assembleTurnLogEntry(params: {
+  turnNumber: number;
+  userInput: string;
+  rawNarratorOutput: string;
+  parsedOutput: ParsedNarrationOutput; // Output from deltaParser.ts
+  contextSnapshot: string; // The full prompt string sent to AI
+  tokenUsage: TokenSummary | null;
+  aiSettings: AiSettings; // The AI settings used for this turn
+  apiRequestBody: string | null;
+  apiResponseBody: string | null;
+  apiUrl: string | null;
+  latencyMs: number | null;
+  modelSlugUsed: string;
+ }): LogEntry;
+
+ /**
+  * Infers digest lines from deltas if no explicit digest was provided by the AI.
+  * Replicates logic from DigestManager.addParsedLines.
+  * @param deltas The map of DeltaInstruction objects.
+  * @param prose Optional: the prose of the turn, for extracting first line as digest.
+  * @returns An array of inferred DigestLine objects.
+  */
+ inferDigestLinesFromDeltas(deltas: DeltaMap, prose?: string): DigestLine[];
+}
+
+/**
+ * Concrete implementation of ILogManager.
+ */
+class LogManager implements ILogManager {
+
+ inferDigestLinesFromDeltas(deltas: DeltaMap, prose?: string): DigestLine[] {
+  const inferredDigests: DigestLine[] = [];
+
+  if (Object.keys(deltas).length === 0) {
+   return inferredDigests;
+  }
+
+  for (const rawKey in deltas) {
+   const instruction = deltas[rawKey];
+   let score = 1; // Default low importance
+
+   // Logic from DigestManager.addParsedLines to infer importance
+   if (rawKey.startsWith("player.")) {
+    score = 5; // Player-related changes are critical
+   } else if (rawKey.startsWith("world.")) {
+    score = 5; // World-related changes are critical
+   } else if (rawKey.includes(".flags.")) {
+    score = 4;
+   } else if (rawKey.includes(".status")) {
+    score = 3;
+   } else if (rawKey.startsWith("+") || rawKey.startsWith("!")) {
+    score = 2; // Add or Declare operations
+   }
+
+   // Logic from DeltaInstruction.toLogValue() for summary text
+   let summaryText = `Unknown delta operation: ${rawKey}`;
+   if (instruction.op === 'assign') {
+    summaryText = `Set ${instruction.key} = ${JSON.stringify(instruction.value)}`;
+   } else if (instruction.op === 'add') {
+    summaryText = `Added to ${instruction.key}: ${JSON.stringify(instruction.value)}`;
+   } else if (instruction.op === 'declare') {
+    // Inferred tag logic, similar to DigestManager
+    let taggableKey = instruction.key;
+    const pathParts = instruction.key.split(".");
+    if (pathParts.length >= 2) {
+      const entity = pathParts[1];
+      // Infer if this is a character or location declaration for a summary
+      const valueAsObject = instruction.value as Record<string, any>;
+      if (valueAsObject && (valueAsObject.tag === "character" || valueAsObject.tag === "location")) {
+        taggableKey = (valueAsObject.tag === "character" ? "#" : "@") + entity;
+      }
+    }
+    summaryText = `Declared ${taggableKey} as ${JSON.stringify(instruction.value)}`;
+   } else if (instruction.op === 'delete') {
+    summaryText = `Removed ${instruction.key}`;
+   }
+
+  const tags = this.extractTags(summaryText); // Extract tags from the generated summary
+    // MODIFIED: Use `importance: score` to match the DigestLine model
+   inferredDigests.push({ text: summaryText, importance: score, tags });
+  }
+
+  // Optional prose line extraction from DigestManager.addParsedLines
+  if (prose && prose.trim().length > 10) {
+   const firstLine = prose.trim().split(/[.!?\n]/).find(line => line.trim().length > 10)?.trim();
+   if (firstLine) {
+    const tags = this.extractTags(firstLine);
+      // MODIFIED: Use `importance: 3`
+    inferredDigests.push({ text: firstLine, importance: 3, tags });
+   }
+  }
+
+  // Assign consistent turn number AFTER all are collected
+  // MODIFIED: Remove turn property, as it's not in the DigestLine model. It's part of the parent LogEntry.
+  return inferredDigests;
+}
+
+ private extractTags(text: string): string[] {
+  const tagPattern = /[#@$][a-zA-Z0-9_]+/g; // Global flag to find all matches
+  const matches = text.match(tagPattern);
+  return matches || [];
+ }
+
+ assembleTurnLogEntry(params: {
+  turnNumber: number;
+  userInput: string;
+  rawNarratorOutput: string;
+  parsedOutput: ParsedNarrationOutput;
+  contextSnapshot: string;
+  tokenUsage: TokenSummary | null;
+  aiSettings: AiSettings;
+  apiRequestBody: string | null;
+  apiResponseBody: string | null;
+  apiUrl: string | null;
+  latencyMs: number | null;
+  modelSlugUsed: string;
+ }): LogEntry {
+  const now = new Date().toISOString();
+  const {
+   turnNumber, userInput, rawNarratorOutput, parsedOutput,
+   contextSnapshot, tokenUsage, aiSettings, apiRequestBody,
+   apiResponseBody, apiUrl, latencyMs, modelSlugUsed
+  } = params;
+
+  let digestLines: DigestLine[] = parsedOutput.digestLines || [];
+  if (digestLines.length === 0 && parsedOutput.deltas) {
+   // If AI didn't provide digest, infer from deltas
+   digestLines = this.inferDigestLinesFromDeltas(parsedOutput.deltas, parsedOutput.prose);
+  }
+  // Ensure correct turn number for inferred digests
+  //digestLines = digestLines.map(d => ({ ...d, turn: turnNumber }));
+
+
+  const errorFlags: LogErrorFlag[] = [];
+  // Basic error checking (can be expanded)
+  if (!parsedOutput.prose) {
+   errorFlags.push('MISSING_PROSE');
+  }
+  // Now using DELTA_MARKER imported from deltaParser
+  if (parsedOutput.deltas && Object.keys(parsedOutput.deltas).length === 0 && rawNarratorOutput.includes(DELTA_MARKER)) {
+    // If the delta marker was present but no deltas were parsed
+    errorFlags.push('INVALID_JSON_DELTA');
+  }
+  if (!tokenUsage || tokenUsage.totalTokens <= 0) {
+   errorFlags.push('INVALID_TOKEN_USAGE');
+  }
+  // Add more validation based on your `LogErrorFlag` enum/sealed class
+  // e.g., if (rawNarratorOutput.length < 50) { errorFlags.push('AI_RESPONSE_TOO_SHORT'); }
+
+
+  return {
+   turnNumber: turnNumber,
+   timestamp: now,
+   userInput: userInput,
+   narratorOutput: rawNarratorOutput,
+   prose: parsedOutput.prose, // ADDED: Save the clean prose here
+   digestLines: digestLines, // Now an array
+   deltas: parsedOutput.deltas,
+   contextSnapshot: contextSnapshot,
+   tokenUsage: tokenUsage,
+   apiRequestBody: apiRequestBody,
+   apiResponseBody: apiResponseBody,
+   apiUrl: apiUrl,
+   latencyMs: latencyMs,
+   aiSettings: aiSettings,
+   errorFlags: errorFlags,
+   modelSlugUsed: modelSlugUsed,
+  };
+ }
+}
+
+export const logManager = new LogManager();
+@@END_FILE@@
+
+@@FILE: src/logic/promptBuilder.ts =====
+// src/logic/promptBuilder.ts
+import type { PromptCard, GameState, LogEntry, Message } from '../models';
+
+import type { IContextStackAssembler } from './IContextStackAssembler';
+import { ContextStackAssembler } from './ContextStackAssembler';
+import { debugLog } from '../utils/debug';
+
+export interface IPromptBuilder {
+  buildFirstTurnPrompt(card: PromptCard): Message[]; // Deprecated but retained
+  buildEveryTurnPrompt(
+    card: PromptCard,
+    currentGameState: GameState,
+    logEntries: LogEntry[],
+    conversationHistory: Message[],
+    currentUserAction: string,
+    isFirstPlayerAction: boolean
+  ): Message[];
+}
+
+export class PromptBuilder implements IPromptBuilder {
+  private stackAssembler: IContextStackAssembler;
+
+  constructor() {
+    this.stackAssembler = new ContextStackAssembler();
+  }
+
+  private buildCommonPromptParts(card: PromptCard): Message[] {
+    const messages: Message[] = [];
+    messages.push({ role: "system", content: `## Core Scenario / Persona\n${card.prompt}` });
+    if (card.gameRules) messages.push({ role: "system", content: `\n## Game Rules\n${card.gameRules}` });
+    if (card.emitSkeleton) messages.push({ role: "system", content: `\n## AI Output Structure Rules\n${card.emitSkeleton}` });
+    if (card.functionDefs) messages.push({ role: "system", content: `\n## Available Functions (JSON)\n\`\`\`json\n${card.functionDefs}\n\`\`\`` });
+    return messages;
+  }
+
+  public buildFirstTurnPrompt(card: PromptCard): Message[] {
+    // Deprecated but preserved for compatibility
+    const messages = this.buildCommonPromptParts(card);
+    if (card.worldStateInit) messages.push({ role: "system", content: `\n## Initial World State (JSON)\n\`\`\`json\n${card.worldStateInit}\n\`\`\`` });
+    if (card.firstTurnOnlyBlock) messages.push({ role: "system", content: `\n## First Turn Specifics\n${card.firstTurnOnlyBlock}` });
+    return messages;
+  }
+
+  public buildEveryTurnPrompt(
+    card: PromptCard,
+    currentGameState: GameState,
+    logEntries: LogEntry[],
+    conversationHistory: Message[],
+    currentUserAction: string,
+    isFirstPlayerAction: boolean
+  ): Message[] {
+    const messages = this.buildCommonPromptParts(card);
+
+    if (isFirstPlayerAction) {
+      // Initial player action after game setup
+      if (card.worldStateInit) {
+        messages.push({ role: "system", content: `\n## Initial World State (JSON)\n\`\`\`json\n${card.worldStateInit}\n\`\`\`` });
+      }
+      if (card.firstTurnOnlyBlock) {
+        messages.push({ role: "system", content: `\n## Initial Scene & Player Objective\n${card.firstTurnOnlyBlock}` });
+      }
+    } else {
+      // Subsequent turns
+      const dynamicContextMessages = this.stackAssembler.assembleContext(
+        card,
+        currentGameState,
+        logEntries
+      );
+      messages.push(...dynamicContextMessages);
+      messages.push(...conversationHistory);
+    }
+
+    messages.push({ role: "user", content: currentUserAction });
+
+    debugLog("[PromptBuilder] Final messages sent to AI:", messages);
+
+    return messages;
+  }
+}
+
+export const promptBuilder = new PromptBuilder();
+
+@@END_FILE@@
+
+@@FILE: src/logic/SnapshotUpdater.ts =====
+// src/logic/SnapshotUpdater.ts
+import { produce } from 'immer';
+import type { GameSnapshot } from '../models';
+import type { IGameStateManager } from './IGameStateManager';
+import type { ISnapshotUpdater, ITurnResult } from './ISnapshotUpdater';
+import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
+
+export class SnapshotUpdater implements ISnapshotUpdater {
+  constructor(private gameStateManager: IGameStateManager) {
+    console.log('[SnapshotUpdater.ts] SnapshotUpdater constructor called.');
+  }
+
+  public applyTurnResultToSnapshot(snapshot: GameSnapshot, turnResult: ITurnResult): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyTurnResultToSnapshot: Starting for snapshot ${snapshot.id}. Turn: ${snapshot.currentTurn}`);
+    const { parsedOutput, logEntry, playerAction } = turnResult;
+
+    const newSnapshot = produce(snapshot, draft => {
+      let stateAfterDeltas = this.gameStateManager.applyDeltasToGameState(draft.gameState, parsedOutput.deltas);
+      let finalGameState = this.gameStateManager.updateSceneState(stateAfterDeltas, parsedOutput.scene, parsedOutput.deltas);
+
+      finalGameState.narration = parsedOutput.prose;
+      draft.gameState = finalGameState;
+
+      if (playerAction) {
+        draft.conversationHistory.push({ role: 'user', content: playerAction });
+      }
+      draft.conversationHistory.push({ role: 'assistant', content: parsedOutput.prose });
+      
+      draft.logs.push(logEntry);
+
+      draft.currentTurn += 1;
+      draft.updatedAt = new Date().toISOString();
+    });
+    console.log(`[SnapshotUpdater.ts] applyTurnResultToSnapshot: Finished. New snapshot ID: ${newSnapshot.id}.`);
+    return newSnapshot;
+  }
+
+  public applyCategoryRename(snapshot: GameSnapshot, oldName: string, newName: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyCategoryRename: ${oldName} -> ${newName}`);
+    return produce(snapshot, draft => {
+      const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.renameCategory(
+        draft.gameState.worldState,
+        draft.worldStatePinnedKeys,
+        oldName,
+        newName
+      );
+      draft.gameState.worldState = updatedWorldState;
+      draft.worldStatePinnedKeys = updatedPinnedKeys;
+      draft.updatedAt = new Date().toISOString();
+    });
+  }
+
+  public applyEntityRename(snapshot: GameSnapshot, category: string, oldName: string, newName: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyEntityRename: ${category}.${oldName} -> ${category}.${newName}`);
+    return produce(snapshot, draft => {
+      const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.renameEntity(
+        draft.gameState.worldState,
+        draft.worldStatePinnedKeys,
+        category,
+        oldName,
+        newName
+      );
+      draft.gameState.worldState = updatedWorldState;
+      draft.worldStatePinnedKeys = updatedPinnedKeys;
+      draft.updatedAt = new Date().toISOString();
+    });
+  }
+  
+  public applyCategoryDelete(snapshot: GameSnapshot, category: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyCategoryDelete: ${category}`);
+     return produce(snapshot, draft => {
+      const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.deleteCategory(
+        draft.gameState.worldState,
+        draft.worldStatePinnedKeys,
+        category
+      );
+      draft.gameState.worldState = updatedWorldState;
+      draft.worldStatePinnedKeys = updatedPinnedKeys;
+      draft.updatedAt = new Date().toISOString();
+    });
+  }
+
+  public applyEntityDelete(snapshot: GameSnapshot, category: string, entity: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyEntityDelete: ${category}.${entity}`);
+     return produce(snapshot, draft => {
+      const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.deleteEntity(
+        draft.gameState.worldState,
+        draft.worldStatePinnedKeys,
+        category,
+        entity
+      );
+      draft.gameState.worldState = updatedWorldState;
+      draft.worldStatePinnedKeys = updatedPinnedKeys;
+      draft.updatedAt = new Date().toISOString();
+    });
+  }
+
+  public applyKeyValueEdit(snapshot: GameSnapshot, key: string, value: any): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyKeyValueEdit: ${key} = ${JSON.stringify(value)}`);
+     return produce(snapshot, draft => {
+      draft.gameState.worldState = this.gameStateManager.editKeyValue(
+        draft.gameState.worldState,
+        key,
+        value
+      );
+      draft.updatedAt = new Date().toISOString();
+    });
+  }
+
+  public applyKeyDelete(snapshot: GameSnapshot, key: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyKeyDelete: ${key}`);
+     return produce(snapshot, draft => {
+      const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.deleteKey(
+        draft.gameState.worldState,
+        draft.worldStatePinnedKeys,
+        key
+      );
+      draft.gameState.worldState = updatedWorldState;
+      draft.worldStatePinnedKeys = updatedPinnedKeys;
+      draft.updatedAt = new Date().toISOString();
+    });
+  }
+
+  public applyPinToggle(snapshot: GameSnapshot, keyPath: string, type: 'variable' | 'entity' | 'category'): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyPinToggle: Starting for snapshot ${snapshot.id}, keyPath: ${keyPath}, type: ${type}.`);
+    const newSnapshot = produce(snapshot, draft => {
+      const currentWorldState = draft.gameState.worldState || {};
+      const currentPinnedKeys = draft.worldStatePinnedKeys || [];
+      const newPinnedKeys = new Set(currentPinnedKeys);
+
+      const getAllChildVariableKeys = (basePath: string): string[] => {
+        const nestedData = getNestedValue(currentWorldState, basePath.split('.'));
+        if (typeof nestedData !== 'object' || nestedData === null) return [];
+        const flattened = flattenJsonObject(nestedData, basePath);
+        return Object.keys(flattened).filter(key => flattened[key] !== undefined); // Only include existing keys
+      };
+
+      let relevantKeysToToggle: string[] = [];
+      if (type === 'variable') {
+        relevantKeysToToggle = [keyPath];
+      } else { // 'entity' or 'category'
+        relevantKeysToToggle = getAllChildVariableKeys(keyPath);
+      }
+
+      // If there are no keys to toggle (e.g., entity doesn't exist), do nothing.
+      if (relevantKeysToToggle.length === 0) {
+        console.warn(`[SnapshotUpdater.ts] applyPinToggle: No relevant keys found for ${type} at "${keyPath}". No change.`);
+        return; // No changes to draft
+      }
+      
+      const areAllChildrenCurrentlyPinned = relevantKeysToToggle.every(key => newPinnedKeys.has(key));
+      const shouldPin = !areAllChildrenCurrentlyPinned; 
+
+      console.log(`[SnapshotUpdater.ts] applyPinToggle: Relevant keys (${relevantKeysToToggle.length}): ${relevantKeysToToggle.join(', ')}. ShouldPin: ${shouldPin}`);
+
+      relevantKeysToToggle.forEach(key => {
+        if (shouldPin) {
+          newPinnedKeys.add(key);
+        } else {
+          newPinnedKeys.delete(key);
+        }
+      });
+
+      draft.worldStatePinnedKeys = Array.from(newPinnedKeys).sort();
+      draft.updatedAt = new Date().toISOString();
+      console.log(`[SnapshotUpdater.ts] applyPinToggle: Final pinned keys count: ${draft.worldStatePinnedKeys.length}.`);
+    });
+    console.log(`[SnapshotUpdater.ts] applyPinToggle: Finished. New snapshot ID: ${newSnapshot.id}.`);
+    return newSnapshot;
+  }
+}
+@@END_FILE@@
+
+@@FILE: src/logic/TurnProcessor.ts =====
+// src/logic/TurnProcessor.ts
+
+import type { AiSettings, AiConnection, GameState, LogEntry, Message, ParsedNarrationOutput, PromptCard, TokenSummary } from '../models';
+import type { IAiClient } from './aiClient';
+import { parseNarratorOutput } from './deltaParser';
+import type { ILogManager } from './logManager';
+import type { IPromptBuilder } from './promptBuilder';
+import type { ITurnProcessor } from './ITurnProcessor';
+import type { ModelInfo } from '../data/config/aiConnectionTemplates';
+
+// Define a simple DummyAiClient for testing and dev
+class DummyAiClient implements IAiClient {
+  async generateCompletion(
+    connection: AiConnection,
+    messages: Message[],
+    settings: AiSettings
+  ): Promise<string> {
+    console.log("Dummy Narrator: Simulating AI response...");
+    const lastUserMessage = messages.slice().reverse().find(m => m.role === 'user')?.content || 'No user input.';
+    const dummyResponse = {
+      choices: [{
+        message: {
+          content: `The dummy narrator observes your action: "${lastUserMessage}". A ripple of arcane energy flows through the air, subtly shifting the very fabric of reality around you. You hear a distant chime, and a curious, ancient tome appears at your feet.
+
+@digest
+\`\`\`json
+[
+  { "text": "The world reacted to your input: '${lastUserMessage}'.", "importance": 2 },
+  { "text": "Something new has manifested nearby: the $enchanted_quill.", "importance": 4, "tags": ["$enchanted_quill"] },
+  { "text": "#Brom's disposition shifted slightly.", "importance": 3, "tags": ["#brom"] },
+  { "text": "A critical system event occurred, requiring your attention!", "importance": 5 }
+]
+\`\`\`
+
+@delta
+\`\`\`json
+{
+  "=player.hp": 85,
+  "+player.gold": 5,
+  "!items.$enchanted_quill.description": "A quill that seems to hum with forgotten magic, vibrating faintly.",
+  "-npcs.#old_sage.wisdom" : true,
+  "=player.status": "observant"
+}
+\`\`\`
+
+@scene
+\`\`\`json
+{
+  "location": "@forest_clearing",
+  "present": ["#you", "#lyrielle", "$enchanted_quill"],
+  "weather": "clear and crisp"
+}
+\`\`\`
+`
+        }
+      }],
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 150,
+        total_tokens: 160,
+      }
+    };
+    return Promise.resolve(JSON.stringify(dummyResponse));
+  }
+
+  async testConnection(connection: AiConnection): Promise<{ success: boolean; message: string }> {
+    return Promise.resolve({
+      success: true,
+      message: "Dummy client: test always passes."
+    });
+  }
+
+  async listModels(connection: Pick<AiConnection, 'apiUrl' | 'apiToken'>): Promise<ModelInfo[]> {
+    return Promise.resolve([
+      { id: 'dummy-model', name: 'Dummy Model' }
+    ]);
+  }
+}
+
+export class TurnProcessor implements ITurnProcessor {
+  private realAiClient: IAiClient;
+  private dummyAiClient: IAiClient;
+  private builder: IPromptBuilder;
+  private logManager: ILogManager;
+
+  constructor(
+    aiClient: IAiClient,
+    promptBuilder: IPromptBuilder,
+    logManager: ILogManager
+  ) {
+    this.realAiClient = aiClient;
+    this.builder = promptBuilder;
+    this.logManager = logManager;
+    this.dummyAiClient = new DummyAiClient();
+  }
+
+  private async executeAiCall(
+    connection: AiConnection,
+    messages: Message[],
+    settings: AiSettings,
+    useDummyNarrator: boolean
+  ): Promise<{ aiRawOutput: string; tokenUsage: TokenSummary | null; fullResponse: string }> {
+    const activeClient = useDummyNarrator ? this.dummyAiClient : this.realAiClient;
+    const fullResponse = await activeClient.generateCompletion(connection, messages, settings);
+
+    let aiRawOutput = '';
+    let tokenUsage: TokenSummary | null = null;
+    try {
+      const parsedJson = JSON.parse(fullResponse);
+      aiRawOutput = parsedJson.choices?.[0]?.message?.content?.trim() || fullResponse;
+      tokenUsage = parsedJson.usage ? {
+        inputTokens: parsedJson.usage.prompt_tokens || 0,
+        outputTokens: parsedJson.usage.completion_tokens || 0,
+        totalTokens: parsedJson.usage.total_tokens || 0,
+      } : null;
+    } catch (e) {
+      aiRawOutput = fullResponse;
+    }
+    return { aiRawOutput, tokenUsage, fullResponse };
+  }
+
+  async processPlayerTurn(
+    userId: string,
+    card: PromptCard,
+    currentGameState: GameState,
+    logs: LogEntry[],
+    conversationHistory: Message[],
+    action: string,
+    turnNumber: number,
+    useDummyNarrator: boolean,
+    aiConnections: AiConnection[],
+    isFirstPlayerAction: boolean
+  ): Promise<{ parsedOutput: ParsedNarrationOutput; logEntry: LogEntry; aiRawOutput: string; tokenUsage: TokenSummary | null; }> {
+    const messagesToSend = this.builder.buildEveryTurnPrompt(
+      card,
+      currentGameState,
+      logs,
+      conversationHistory,
+      action,
+      isFirstPlayerAction
+    );
+    const contextSnapshotForLog = JSON.stringify(messagesToSend, null, 2);
+
+    const connection = aiConnections.find(c => c.id === card.aiSettings.selectedConnectionId);
+    if (!connection && !useDummyNarrator) {
+      throw new Error(`AI connection ${card.aiSettings.selectedConnectionId} not found.`);
+    }
+
+    const startTime = performance.now();
+    const { aiRawOutput, tokenUsage, fullResponse } = await this.executeAiCall(connection!, messagesToSend, card.aiSettings, useDummyNarrator);
+    const latencyMs = Math.round(performance.now() - startTime);
+
+    const parsedOutput = parseNarratorOutput(aiRawOutput);
+
+    const logEntry = this.logManager.assembleTurnLogEntry({
+      turnNumber: turnNumber,
+      userInput: action,
+      rawNarratorOutput: aiRawOutput,
+      parsedOutput: parsedOutput,
+      contextSnapshot: contextSnapshotForLog,
+      tokenUsage: tokenUsage,
+      aiSettings: card.aiSettings,
+      apiRequestBody: JSON.stringify({ model: connection?.modelSlug, messages: "..." }, null, 2),
+      apiResponseBody: fullResponse,
+      apiUrl: connection ? new URL("chat/completions", connection.apiUrl).href : 'dummy-url',
+      latencyMs: latencyMs,
+      modelSlugUsed: connection?.modelSlug || 'dummy-model',
+    });
+
+    return { parsedOutput, logEntry, aiRawOutput, tokenUsage };
+  }
+}
+
+@@END_FILE@@

@@ -1,0 +1,392 @@
+# Group: src/models
+# Files: 11
+
+@@FILE: src/models/AiConnection.ts =====
+// src/models/AiConnection.ts
+
+/**
+ * Represents the configuration for a connection to an AI service.
+ * Aligns with Android's AiConnection class.
+ */
+export interface AiConnection {
+  id: string; // Unique ID for this connection
+  displayName: string; // User-friendly name for the connection (e.g., "My OpenAI Key")
+  modelName: string; // The full name of the model (e.g., "GPT-4 Turbo")
+  modelSlug: string; // The API identifier for the model (e.g., "gpt-4-turbo", "deepseek-coder")
+  apiUrl: string; // The base URL for the API (e.g., "https://api.openai.com/v1/")
+  apiToken: string; // The user's API key (sensitive)
+  functionCallingEnabled: boolean; // Whether this connection supports/uses function calling
+  userAgent?: string | null; // Optional: User-Agent string for API calls (from Android)
+
+  // Metadata
+  createdAt: string; // ISO 8601 string
+  lastUpdated: string; // ISO 8601 string
+}
+@@END_FILE@@
+
+@@FILE: src/models/DeltaInstruction.ts =====
+// src/models/DeltaInstruction.ts
+
+/**
+ * Represents a single instruction to modify the game world state, as per DeltaInstruction.kt.
+ * This is a pure data definition, without logic or companion methods.
+ * Corresponds to a discriminated union in TypeScript for Kotlin's sealed class.
+ *
+ * `value: any` corresponds to Kotlin's `JsonElement`, allowing any valid JSON value (string, number, boolean, object, array, null).
+ */
+
+export type DeltaInstruction =
+  | { op: 'add'; key: string; value: any }      // Corresponds to Add data class
+  | { op: 'assign'; key: string; value: any }   // Corresponds to Assign data class
+  | { op: 'declare'; key: string; value: any }  // Corresponds to Declare data class
+  | { op: 'delete'; key: string };              // Corresponds to Delete data class (no value)
+
+// Helper type for the map of deltas
+export type DeltaMap = { [fullKey: string]: DeltaInstruction };
+@@END_FILE@@
+
+@@FILE: src/models/GameSnapshot.ts =====
+// src/models/GameSnapshot.ts
+
+import type { GameState, LogEntry, Message } from './index';
+
+/**
+ * Represents a full, self-contained snapshot of a game session.
+ * This is the primary object for saving and loading games.
+ * Based on `StoryForgeViewModel.buildSnapshot()`.
+ */
+export interface GameSnapshot {
+  // --- Core Identifiers ---
+  id: string; // Unique ID for this snapshot/game session
+  gameId: string; 
+  userId: string;
+  promptCardId: string; // ID of the card used
+  title: string; // NEW: A human-readable title for the saved game
+
+  // --- Timestamps ---
+  createdAt: string; // When the game session was started
+  updatedAt: string; // When this snapshot was last saved
+
+  // --- Core Game State ---
+  currentTurn: number;
+  gameState: GameState; // Contains worldState, scene, narration
+  conversationHistory: Message[]; // Full user/assistant conversation history
+
+  // --- Logs for Context & Debugging ---
+  // Note: All "digests" are now just part of the logs.
+  // We extract them for context building, but don't store them separately.
+  logs: LogEntry[];
+
+  // --- UI Preferences (Persisted with Snapshot) ---
+  worldStatePinnedKeys: string[]; // Stores full variable paths, e.g., "npcs.#fox.hp"
+}
+@@END_FILE@@
+
+@@FILE: src/models/GameState.ts =====
+// src/models/GameState.ts
+
+/**
+ * Represents the current scene's location and present entities.
+ * Corresponds to the state managed by SceneManager.
+ */
+export interface SceneState {
+  location: string | null;
+  present: string[]; // List of entity keys, e.g., ["player.#you", "npcs.#fox"]
+}
+
+/**
+ * Defines the core mutable state of the game.
+ * All game variables (like HP, gold) are expected to be dynamic and reside within `worldState`.
+ */
+export interface GameState {
+  narration: string;
+  worldState: Record<string, any>; // The dynamic game world
+  scene: SceneState; // The current scene state
+}
+@@END_FILE@@
+
+@@FILE: src/models/index.ts =====
+// src/models/index.ts
+
+// Re-export all models for easier importing
+export * from './AiConnection';
+export * from './DeltaInstruction';
+export * from './GameSnapshot';
+export * from './GameState.ts';
+export * from './LogEntry';
+export * from './LogEntryElements';
+export * from './Message';
+export * from './ParsedNarrationOutput';
+export * from './PromptCard';
+export * from './StackInstructions';
+@@END_FILE@@
+
+@@FILE: src/models/LogEntry.ts =====
+// src/models/LogEntry.ts
+
+import type { DeltaMap, DigestLine, TokenSummary, LogErrorFlag, AiSettings } from './index';
+
+/**
+ * Canonical structured log for a single turn or significant event in the game.
+ * Corresponds to TurnLogEntry.kt, enhanced with insights from DigestManager.
+ */
+export interface LogEntry {
+ turnNumber: number;
+ timestamp: string;
+
+ userInput: string;
+ narratorOutput: string; // The raw, full output from the AI
+ prose: string; 
+
+ digestLines: DigestLine[];
+ deltas?: DeltaMap | null;
+
+ contextSnapshot?: string | null;
+ tokenUsage?: TokenSummary | null;
+ apiRequestBody?: string | null;
+ apiResponseBody?: string | null;
+ apiUrl?: string | null;
+ latencyMs?: number | null;
+
+ aiSettings?: AiSettings | null;
+ errorFlags: LogErrorFlag[];
+ modelSlugUsed: string;
+}
+@@END_FILE@@
+
+@@FILE: src/models/LogEntryElements.ts =====
+// src/models/LogEntryElements.ts
+
+/**
+ * Represents a single summary line for the digest, as per DigestLine.kt (implied by TurnLogEntry).
+ */
+export interface DigestLine {
+  text: string;
+  importance: number; // 1 (minor) to 5 (critical)
+  tags?: string[];    // Optional, e.g., for filtering by specific entities
+}
+
+/**
+ * Summarizes token usage for an AI call, as per TokenSummary.kt (implied by TurnLogEntry).
+ */
+export interface TokenSummary {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedTokens?: number; // Optional: If some tokens were served from cache
+}
+
+/**
+ * Represents a flag for a validation error or issue in the log entry.
+ * Based on `LogErrorFlag` (implied enum/sealed class from `TurnLogEntry`).
+ */
+export type LogErrorFlag =
+  | 'MISSING_PROSE'
+  | 'MISSING_DELTAS'
+  | 'INVALID_JSON_DELTA'
+  | 'INVALID_TOKEN_USAGE'
+  | 'AI_RESPONSE_TOO_SHORT'
+  | 'AI_RESPONSE_TOO_LONG'
+  | 'UNEXPECTED_AI_FORMAT'
+  | 'API_ERROR'
+  | 'UNKNOWN_ERROR';
+// Add more flags as needed based on your LogErrorFlag enum/sealed class if it exists.
+@@END_FILE@@
+
+@@FILE: src/models/Message.ts =====
+// src/models/Message.ts
+
+/**
+ * Represents a single message in a conversation with the AI.
+ * Corresponds to Message.kt.
+ */
+export interface Message {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+@@END_FILE@@
+
+@@FILE: src/models/ParsedNarrationOutput.ts =====
+// src/models/ParsedNarrationOutput.ts
+
+import type { DeltaMap, DigestLine} from './index';
+
+/**
+ * Represents the structured data extracted from a raw AI narrator response.
+ * Corresponds to `NarrationParser.ParsedNarration` from the old project.
+ *
+ * @param prose The clean, human-readable narrative text.
+ * @param deltas A map of world state changes to apply.
+ * @param digestLines An array of summary lines.
+ * @param scene A flexible JSON object describing the current scene (location, present characters, etc.).
+ */
+export interface ParsedNarrationOutput {
+  prose: string;
+  deltas: DeltaMap;
+  digestLines: DigestLine[];
+  scene?: Record<string, any> | null; // Corresponds to the JsonObject? for the @scene block
+}
+@@END_FILE@@
+
+@@FILE: src/models/PromptCard.ts =====
+// src/models/PromptCard.ts
+
+import type { StackInstructions} from './index';
+/**
+ * Defines the configuration settings for an AI connection.
+ * These fields are embedded directly within PromptCard.
+ * This is a pure data definition, without logic or companion methods.
+ */
+export interface AiSettings {
+  selectedConnectionId: string;
+  temperature: number;
+  topP: number;
+  maxTokens: number;
+  presencePenalty: number;
+  frequencyPenalty: number;
+  functionCallingEnabled: boolean;
+  streaming: boolean; 
+}
+
+/**
+ * A self-contained prompt card that can be submitted to the AI to configure tone, rules, or scenario.
+ * This version consolidates AiSettings and uses a structured StackInstructions object.
+ * This is a pure data definition, with no default values or logic.
+ */
+export interface PromptCard {
+  id: string;
+  rootId: string;
+  parentId: string | null; // Null for root cards
+  contentHash: string; // Hash of significant content fields to detect duplicates
+  title: string;
+  description: string | null; // Optional in Kotlin, so `string | null`
+  prompt: string;
+  firstTurnOnlyBlock: string;
+  stackInstructions: StackInstructions; // Now a structured object
+  emitSkeleton: string;      // JSON string
+  worldStateInit: string;    // JSON string
+  gameRules: string;
+  aiSettings: AiSettings;
+  helperAiSettings: AiSettings;
+  isHelperAiEnabled: boolean; // NEW: Controls whether helper AI is considered active
+  tags: string[];            // Kotlin `List<String>` maps to `string[]`
+  isExample: boolean;        // From Kotlin `isExample`
+  functionDefs: string;      // JSON string
+  historyBrowsingEnabled: boolean;
+  isPublic: boolean;
+  createdAt: string; // ISO 8601 string
+  updatedAt: string; // ISO 8601 string
+  ownerId: string;   // Firebase User UID
+}
+
+/**
+ * Represents the raw data needed when creating or updating a PromptCard.
+ * This does not include generated fields like IDs, hashes, timestamps, or ownerId,
+ * nor does it specify default values for optional fields.
+ */
+export interface NewPromptCardData {
+  title: string;
+  prompt: string;
+  description?: string | null;
+  firstTurnOnlyBlock?: string;
+  // This is kept as 'string | StackInstructions' to allow raw JSON string input,
+  // with parsing logic to convert it to StackInstructions handled elsewhere (e.g., in logic/cardManager or data repository).
+  stackInstructions?: string | StackInstructions;
+  emitSkeleton?: string;
+  worldStateInit?: string;
+  gameRules?: string;
+  aiSettings?: AiSettings; // Changed from AiSettingsInCard to AiSettings for consistency
+  helperAiSettings?: AiSettings; // Changed from AiSettingsInCard to AiSettings for consistency
+  isHelperAiEnabled?: boolean; // NEW: Optional for new card data
+  tags?: string[];
+  isExample?: boolean;
+  functionDefs?: string;
+  isPublic?: boolean;
+  historyBrowsingEnabled?: boolean;
+}
+@@END_FILE@@
+
+@@FILE: src/models/StackInstructions.ts =====
+// src/models/StackInstructions.ts
+
+/**
+ * Defines the mode for including a stack element.
+ * Now an enum to allow runtime access (e.g., Object.values).
+ */
+export enum StackMode {
+  ALWAYS = 'always',
+  FIRST_N = 'firstN',
+  AFTER_N = 'afterN',
+  NEVER = 'never',
+  FILTERED = 'filtered', // Added if 'filtered' applies to modes
+}
+
+/**
+ * Defines the filtering strategy for a stack element.
+ * Now an enum to allow runtime access.
+ */
+export enum FilterMode {
+  NONE = 'none',
+  SCENE_ONLY = 'sceneOnly',
+  TAGGED = 'tagged',
+}
+
+/**
+ * Defines a policy for including prose or other list-based context.
+ * Corresponds to `ProsePolicy`.
+ */
+export interface ProsePolicy {
+  mode: StackMode; // Use the enum
+  n: number;
+  filtering: FilterMode; // Use the enum
+  enabled?: boolean; // NEW: Added for toggling the entire section
+}
+
+/**
+ * Defines a rule for emitting digest lines based on their importance score.
+ * Corresponds to `EmissionRule`.
+ */
+export interface EmissionRule {
+  mode: StackMode; // Use the enum
+  n: number;
+}
+
+/**
+ * Defines the policy for filtering digest lines.
+ * Corresponds to `DigestFilterPolicy`.
+ */
+export interface DigestFilterPolicy {
+  filtering: FilterMode; // Use the enum
+  enabled?: boolean; // NEW: Added for toggling the entire section
+}
+
+/**
+ * Defines the policy for token usage and fallback strategies.
+ * Corresponds to `TokenPolicy`.
+ */
+export interface TokenPolicy {
+  minTokens: number;
+  maxTokens: number;
+  fallbackPlan: string[];
+}
+
+/**
+ * The full, structured stack instructions for a PromptCard.
+ * Corresponds to `StackInstructions.kt`.
+ */
+export interface StackInstructions {
+  narratorProseEmission: ProsePolicy;
+  digestPolicy: DigestFilterPolicy;
+  digestEmission: Record<number, EmissionRule>; // Map<Int, EmissionRule> -> Record<number, EmissionRule>
+
+  expressionLogPolicy: ProsePolicy;
+  expressionLinesPerCharacter: number;
+  emotionWeighting: boolean;
+
+  worldStatePolicy: ProsePolicy;
+  knownEntitiesPolicy: ProsePolicy;
+
+  // REMOVED: outputFormat: string; // This field is being removed
+  tokenPolicy: TokenPolicy;
+}
+@@END_FILE@@

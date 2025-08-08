@@ -1,0 +1,749 @@
+# Group: src/state
+# Files: 5
+
+@@FILE: src/state/useAuthStore.ts =====
+// src/state/useAuthStore.ts
+
+import { create } from 'zustand';
+import { type User } from 'firebase/auth'; // Import Firebase User type
+import { subscribeToAuthChanges, signInWithGoogle, signOutUser } from '../data/repositories/authRepository'; // Import auth functions
+import { debugLog, errorLog } from '../utils/debug';
+
+// Define the shape of our authentication state
+interface AuthState {
+  user: User | null; // The current authenticated user or null
+  isLoading: boolean; // True while checking initial auth state
+  error: string | null; // Any error during auth operations
+
+  // Actions
+  // These are not directly implemented here, but exposed for components to call
+  signIn: () => Promise<void>;
+  signOut: () => Promise<void>;
+}
+
+// Create the Zustand store
+export const useAuthStore = create<AuthState>((set, get) => ({
+  user: null, // Initial state: no user
+  isLoading: true, // Initially loading to check auth state
+  error: null, // No error initially
+
+  // Action to handle sign-in
+  signIn: async () => {
+    debugLog('[useAuthStore.ts] signIn action called.');
+    set({ error: null }); // Clear previous errors
+    try {
+      await signInWithGoogle();
+      // The onAuthStateChanged listener will update the 'user' state,
+      // so we don't need to manually set it here based on the signIn result.
+    } catch (err: any) {
+      console.error("[useAuthStore.ts] AuthStore signIn error:", err);
+      set({ error: err.message || "Failed to sign in." });
+    }
+  },
+
+  // Action to handle sign-out
+  signOut: async () => {
+    debugLog('[useAuthStore.ts] signOut action called.');
+    set({ error: null }); // Clear previous errors
+    try {
+      await signOutUser();
+    } catch (err: any) {
+      console.error("[useAuthStore.ts] AuthStore signOut error:", err);
+      set({ error: err.message || "Failed to sign out." });
+    }
+  },
+}));
+
+// --- Initialize and Subscribe to Auth Changes ---
+// This part ensures our store's 'user' state is always in sync with Firebase Auth.
+// It runs only once when the module is loaded.
+const unsubscribe = subscribeToAuthChanges((user) => {
+  // DEBUG: Log exact auth state updates
+  useAuthStore.setState({ user: user, isLoading: false });
+  debugLog(`%c[useAuthStore.ts] Auth State Updated: ${user ? user.uid : "No user"}, IsLoading: false`, 'color: brown;');
+});
+
+// Optional: You might want to handle unsubscription if your app could unmount this module,
+// but for a core global store, it often lives for the app's lifetime.
+// If you were to integrate this into a React component's useEffect, you'd return the unsubscribe function.
+// For a global store, we typically let it live.
+@@END_FILE@@
+
+@@FILE: src/state/useGameStateStore.ts =====
+// src/state/useGameStateStore.ts
+import { create } from 'zustand';
+import type { GameSnapshot, GameState, LogEntry, Message } from '../models';
+import type { IGameSession } from '../logic/gameSession';
+import { useSettingsStore } from './useSettingsStore';
+import { usePromptCardStore } from './usePromptCardStore';
+import { promptCardRepository } from '../data/repositories/promptCardRepository';
+import { debugLog, errorLog } from '../utils/debug';
+import { produce } from 'immer';
+import { gameRepository } from '../data/repositories/gameRepository';
+import { aiConnectionRepository } from '../data/repositories/aiConnectionRepository';
+
+// External GameSession service instance
+let _gameSessionService: IGameSession | null = null;
+
+export const initializeGameStateStore = (gameSession: IGameSession) => {
+  if (_gameSessionService === null) {
+    _gameSessionService = gameSession;
+    debugLog('%c[useGameStateStore.ts] GameSession service injected successfully.', 'color: green;');
+  }
+};
+
+interface GameStateState {
+  currentSnapshot: GameSnapshot | null;
+  maxTurn: number | null;
+  narratorInputText: string;
+  narratorScrollPosition: number;
+  gameError: string | null;
+  gameLoading: boolean;
+  isProcessingTurn: boolean;
+}
+
+interface GameStateActions {
+  initializeGame: (userId: string, cardId: string, existingSnapshotId?: string) => Promise<void>;
+  processPlayerAction: (action: string) => Promise<void>;
+  loadGame: (userId: string, snapshotId: string) => Promise<void>;
+  loadLastActiveGame: (userId: string) => Promise<boolean>;
+  updateNarratorInputText: (text: string) => void;
+  updateNarratorScrollPosition: (position: number) => void;
+  renameWorldCategory: (oldName: string, newName: string) => Promise<void>;
+  renameWorldEntity: (category: string, oldName: string, newName: string) => Promise<void>;
+  deleteWorldCategory: (category: string) => Promise<void>;
+  deleteWorldEntity: (category: string, entity: string) => Promise<void>;
+  editWorldKeyValue: (key: string, value: any) => Promise<void>;
+  deleteWorldKey: (key: string) => Promise<void>;
+  toggleWorldStatePin: (keyPath: string, type: 'variable' | 'entity' | 'category') => Promise<void>;
+  reset: () => void;
+  processTurn: (action: string) => Promise<void>;
+  navigateToTurn: (turnNumber: number) => Promise<void>;
+}
+
+type GameStateStore = GameStateState & GameStateActions;
+
+const initialState: GameStateState = {
+  currentSnapshot: null,
+  narratorInputText: '',
+  narratorScrollPosition: 0,
+  gameError: null,
+  gameLoading: false,
+  isProcessingTurn: false,
+  maxTurn: null, 
+};
+
+export const useGameStateStore = create<GameStateStore>((set, get) => {
+  const getGameService = (): IGameSession => {
+    if (!_gameSessionService) {
+      throw new Error("GameSession service has not been initialized in the store.");
+    }
+    return _gameSessionService;
+  };
+
+  const updateSnapshotAndPersist = async (newSnapshot: GameSnapshot | null) => {
+    if (!newSnapshot) {
+      set({ currentSnapshot: null });
+      return;
+    }
+    set({ currentSnapshot: newSnapshot });
+    try {
+      await gameRepository.saveGameSnapshot(newSnapshot.userId, newSnapshot);
+      debugLog(`[useGameStateStore] Persisted snapshot ${newSnapshot.id}`);
+    } catch (e: any) {
+      errorLog("[useGameStateStore] Failed to persist snapshot:", e);
+      set({ gameError: "Failed to save game progress." });
+    }
+  };
+
+  const performWorldStateUpdate = async (
+    updateFn: (service: IGameSession, snapshot: GameSnapshot) => GameSnapshot
+  ) => {
+    const currentState = get().currentSnapshot;
+    if (!currentState) {
+      set({ gameError: "No active game to update." });
+      return;
+    }
+    set({ gameError: null });
+    try {
+      const service = getGameService();
+      const updatedSnapshot = updateFn(service, currentState);
+      await updateSnapshotAndPersist(updatedSnapshot);
+    } catch (error: any) {
+      errorLog("[useGameStateStore] Error during world state update:", error);
+      set({ gameError: error.message });
+    }
+  };
+
+  return {
+    ...initialState,
+
+    initializeGame: async (userId, cardId, existingSnapshotId) => {
+      set({ gameLoading: true, gameError: null, currentSnapshot: null });
+      try {
+        if (existingSnapshotId) {
+          await get().loadGame(userId, existingSnapshotId);
+        } else {
+          const card = await promptCardRepository.getPromptCard(userId, cardId);
+          if (!card) throw new Error(`PromptCard with ID ${cardId} not found.`);
+          usePromptCardStore.getState().setActivePromptCard(card);
+          const service = getGameService();
+          const initialSnapshot = service.initializeGame(userId, card);
+          await updateSnapshotAndPersist(initialSnapshot);
+        }
+      } catch (error: any) {
+        errorLog("[useGameStateStore] initializeGame action ERROR:", error);
+        set({ gameError: error.message });
+      } finally {
+        set({ gameLoading: false });
+      }
+    },
+
+    processPlayerAction: async (action) => {
+      const snapshot = get().currentSnapshot;
+      const card = usePromptCardStore.getState().activePromptCard;
+      const maxTurn = get().maxTurn; // Get maxTurn from state
+
+      if (!snapshot || !card) {
+        set({ gameError: "Cannot process action: Game or Prompt Card not loaded." });
+        return;
+      }
+
+      // DESTRUCTIVE RESUME LOGIC
+      if (maxTurn !== null && snapshot.currentTurn < maxTurn) {
+        const confirmed = window.confirm(
+          "You are about to resume from an earlier point. This will delete all future turns from your previous timeline. This cannot be undone. Are you sure?"
+        );
+        if (!confirmed) {
+          return; // User cancelled
+        }
+        // Tell the repository to delete the obsolete future turns
+        await gameRepository.deleteFutureTurns(snapshot.userId, snapshot.gameId, snapshot.currentTurn);
+      }
+
+      set({ isProcessingTurn: true, gameError: null, narratorInputText: '' });
+      const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
+      try {
+        const aiConnections = await aiConnectionRepository.getAiConnections(snapshot.userId);
+        const service = getGameService();
+        // The service returns a new snapshot with turn number incremented
+        const processedSnapshot = await service.processPlayerAction(
+          snapshot, card, action, useDummyNarrator, aiConnections
+        );
+        
+        // Overwrite the ID to follow our new convention
+        const finalSnapshot = {
+          ...processedSnapshot,
+          id: `${processedSnapshot.gameId}-${processedSnapshot.currentTurn}`
+        };
+
+        await updateSnapshotAndPersist(finalSnapshot);
+        // After persisting, update the maxTurn to the current turn
+        set({ maxTurn: finalSnapshot.currentTurn });
+
+      } catch (error: any) {
+        errorLog("[useGameStateStore] processPlayerAction action ERROR:", error);
+        set({ gameError: error.message });
+      } finally {
+        set({ isProcessingTurn: false });
+      }
+    },
+
+    loadGame: async (userId, gameId) => { // This now receives a gameId
+      set({ gameLoading: true, gameError: null });
+      try {
+        const timeline = await gameRepository.getGameTimeline(userId, gameId);
+        if (timeline.length === 0) throw new Error(`Game ${gameId} not found.`);
+        
+        const latestSnapshot = timeline[timeline.length - 1];
+        const card = await promptCardRepository.getPromptCard(userId, latestSnapshot.promptCardId);
+        if (!card) throw new Error(`PromptCard for game could not be found.`);
+
+        usePromptCardStore.getState().setActivePromptCard(card);
+        set({
+          currentSnapshot: latestSnapshot,
+          maxTurn: latestSnapshot.currentTurn, // Max turn is the turn number of the latest snapshot
+          gameLoading: false,
+        });
+      } catch (error: any) {
+        errorLog("[useGameStateStore] loadGame action ERROR:", error);
+        set({ gameError: error.message, gameLoading: false });
+      }
+    },
+
+    // ADD NEW ACTION: navigateToTurn
+    navigateToTurn: async (turnNumber: number) => {
+      const snapshot = get().currentSnapshot;
+      if (!snapshot) return;
+
+      set({ gameLoading: true, gameError: null });
+      try {
+        const targetSnapshotId = `${snapshot.gameId}-${turnNumber}`;
+        const targetSnapshot = await gameRepository.getGameSnapshot(snapshot.userId, targetSnapshotId);
+        if (!targetSnapshot) throw new Error(`Turn ${turnNumber} not found.`);
+        
+        set({ currentSnapshot: targetSnapshot, gameLoading: false });
+      } catch(e: any) {
+        set({ gameError: e.message, gameLoading: false });
+      }
+    },
+
+    loadLastActiveGame: async (userId: string): Promise<boolean> => {
+      set({ gameLoading: true, gameError: null });
+      try {
+        const allSnapshots = await gameRepository.getAllGameSnapshots(userId);
+        if (allSnapshots.length > 0) {
+          await get().loadGame(userId, allSnapshots[0].id);
+          return true;
+        }
+        return false;
+      } catch (error: any) {
+        errorLog("[useGameStateStore] loadLastActiveGame action FAILED with error:", error);
+        set({ gameError: error.message });
+        return false;
+      } finally {
+        set({ gameLoading: false });
+      }
+    },
+
+    processTurn: (action: string) => {
+      return get().processPlayerAction(action);
+    },
+
+    updateNarratorInputText: (text) => set({ narratorInputText: text }),
+    updateNarratorScrollPosition: (position) => set({ narratorScrollPosition: position }),
+
+    renameWorldCategory: (oldName, newName) =>
+      performWorldStateUpdate((s, snap) => s.renameWorldCategory(snap, oldName, newName)),
+
+    renameWorldEntity: (category, oldName, newName) =>
+      performWorldStateUpdate((s, snap) => s.renameWorldEntity(snap, category, oldName, newName)),
+
+    deleteWorldCategory: (category) =>
+      performWorldStateUpdate((s, snap) => s.deleteWorldCategory(snap, category)),
+
+    deleteWorldEntity: (category, entity) =>
+      performWorldStateUpdate((s, snap) => s.deleteWorldEntity(snap, category, entity)),
+
+    editWorldKeyValue: (key, value) =>
+      performWorldStateUpdate((s, snap) => s.editWorldKeyValue(snap, key, value)),
+
+    deleteWorldKey: (key) =>
+      performWorldStateUpdate((s, snap) => s.deleteWorldKey(snap, key)),
+
+    toggleWorldStatePin: (key, type) =>
+      performWorldStateUpdate((s, snap) => s.toggleWorldStatePin(snap, key, type)),
+
+    reset: () => {
+      debugLog('%c[useGameStateStore.ts] RESETTING GameStateStore to initialState.', 'color: red; font-weight: bold;');
+      set(initialState);
+    },
+  };
+});
+
+// --- Selectors ---
+export const selectCurrentGameState = (state: GameStateStore): GameState | null => {
+  return state.currentSnapshot?.gameState ?? null;
+};
+
+export const selectGameLogs = (state: GameStateStore): LogEntry[] => {
+  return state.currentSnapshot?.logs ?? [];
+};
+
+export const selectConversationHistory = (state: GameStateStore): Message[] => {
+  return state.currentSnapshot?.conversationHistory ?? [];
+};
+
+export const selectWorldStatePinnedKeys = (state: GameStateStore): string[] => {
+  return state.currentSnapshot?.worldStatePinnedKeys ?? [];
+};
+@@END_FILE@@
+
+@@FILE: src/state/useLogStore.ts =====
+// src/state/useLogStore.ts
+
+import { create } from 'zustand';
+import { LogViewMode } from '../utils/types';
+import type { LogEntry } from '../models';
+import { debugLog } from '../utils/debug';
+
+const initialState = {
+  logEntries: [] as LogEntry[],
+  // Default to a useful set of views
+  selectedLogViewModes: [LogViewMode.USER_INPUT, LogViewMode.NARRATOR_OUTPUT, LogViewMode.DIGEST_LINES, LogViewMode.DELTAS] as LogViewMode[],
+  isLoading: false,
+  error: null as string | null,
+};
+
+interface LogState {
+  logEntries: LogEntry[];
+  selectedLogViewModes: LogViewMode[];
+  isLoading: boolean;
+  error: string | null;
+  setLogEntries: (entries: LogEntry[]) => void;
+  setSelectedLogViewModes: (modes: LogViewMode[]) => void;
+  reset: () => void;
+}
+
+export const useLogStore = create<LogState>((set) => ({
+  ...initialState,
+
+  setLogEntries: (entries) => set({ logEntries: entries }),
+
+  setSelectedLogViewModes: (modes) => set({ selectedLogViewModes: modes }),
+
+  reset: () => {
+    debugLog("Resetting LogStore.");
+    set(initialState);
+  },
+}));
+@@END_FILE@@
+
+@@FILE: src/state/usePromptCardStore.ts =====
+// src/state/usePromptCardStore.ts
+
+import { create } from 'zustand';
+import type { PromptCard, NewPromptCardData, AiConnection } from '../models'; // Assuming index.ts exports these
+import { promptCardManager } from '../logic/cardManager';
+import { debugLog, errorLog } from '../utils/debug';
+import { aiConnectionRepository } from '../data/repositories/aiConnectionRepository';
+
+const initialState = {
+  promptCards: [],
+  activePromptCard: null,
+  isLoading: false,
+  error: null,
+};
+
+interface PromptCardState {
+  promptCards: PromptCard[];
+  activePromptCard: PromptCard | null;
+  aiConnections: AiConnection[];
+  isLoading: boolean;
+  error: string | null;
+
+  // Actions
+  fetchPromptCards: (userId: string) => Promise<void>;
+  setActivePromptCard: (card: PromptCard | null) => void;
+  addPromptCard: (userId: string, cardData: NewPromptCardData) => Promise<PromptCard | null>;
+  updatePromptCard: (userId: string, cardId: string, updates: Partial<PromptCard>) => Promise<PromptCard | null>;
+  duplicatePromptCard: (userId: string, cardId: string) => Promise<PromptCard | null>;
+  deletePromptCard: (userId: string, cardId: string) => Promise<void>;
+  fetchAiConnections: (userId: string) => Promise<void>;
+  // Import/Export functionality will go here eventually
+  importPromptCards: (userId: string, cards: NewPromptCardData[]) => Promise<PromptCard[]>;
+  exportPromptCard: (userId: string, cardId: string) => Promise<PromptCard | null>;
+  reset: () => void;
+}
+
+export const usePromptCardStore = create<PromptCardState>((set, get) => ({
+  promptCards: [],
+  activePromptCard: null,
+  aiConnections: [],
+  isLoading: false,
+  error: null,
+
+  fetchPromptCards: async (userId) => {
+    set({ isLoading: true, error: null });
+    try {
+      const cards = await promptCardManager.getAllPromptCards(userId);
+      set({ promptCards: cards, isLoading: false });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      errorLog("Error fetching prompt cards:", error);
+    }
+  },
+
+  setActivePromptCard: (card) => {
+    set({ activePromptCard: card });
+  },
+
+  addPromptCard: async (userId, cardData) => {
+    set({ isLoading: true, error: null });
+    try {
+      const newCard = await promptCardManager.createNewPromptCard(userId, cardData);
+      set((state) => ({
+        promptCards: [...state.promptCards, newCard],
+        isLoading: false,
+      }));
+      return newCard;
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      errorLog("Error adding prompt card:", error);
+      return null;
+    }
+  },
+
+  updatePromptCard: async (userId, cardId, updates) => {
+    set({ isLoading: true, error: null });
+    try {
+      const updatedCard = await promptCardManager.updatePromptCard(userId, cardId, updates);
+      if (updatedCard) {
+        set((state) => ({
+          promptCards: state.promptCards.map(card => card.id === updatedCard.id ? updatedCard : card),
+          activePromptCard: state.activePromptCard?.id === updatedCard.id ? updatedCard : state.activePromptCard,
+          isLoading: false,
+        }));
+      }
+      return updatedCard;
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      errorLog("Error updating prompt card:", error);
+      return null;
+    }
+  },
+
+  duplicatePromptCard: async (userId, cardId) => {
+    set({ isLoading: true, error: null });
+    try {
+      const duplicatedCard = await promptCardManager.duplicatePromptCard(userId, cardId);
+      if (duplicatedCard) {
+        set((state) => ({
+          promptCards: [...state.promptCards, duplicatedCard],
+          isLoading: false,
+        }));
+      }
+      return duplicatedCard;
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      errorLog("Error duplicating prompt card:", error);
+      return null;
+    }
+  },
+
+  deletePromptCard: async (userId, cardId) => {
+    set({ isLoading: true, error: null });
+    try {
+      await promptCardManager.deletePromptCard(userId, cardId);
+      set((state) => ({
+        promptCards: state.promptCards.filter(card => card.id !== cardId),
+        activePromptCard: state.activePromptCard?.id === cardId ? null : state.activePromptCard,
+        isLoading: false,
+      }));
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      errorLog("Error deleting prompt card:", error);
+    }
+  },
+
+  fetchAiConnections: async (userId) => {
+    set({ isLoading: true, error: null });
+    try {
+      const connections = await aiConnectionRepository.getAiConnections(userId);
+      set({ aiConnections: connections, isLoading: false });
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      errorLog("Error fetching AI connections:", error);
+    }
+  },
+
+  importPromptCards: async (userId, cards) => {
+    set({ isLoading: true, error: null });
+    try {
+      const imported = await promptCardManager.importPromptCards(userId, cards);
+      set((state) => ({
+        promptCards: [...state.promptCards, ...imported],
+        isLoading: false,
+      }));
+      return imported;
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      errorLog("Error importing prompt cards:", error);
+      return [];
+    }
+  },
+
+  exportPromptCard: async (userId, cardId) => {
+    set({ isLoading: true, error: null });
+    try {
+      const exported = await promptCardManager.exportPromptCard(userId, cardId);
+      set({ isLoading: false });
+      return exported;
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      errorLog("Error exporting prompt card:", error);
+      return null;
+    }
+  },
+
+  reset: () => {
+    debugLog("Resetting PromptCardStore.");
+    set(initialState);
+  },
+}));
+@@END_FILE@@
+
+@@FILE: src/state/useSettingsStore.ts =====
+// src/state/useSettingsStore.ts
+
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import type { AiConnection } from '../models';
+import { generateUuid } from '../utils/uuid';
+import { debugLog } from '../utils/debug'; 
+import { aiConnectionRepository } from '../data/repositories/aiConnectionRepository';
+
+interface SettingsState {
+  aiConnections: AiConnection[];
+  selectedConnectionId: string | null;
+  isLoadingConnections: boolean;
+  connectionsError: string | null;
+  useDummyNarrator: boolean;
+  themeMode: 'light' | 'dark';
+  enableDebugLogging: boolean;              
+  textGenerationSpeedMs: number;            
+
+  fetchAiConnections: (userId: string) => Promise<void>;
+  addAiConnection: (
+    userId: string,
+    connection: Omit<AiConnection, 'id' | 'createdAt' | 'lastUpdated'>
+  ) => Promise<AiConnection | null>;
+  updateAiConnection: (
+    userId: string,
+    connection: AiConnection
+  ) => Promise<AiConnection | null>;
+  deleteAiConnection: (userId: string, connectionId: string) => Promise<void>;
+
+  setSelectedConnectionId: (id: string | null) => void;
+  setUseDummyNarrator: (enabled: boolean) => void;
+  setThemeMode: (mode: 'light' | 'dark') => void;
+  setEnableDebugLogging: (enabled: boolean) => void;     
+  setTextGenerationSpeedMs: (speed: number) => void;     
+  reset: () => void;
+}
+
+export const useSettingsStore = create<SettingsState>()(
+  persist(
+    (set, get) => ({
+      // --- Initial State Values ---
+      aiConnections: [],
+      selectedConnectionId: null,
+      isLoadingConnections: false,
+      connectionsError: null,
+      useDummyNarrator: false,
+      themeMode: 'light',
+      enableDebugLogging: false,             
+      textGenerationSpeedMs: 20,             
+
+      // --- Actions ---
+      fetchAiConnections: async (userId) => {
+        set({ isLoadingConnections: true, connectionsError: null });
+        try {
+          const connections = await aiConnectionRepository.getAiConnections(userId);
+          set({
+            aiConnections: connections,
+            isLoadingConnections: false,
+            selectedConnectionId: get().selectedConnectionId &&
+              connections.some(c => c.id === get().selectedConnectionId)
+              ? get().selectedConnectionId
+              : (connections.length > 0 ? connections[0].id : null)
+          });
+        } catch (error: any) {
+          set({ connectionsError: error.message, isLoadingConnections: false });
+        }
+      },
+
+      addAiConnection: async (userId, newConnectionData) => {
+        set({ isLoadingConnections: true, connectionsError: null });
+        try {
+          const newId = generateUuid();
+          const now = new Date().toISOString();
+          const connection: AiConnection = {
+            ...newConnectionData,
+            id: newId,
+            createdAt: now,
+            lastUpdated: now,
+          };
+          await aiConnectionRepository.saveAiConnection(userId, connection);
+          set(state => {
+            const updatedConnections = [...state.aiConnections, connection].sort((a, b) =>
+              a.displayName.localeCompare(b.displayName)
+            );
+            return {
+              aiConnections: updatedConnections,
+              isLoadingConnections: false,
+              selectedConnectionId: state.selectedConnectionId || newId,
+            };
+          });
+          return connection;
+        } catch (error: any) {
+          set({ connectionsError: error.message, isLoadingConnections: false });
+          return null;
+        }
+      },
+
+      updateAiConnection: async (userId, updatedConnection) => {
+        set({ isLoadingConnections: true, connectionsError: null });
+        try {
+          const now = new Date().toISOString();
+          const connectionToSave = { ...updatedConnection, lastUpdated: now };
+          await aiConnectionRepository.saveAiConnection(userId, connectionToSave);
+          set(state => {
+            const updatedConnections = state.aiConnections.map(conn =>
+              conn.id === updatedConnection.id ? connectionToSave : conn
+            ).sort((a, b) => a.displayName.localeCompare(b.displayName));
+            return {
+              aiConnections: updatedConnections,
+              isLoadingConnections: false,
+            };
+          });
+          return connectionToSave;
+        } catch (error: any) {
+          set({ connectionsError: error.message, isLoadingConnections: false });
+          return null;
+        }
+      },
+
+      deleteAiConnection: async (userId, connectionId) => {
+        set({ isLoadingConnections: true, connectionsError: null });
+        try {
+          await aiConnectionRepository.deleteAiConnection(userId, connectionId);
+          set(state => {
+            const updatedConnections = state.aiConnections.filter(conn => conn.id !== connectionId);
+            let newSelectedId = state.selectedConnectionId;
+            if (newSelectedId === connectionId) {
+              newSelectedId = updatedConnections.length > 0 ? updatedConnections[0].id : null;
+            }
+            return {
+              aiConnections: updatedConnections.sort((a, b) =>
+                a.displayName.localeCompare(b.displayName)
+              ),
+              selectedConnectionId: newSelectedId,
+              isLoadingConnections: false,
+            };
+          });
+        } catch (error: any) {
+          set({ connectionsError: error.message, isLoadingConnections: false });
+        }
+      },
+
+      setSelectedConnectionId: (id) => set({ selectedConnectionId: id }),
+      setUseDummyNarrator: (enabled) => set({ useDummyNarrator: enabled }),
+      setThemeMode: (mode) => set({ themeMode: mode }),
+      setEnableDebugLogging: (enabled) => set({ enableDebugLogging: enabled }), 
+      setTextGenerationSpeedMs: (speed) => set({ textGenerationSpeedMs: speed }), 
+
+      reset: () => {
+        debugLog("Resetting SettingsStore."); // ⬅️ Replaces console.log
+        set({
+          aiConnections: [],
+          isLoadingConnections: false,
+          connectionsError: null,
+        });
+      },
+    }),
+    {
+      name: 'storyforge-app-settings',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        selectedConnectionId: state.selectedConnectionId,
+        useDummyNarrator: state.useDummyNarrator,
+        themeMode: state.themeMode,
+        enableDebugLogging: state.enableDebugLogging,         
+        textGenerationSpeedMs: state.textGenerationSpeedMs,   
+      }),
+    }
+  )
+);
+
+@@END_FILE@@

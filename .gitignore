@@ -24,3 +24,9 @@ dist-ssr
 *.sw?
 *.env
 .env
+'!public/source-dump/**',
+'!public/source-dump.txt',
+'!public/source-dump.zip',
+'!public/source-dump.b64.txt',
+'!public/source-dump-manifest.json',
+src/ignore-me.js

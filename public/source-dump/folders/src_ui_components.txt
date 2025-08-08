@@ -1,0 +1,2995 @@
+# Group: src/ui/components
+# Files: 32
+
+@@FILE: src/ui/components/AiSettingsEditor.tsx =====
+// src/ui/components/AiSettingsEditor.tsx
+
+import React from 'react';
+import {
+  Box,
+  Typography,
+  Slider,
+  Switch,
+  FormControlLabel,
+  Divider,
+  TextField,
+  MenuItem,
+} from '@mui/material';
+import type { AiSettings, AiConnection } from '../../models/index';
+import { CollapsibleSection } from './CollapsibleSection';
+
+interface AiSettingsEditorProps {
+  label: string;
+  settings: AiSettings;
+  onSettingsChange: (updatedSettings: AiSettings) => void;
+  availableConnections: AiConnection[];
+}
+
+export const AiSettingsEditor: React.FC<AiSettingsEditorProps> = ({
+  label,
+  settings,
+  onSettingsChange,
+  availableConnections,
+}) => {
+  const handleSliderChange = (
+    prop: keyof AiSettings,
+    newValue: number | number[]
+  ) => {
+    onSettingsChange({ ...settings, [prop]: newValue as number });
+  };
+
+  const handleSwitchChange = (prop: keyof AiSettings, checked: boolean) => {
+    onSettingsChange({ ...settings, [prop]: checked });
+  };
+
+  const handleConnectionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    onSettingsChange({ ...settings, selectedConnectionId: event.target.value });
+  };
+
+  return (
+    <CollapsibleSection title={label} initiallyExpanded={false}>
+      <TextField
+        select
+        fullWidth
+        label="AI Connection"
+        value={settings.selectedConnectionId}
+        onChange={handleConnectionChange}
+        variant="outlined"
+        sx={{ mb: 2 }}
+      >
+        {availableConnections.map((conn) => (
+          <MenuItem key={conn.id} value={conn.id}>
+            {conn.modelName} ({conn.id})
+          </MenuItem>
+        ))}
+      </TextField>
+
+      <Typography gutterBottom>
+        Temperature: {settings.temperature.toFixed(2)}
+      </Typography>
+      <Slider
+        value={settings.temperature}
+        onChange={(_e, val) => handleSliderChange('temperature', val)}
+        min={0.0}
+        max={1.5}
+        step={0.01}
+        valueLabelDisplay="auto"
+      />
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Controls randomness. Low = logical, high = creative. RPG-optimal:
+        0.7–1.0.
+      </Typography>
+
+      <Typography gutterBottom>Top P: {settings.topP.toFixed(2)}</Typography>
+      <Slider
+        value={settings.topP}
+        onChange={(_e, val) => handleSliderChange('topP', val)}
+        min={0.0}
+        max={1.0}
+        step={0.01}
+        valueLabelDisplay="auto"
+      />
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Controls diversity. Lower = focused, higher = expressive. RPG-optimal:
+        0.8–1.0.
+      </Typography>
+
+      <Typography gutterBottom>Max Tokens: {settings.maxTokens}</Typography>
+      <Slider
+        value={settings.maxTokens}
+        onChange={(_e, val) => handleSliderChange('maxTokens', val)}
+        min={256}
+        max={8192}
+        step={256}
+        valueLabelDisplay="auto"
+      />
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Maximum length of AI reply. Longer = more story depth. RPG-optimal:
+        1024–4096.
+      </Typography>
+
+      <Typography gutterBottom>
+        Presence Penalty: {settings.presencePenalty.toFixed(2)}
+      </Typography>
+      <Slider
+        value={settings.presencePenalty}
+        onChange={(_e, val) => handleSliderChange('presencePenalty', val)}
+        min={-2.0}
+        max={2.0}
+        step={0.01}
+        valueLabelDisplay="auto"
+      />
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Discourages introducing new topics repeatedly. RPG-optimal: 0.0–0.5.
+      </Typography>
+
+      <Typography gutterBottom>
+        Frequency Penalty: {settings.frequencyPenalty.toFixed(2)}
+      </Typography>
+      <Slider
+        value={settings.frequencyPenalty}
+        onChange={(_e, val) => handleSliderChange('frequencyPenalty', val)}
+        min={-2.0}
+        max={2.0}
+        step={0.01}
+        valueLabelDisplay="auto"
+      />
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Discourages repeating phrases. Helps avoid spam. RPG-optimal: 0.2–0.8.
+      </Typography>
+
+      <Divider sx={{ my: 2 }} />
+
+      <FormControlLabel
+        control={
+          <Switch
+            checked={settings.functionCallingEnabled}
+            onChange={(e) =>
+              handleSwitchChange('functionCallingEnabled', e.target.checked)
+            }
+          />
+        }
+        label="Enable Function Calling"
+      />
+      <Typography variant="body2" color="text.secondary">
+        Allows AI to call structured functions (if you've defined them in the
+        prompt).
+      </Typography>
+
+      <FormControlLabel
+        control={
+          <Switch
+            checked={settings.streaming} // RENAMED
+            onChange={(e) =>
+              handleSwitchChange('streaming', e.target.checked) // RENAMED
+            }
+          />
+        }
+        label="Enable Streaming Output" // UPDATED LABEL
+      />
+      <Typography variant="body2" color="text.secondary">
+        Displays AI-generated narrative text as it's generated (typing effect).
+      </Typography>
+    </CollapsibleSection>
+  );
+};
+@@END_FILE@@
+
+@@FILE: src/ui/components/AuthOrchestrator.tsx =====
+// src/ui/components/AuthOrchestrator.tsx
+import React, { useEffect, useReducer } from 'react';
+import { useAuthStore } from '../../state/useAuthStore';
+import { useGameStateStore } from '../../state/useGameStateStore';
+import { useNavigate, useLocation, Outlet } from 'react-router-dom';
+import { Box, CircularProgress, Typography } from '@mui/material';
+import { debugLog } from '../../utils/debug';
+
+// --- Start of State Machine Definition ---
+
+type LoadingState = 'IDLE' | 'CHECKING_AUTH' | 'LOADING_GAME' | 'READY';
+type LoadingAction =
+  | { type: 'AUTH_CHECK_COMPLETE'; payload: { isAuthenticated: boolean } }
+  | { type: 'GAME_LOAD_SUCCESS' }
+  | { type: 'GAME_LOAD_FAIL' }
+  | { type: 'RESET' };
+
+const reducer = (state: LoadingState, action: LoadingAction): LoadingState => {
+  debugLog(`%c[AuthOrchestrator] State Transition: ${state} -> Action: ${action.type}`, 'color: blue;');
+  switch (state) {
+    case 'IDLE':
+      if (action.type === 'AUTH_CHECK_COMPLETE') {
+        return action.payload.isAuthenticated ? 'LOADING_GAME' : 'READY';
+      }
+      return state;
+    case 'LOADING_GAME':
+      if (action.type === 'GAME_LOAD_SUCCESS' || action.type === 'GAME_LOAD_FAIL') {
+        return 'READY';
+      }
+      if (action.type === 'RESET') {
+        return 'IDLE';
+      }
+      return state;
+    case 'READY':
+      if (action.type === 'RESET') {
+        return 'IDLE';
+      }
+      return state;
+    default:
+      return state;
+  }
+};
+// --- End of State Machine Definition ---
+
+
+const AuthOrchestrator: React.FC = () => {
+  const { user, isLoading: isAuthLoading } = useAuthStore();
+  const loadLastActiveGame = useGameStateStore(state => state.loadLastActiveGame);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const [state, dispatch] = useReducer(reducer, 'IDLE');
+
+  // Effect 1: React to authentication changes to kick off the state machine.
+  useEffect(() => {
+    if (!isAuthLoading) {
+      dispatch({ type: 'AUTH_CHECK_COMPLETE', payload: { isAuthenticated: !!user } });
+    }
+  }, [isAuthLoading, user]);
+
+  // Effect 2: Perform side-effects based on the current state of the machine.
+  useEffect(() => {
+    if (state === 'LOADING_GAME' && user) {
+      loadLastActiveGame(user.uid).then((gameLoaded) => {
+        dispatch({ type: gameLoaded ? 'GAME_LOAD_SUCCESS' : 'GAME_LOAD_FAIL' });
+        // Navigate only if we are at the root, otherwise stay put.
+        if (location.pathname === '/') {
+          navigate(gameLoaded ? '/game' : '/library', { replace: true });
+        }
+      }).catch(() => {
+        dispatch({ type: 'GAME_LOAD_FAIL' });
+        if (location.pathname === '/') {
+          navigate('/library', { replace: true });
+        }
+      });
+    }
+  }, [state, user, loadLastActiveGame, navigate, location.pathname]);
+  
+  // Effect 3: Reset the machine if the user logs out.
+  useEffect(() => {
+    if (!user && state === 'READY') {
+      dispatch({ type: 'RESET' });
+    }
+  }, [user, state]);
+
+
+  // Render loading indicator until the machine is in the 'READY' state.
+  if (state !== 'READY') {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress />
+        <Typography variant="h6" ml={2}>Loading Session...</Typography>
+      </Box>
+    );
+  }
+
+  // Once ready, render the nested routes.
+  return <Outlet />;
+};
+
+export default AuthOrchestrator;
+@@END_FILE@@
+
+@@FILE: src/ui/components/CollapsibleLogEntry.tsx =====
+// src/ui/components/CollapsibleLogEntry.tsx
+
+import React from 'react';
+import { Box, Typography, Divider } from '@mui/material';
+import type { LogEntry } from '../../models/LogEntry';
+import { LogViewMode } from '../../utils/types';
+import { CollapsibleSection } from './CollapsibleSection';
+// This component should be importing DetailedLogTurnView or LogEntryDisplay
+// Let's assume you're building out the detailed view as discussed.
+// If you're using the simpler LogEntryDisplay, the fix is the same.
+import { LogEntryDisplay } from './LogEntryDisplay';
+
+interface CollapsibleLogEntryProps {
+  entry: LogEntry;
+  selectedLogViewModes: LogViewMode[];
+}
+
+// NOTE: This component might be redundant if `DetailedLogTurnView` does everything.
+// However, fixing the error is straightforward.
+export const CollapsibleLogEntry: React.FC<CollapsibleLogEntryProps> = ({ entry, selectedLogViewModes }) => {
+  // ... (logic to check if there's content remains the same)
+
+  return (
+    <CollapsibleSection
+      title={`Turn ${entry.turnNumber} - ${new Date(entry.timestamp).toLocaleTimeString()}`}
+      initiallyExpanded={entry.turnNumber === 0}
+    >
+      <Box sx={{ p: 1 }}>
+        {selectedLogViewModes.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            No log view modes selected.
+          </Typography>
+        ) : (
+          selectedLogViewModes.map((mode, index) => (
+            <React.Fragment key={mode}>
+              <CollapsibleSection title={mode} initiallyExpanded={true}>
+                {/* --- THE FIX IS HERE --- */}
+                {/* Remove the hideTurnInfo prop */}
+                <LogEntryDisplay mode={mode} entry={entry} />
+              </CollapsibleSection>
+              {index < selectedLogViewModes.length - 1 && <Divider sx={{ my: 1 }} />}
+            </React.Fragment>
+          ))
+        )}
+      </Box>
+    </CollapsibleSection>
+  );
+};
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/CollapsibleSection.tsx =====
+// src/ui/components/CollapsibleSection.tsx
+
+import React from 'react';
+import {
+  Card,
+  CardContent,
+  Typography,
+  IconButton,
+  Collapse,
+  Box,
+} from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+
+interface CollapsibleSectionProps {
+  title: string;
+  children: React.ReactNode;
+  initiallyExpanded?: boolean;
+}
+
+export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
+  title,
+  children,
+  initiallyExpanded = false,
+}) => {
+  const [expanded, setExpanded] = React.useState(initiallyExpanded);
+
+  const handleExpandClick = () => {
+    setExpanded(!expanded);
+  };
+
+  return (
+    <Card variant="outlined" sx={{ mb: 2 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          p: 1.5,
+          cursor: 'pointer',
+          '&:hover': {
+            backgroundColor: (theme) => theme.palette.action.hover,
+          },
+        }}
+        onClick={handleExpandClick}
+      >
+        <Typography variant="h6" sx={{ flexGrow: 1 }}>
+          {title}
+        </Typography>
+        <IconButton
+          onClick={handleExpandClick}
+          aria-expanded={expanded}
+          aria-label="show more"
+          size="small"
+        >
+          {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+        </IconButton>
+      </Box>
+      <Collapse in={expanded} timeout="auto" unmountOnExit>
+        <CardContent sx={{ pt: 1 }}>{children}</CardContent>
+      </Collapse>
+    </Card>
+  );
+};
+@@END_FILE@@
+
+@@FILE: src/ui/components/DetailedLogTurnView.tsx =====
+// src/ui/components/DetailedLogTurnView.tsx
+
+import React from 'react';
+import { Box, Divider } from '@mui/material';
+import { LogViewMode } from '../../utils/types';
+import type { LogEntry } from '../../models';
+import { CollapsibleSection } from './CollapsibleSection';
+import { LogEntryDisplay } from './LogEntryDisplay';
+
+interface DetailedLogTurnViewProps {
+  entry: LogEntry;
+  selectedLogViewModes: LogViewMode[];
+}
+
+// This defines the ideal chronological and logical order of log parts.
+const RENDER_ORDER: LogViewMode[] = [
+    LogViewMode.API_DETAILS, // Metadata first
+    LogViewMode.CONTEXT_SNAPSHOT,
+    LogViewMode.API_REQUEST_BODY, // Then the request body
+    LogViewMode.USER_INPUT,
+    LogViewMode.RAW_NARRATOR_OUTPUT,
+    LogViewMode.API_RESPONSE_BODY, // Then the response body
+    LogViewMode.NARRATOR_OUTPUT,
+    LogViewMode.DIGEST_LINES,
+    LogViewMode.DELTAS,
+    // These are metadata and appear last
+    LogViewMode.MODEL_SLUG_USED,
+    LogViewMode.AI_SETTINGS,
+    LogViewMode.TOKEN_USAGE,
+    LogViewMode.ERROR_FLAGS,
+  ];
+
+export const DetailedLogTurnView: React.FC<DetailedLogTurnViewProps> = ({ entry, selectedLogViewModes }) => {
+  // Filter the master RENDER_ORDER array to only include modes the user has selected.
+  const viewsToRender = RENDER_ORDER.filter(mode => selectedLogViewModes.includes(mode));
+
+  if (viewsToRender.length === 0) {
+    return null; // Don't render anything for this turn if no relevant views are selected
+  }
+
+  return (
+    // Each turn is its own collapsible section
+    <CollapsibleSection
+      title={`Turn ${entry.turnNumber} - ${new Date(entry.timestamp).toLocaleTimeString()}`}
+      initiallyExpanded={entry.turnNumber === 0 || !!entry.errorFlags?.length} // Expand first turn or turns with errors
+    >
+      <Box sx={{ p: 1 }}>
+        {viewsToRender.map((mode, index) => (
+          <React.Fragment key={mode}>
+            {/* Each part of the log within the turn is ALSO a collapsible section */}
+            <CollapsibleSection title={mode} initiallyExpanded={true}>
+              <LogEntryDisplay mode={mode} entry={entry} />
+            </CollapsibleSection>
+            {index < viewsToRender.length - 1 && <Divider sx={{ my: 1.5, opacity: 0.5 }} />}
+          </React.Fragment>
+        ))}
+      </Box>
+    </CollapsibleSection>
+  );
+};
+@@END_FILE@@
+
+@@FILE: src/ui/components/InfoDialog.tsx =====
+// src/ui/components/InfoDialog.tsx
+
+import React, { useState } from 'react';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, IconButton, Tooltip, Box } from '@mui/material';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+
+interface InfoDialogProps {
+  title: string;
+  content: string | React.ReactNode; // Can be a string or JSX
+  iconSize?: 'small' | 'medium' | 'large';
+  tooltipText?: string; // Optional text for the initial hover tooltip
+}
+
+export const InfoDialog: React.FC<InfoDialogProps> = ({ title, content, iconSize = 'small', tooltipText = "Click for more information" }) => {
+  const [open, setOpen] = useState(false);
+
+  const handleClickOpen = () => {
+    setOpen(true);
+  };
+
+  const handleClose = () => {
+    setOpen(false);
+  };
+
+  return (
+    <>
+      <Tooltip title={tooltipText}>
+        <IconButton size={iconSize} onClick={handleClickOpen} sx={{ ml: 0.5, p: 0 }}>
+          <InfoOutlinedIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+      <Dialog
+        open={open}
+        onClose={handleClose}
+        aria-labelledby="info-dialog-title"
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle id="info-dialog-title">{title}</DialogTitle>
+        <DialogContent dividers>
+          {/* Use Box with pre-wrap to respect line breaks in string content */}
+          {typeof content === 'string' ? <Box sx={{ whiteSpace: 'pre-wrap' }}>{content}</Box> : content}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClose}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+};
+@@END_FILE@@
+
+@@FILE: src/ui/components/LogEntryDisplay.tsx =====
+// src/ui/components/LogEntryDisplay.tsx
+
+import React from 'react';
+import { Typography, Alert, Paper, Box } from '@mui/material'; // Add Paper and Box
+import type { LogEntry } from '../../models';
+import { LogViewMode } from '../../utils/types';
+
+interface LogEntryDisplayProps {
+  mode: LogViewMode;
+  entry: LogEntry;
+}
+
+export const LogEntryDisplay: React.FC<LogEntryDisplayProps> = ({ mode, entry }) => {
+  const renderContent = () => {
+    switch (mode) {
+      case LogViewMode.USER_INPUT:
+        return entry.userInput || <Alert severity="info" sx={{mt:1}}>No user input for this turn (e.g., initial game state).</Alert>;
+
+      case LogViewMode.NARRATOR_OUTPUT:
+        return entry.prose || <Alert severity="info" sx={{mt:1}}>No prose was generated for this turn.</Alert>;
+        
+      case LogViewMode.RAW_NARRATOR_OUTPUT: // Add a case for the raw output if needed
+        return entry.narratorOutput || <Alert severity="info" sx={{mt:1}}>No raw output was logged.</Alert>;
+
+      case LogViewMode.DIGEST_LINES:
+        if (!entry.digestLines || entry.digestLines.length === 0) return <Alert severity="info" sx={{mt:1}}>No digest lines.</Alert>;
+        return entry.digestLines.map((d, i) => `(Importance ${d.importance}) ${d.text}`).join('\n');
+
+      case LogViewMode.DELTAS:
+        if (!entry.deltas || Object.keys(entry.deltas).length === 0) return <Alert severity="info" sx={{mt:1}}>No deltas.</Alert>;
+        return JSON.stringify(entry.deltas, null, 2);
+
+      case LogViewMode.CONTEXT_SNAPSHOT:
+        return entry.contextSnapshot || <Alert severity="info" sx={{mt:1}}>No context snapshot was logged.</Alert>;
+
+      case LogViewMode.TOKEN_USAGE:
+        if (!entry.tokenUsage) return <Alert severity="info" sx={{mt:1}}>No token usage info.</Alert>;
+        return `Input: ${entry.tokenUsage.inputTokens}, Output: ${entry.tokenUsage.outputTokens}, Total: ${entry.tokenUsage.totalTokens}`;
+
+      case LogViewMode.AI_SETTINGS:
+        if (!entry.aiSettings) return <Alert severity="info" sx={{mt:1}}>No AI settings logged.</Alert>;
+        return JSON.stringify(entry.aiSettings, null, 2);
+
+      case LogViewMode.API_DETAILS:
+        const details = [
+          `URL: ${entry.apiUrl || 'N/A'}`,
+          `Latency: ${entry.latencyMs !== null ? `${entry.latencyMs}ms` : 'N/A'}`,
+        ];
+        return details.join('\n');
+
+      // ADDED: New case for the request body.
+      case LogViewMode.API_REQUEST_BODY:
+        if (!entry.apiRequestBody) return <Alert severity="info" sx={{mt:1}}>No request body was logged.</Alert>;
+        return (
+            <Paper variant="outlined" sx={{ p: 1, mt: 1, backgroundColor: (theme) => theme.palette.action.hover }}>
+              <Typography component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '0.8rem' }}>
+                {entry.apiRequestBody}
+              </Typography>
+            </Paper>
+        );
+
+      // ADDED: New case for the response body.
+      case LogViewMode.API_RESPONSE_BODY:
+        if (!entry.apiResponseBody) return <Alert severity="info" sx={{mt:1}}>No response body was logged.</Alert>;
+        return (
+            <Paper variant="outlined" sx={{ p: 1, mt: 1, backgroundColor: (theme) => theme.palette.action.hover }}>
+              <Typography component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: '0.8rem' }}>
+                {entry.apiResponseBody}
+              </Typography>
+            </Paper>
+        );
+
+      case LogViewMode.ERROR_FLAGS:
+        if (!entry.errorFlags || entry.errorFlags.length === 0) return <Alert severity="success" sx={{mt:1}}>No errors flagged.</Alert>;
+        return <Alert severity="error" sx={{mt:1}}>{entry.errorFlags.join(', ')}</Alert>;
+
+      case LogViewMode.RAW_NARRATOR_OUTPUT:
+        return entry.narratorOutput || <Alert severity="info" sx={{mt:1}}>No raw output was logged.</Alert>;
+  
+      case LogViewMode.MODEL_SLUG_USED: // ADD THIS CASE
+        return entry.modelSlugUsed || <Alert severity="info" sx={{mt:1}}>Model slug was not logged.</Alert>;  
+
+      default:
+        return `Unknown log view mode: ${mode}`;
+    }
+  };
+
+  // The outer component can be simplified as the inner content now handles its own formatting
+  // We can create a list of modes that need special paper/box wrapping
+  const needsWrapper = [LogViewMode.API_REQUEST_BODY, LogViewMode.API_RESPONSE_BODY, LogViewMode.ERROR_FLAGS];
+  if (needsWrapper.includes(mode)) {
+    return <Box>{renderContent()}</Box>;
+  }
+
+  return (
+    <Typography variant="body2" component="pre" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', mt: 0.5, fontFamily: 'monospace', fontSize: '0.9rem' }}>
+      {renderContent()}
+    </Typography>
+  );
+};
+@@END_FILE@@
+
+@@FILE: src/ui/components/LogView.tsx =====
+// src/ui/components/LogView.tsx
+
+import React from 'react';
+import { Box, Typography, Paper } from '@mui/material';
+import type { Message } from '../../models';
+
+interface LogViewProps {
+  conversationHistory: Message[];
+  currentStreamingNarration: string;
+  isProcessingTurn: boolean;
+  fullLatestNarration: string;
+  enableStreaming: boolean;
+}
+
+export const LogView: React.FC<LogViewProps> = ({
+  conversationHistory,
+  currentStreamingNarration,
+  isProcessingTurn,
+  fullLatestNarration,
+  enableStreaming
+}) => {
+  const isInitialDisplay = conversationHistory.length === 0;
+
+  const lastMessageInHistoryIsLatest =
+    conversationHistory.length > 0 &&
+    conversationHistory[conversationHistory.length - 1].role === 'assistant' &&
+    conversationHistory[conversationHistory.length - 1].content === fullLatestNarration;
+
+  const messagesToRenderFromHistory =
+    (enableStreaming && isProcessingTurn) ||
+    (enableStreaming && !lastMessageInHistoryIsLatest && fullLatestNarration.length > 0 && currentStreamingNarration !== fullLatestNarration)
+      ? conversationHistory.slice(0, -1)
+      : conversationHistory;
+
+  return (
+    <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
+      {isInitialDisplay ? (
+        // Show initial prose block if there's no prior conversation
+        <Paper elevation={0} sx={{ p: 1.5, mb: 1.5, backgroundColor: 'transparent' }}>
+          <Typography variant="body2" sx={{ fontWeight: 'bold', color: (theme) => theme.palette.secondary.dark }}>
+            AI Narrator:
+          </Typography>
+          <Typography variant="body1">
+            {fullLatestNarration}
+          </Typography>
+        </Paper>
+      ) : (
+        messagesToRenderFromHistory.map((message, index) => (
+          <Paper key={index} elevation={0} sx={{ p: 1.5, mb: 1.5, backgroundColor: 'transparent' }}>
+            {message.role === 'user' ? (
+              <>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', color: (theme) => theme.palette.primary.dark }}>
+                  You:
+                </Typography>
+                <Typography variant="body1" sx={{ mb: 1 }}>
+                  {message.content}
+                </Typography>
+              </>
+            ) : (
+              <>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', color: (theme) => theme.palette.secondary.dark }}>
+                  AI Narrator:
+                </Typography>
+                <Typography variant="body1">
+                  {message.content}
+                </Typography>
+              </>
+            )}
+          </Paper>
+        ))
+      )}
+
+{!isInitialDisplay && fullLatestNarration && !lastMessageInHistoryIsLatest && (
+        <Paper elevation={0} sx={{ p: 1.5, mb: 1.5, backgroundColor: 'transparent' }}>
+          <Typography variant="body2" sx={{ fontWeight: 'bold', color: (theme) => theme.palette.secondary.dark }}>
+            AI Narrator:
+          </Typography>
+          <Typography variant="body1">
+            {isProcessingTurn || (enableStreaming && currentStreamingNarration !== fullLatestNarration)
+              ? currentStreamingNarration
+              : fullLatestNarration}
+          </Typography>
+        </Paper>
+      )}
+    </Box>
+  );
+};
+@@END_FILE@@
+
+@@FILE: src/ui/components/MainLayout.tsx =====
+// src/ui/components/MainLayout.tsx
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
+  CssBaseline, Box, Typography, Divider, IconButton
+} from '@mui/material';
+import LogoutIcon from '@mui/icons-material/Logout';
+import MenuIcon from '@mui/icons-material/Menu';
+import { useAuthStore } from '../../state/useAuthStore';
+import { useGameStateStore } from '../../state/useGameStateStore';
+import { getNavItems } from '../../config/navigation';
+import { LayoutProvider } from '../../contexts/LayoutContext';
+
+const drawerWidth = 240;
+
+const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, signOut } = useAuthStore();
+  const { currentSnapshot } = useGameStateStore();
+  const navigate = useNavigate();
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/login');
+  };
+
+  const navItems = getNavItems(currentSnapshot);
+
+  const drawerContent = (
+    <Box onClick={handleDrawerToggle} sx={{ textAlign: 'center' }}>
+      <Typography variant="h6" sx={{ my: 2 }}>StoryForge</Typography>
+      <Divider />
+      <List>
+        {navItems.filter(item => user ? true : !item.requiresAuth).map((item) => (
+          <ListItem key={item.text} disablePadding>
+            <ListItemButton onClick={() => navigate(item.path)} disabled={item.disabled}>
+              <ListItemIcon>{item.icon}</ListItemIcon>
+              <ListItemText primary={item.text} />
+            </ListItemButton>
+          </ListItem>
+        ))}
+        {user ? (
+          <ListItem disablePadding>
+            <ListItemButton onClick={handleSignOut}>
+              <ListItemIcon><LogoutIcon /></ListItemIcon>
+              <ListItemText primary="Logout" />
+            </ListItemButton>
+          </ListItem>
+        ) : (
+          <ListItem disablePadding>
+            <ListItemButton onClick={() => navigate('/login')}>
+              <ListItemIcon><LogoutIcon /></ListItemIcon>
+              <ListItemText primary="Login" />
+            </ListItemButton>
+          </ListItem>
+        )}
+      </List>
+    </Box>
+  );
+
+  return (
+    <LayoutProvider>
+      <Box sx={{ display: 'flex', height: '100vh' }}>
+        <CssBaseline />
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={handleDrawerToggle}
+          ModalProps={{ keepMounted: true }}
+          sx={{ '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidth } }}
+        >
+          {drawerContent}
+        </Drawer>
+
+        <Box component="main" sx={{ flexGrow: 1, height: '100%', display: 'flex', flexDirection: 'column' }}>
+          {user && (
+            <IconButton
+              color="inherit"
+              aria-label="open drawer"
+              onClick={handleDrawerToggle}
+              edge="start"
+              sx={{
+                position: 'fixed',
+                top: 16,
+                right: 16,
+                zIndex: (theme) => theme.zIndex.drawer + 1,
+                backgroundColor: (theme) => theme.palette.background.paper,
+                boxShadow: 2,
+                '&:hover': { backgroundColor: (theme) => theme.palette.action.hover },
+              }}
+            >
+              <MenuIcon />
+            </IconButton>
+          )}
+          {children}
+        </Box>
+      </Box>
+    </LayoutProvider>
+  );
+};
+
+export default MainLayout;
+@@END_FILE@@
+
+@@FILE: src/ui/components/PinnedAttributeChip.tsx =====
+// src/ui/components/PinnedAttributeChip.tsx
+
+import React from 'react';
+import { Chip, Tooltip } from '@mui/material';
+import PushPinIcon from '@mui/icons-material/PushPin';
+import { useLongPress } from '../../utils/hooks/useLongPress';
+
+interface PinnedAttributeChipProps {
+  fullKey: string;
+  label: string;
+  value: any;
+  onUnpin: (key: string) => void;
+}
+
+export const PinnedAttributeChip: React.FC<PinnedAttributeChipProps> = React.memo(
+  ({ fullKey, label, value, onUnpin }) => {
+    const longPressProps = useLongPress((e) => {
+      e.stopPropagation();
+      onUnpin(fullKey);
+    });
+
+    return (
+      <Tooltip title={`Long-press to unpin '${label}'`} key={fullKey}>
+        <Chip
+          label={`${label}: ${JSON.stringify(value)}`}
+          size="small"
+          deleteIcon={<PushPinIcon />}
+          sx={{
+            backgroundColor: (theme) => theme.palette.chipBackground.main, // CHIP_BG_LIGHT/DARK
+            color: (theme) => theme.palette.text.primary,
+            fontSize: '0.8rem',
+            height: '22px',
+            '& .MuiChip-label': {
+              px: 1,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            },
+            '& .MuiChip-deleteIcon': {
+              opacity: 0.2,
+            },
+            '&:hover .MuiChip-deleteIcon': {
+              opacity: 1,
+            },
+          }}
+          {...longPressProps}
+        />
+      </Tooltip>
+    );
+  }
+);
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/PinnedEntityGroup.tsx =====
+// src/ui/components/PinnedEntityGroup.tsx
+
+import React from 'react';
+import { Paper, Typography, Stack, Tooltip } from '@mui/material';
+import PushPinIcon from '@mui/icons-material/PushPin';
+import { useLongPress } from '../../utils/hooks/useLongPress';
+import { PinnedAttributeChip } from './PinnedAttributeChip';
+
+interface Attribute {
+  label: string;
+  value: any;
+  fullKey: string;
+}
+
+interface PinnedEntityGroupProps {
+  entityPath: string;
+  attributes: Attribute[];
+  onUnpinEntity: (path: string) => void;
+  onUnpinVariable: (key: string) => void;
+}
+
+export const PinnedEntityGroup: React.FC<PinnedEntityGroupProps> = ({
+  entityPath,
+  attributes,
+  onUnpinEntity,
+  onUnpinVariable,
+}) => {
+  const longPressEntityProps = useLongPress(() => {
+    onUnpinEntity(entityPath);
+  });
+
+  const entityDisplayName = entityPath.includes('.')
+    ? entityPath.split('.').pop()?.replace(/^[#@$]/, '')
+    : entityPath;
+
+  return (
+    <Paper
+      elevation={3}
+      sx={{
+        p: 1,
+        minWidth: 150,
+        backgroundColor: (theme) =>
+          theme.palette.mode === 'light'
+            ? theme.palette.pinnedEntity.main // Uses PINNED_ENTITY_LIGHT
+            : theme.palette.pinnedEntity.main, // Uses PINNED_ENTITY_DARK
+        backdropFilter: 'blur(4px)',
+        color: (theme) => theme.palette.text.primary,
+        flexShrink: 0,
+        cursor: 'pointer',
+        borderRadius: 3,
+        boxShadow: (theme) => theme.shadows[4],
+        transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+        '&:hover': {
+          transform: 'translateY(-2px)',
+          boxShadow: (theme) => theme.shadows[6],
+        },
+      }}
+      {...longPressEntityProps}
+    >
+
+      <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+        {entityDisplayName}
+        <Tooltip title="Long-press to unpin all for this group">
+          <PushPinIcon fontSize="small" sx={{ verticalAlign: 'middle', ml: 0.5 }} />
+        </Tooltip>
+      </Typography>
+      <Stack direction="column" spacing={0.5} sx={{ mt: 1 }}>
+        {attributes.map((attr) => (
+          <PinnedAttributeChip
+            key={attr.fullKey}
+            fullKey={attr.fullKey}
+            label={attr.label}
+            value={attr.value}
+            onUnpin={onUnpinVariable}
+          />
+        ))}
+      </Stack>
+    </Paper>
+  );
+};
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/PinnedItemsView.tsx =====
+import React, { useEffect, useCallback } from 'react';
+import { Box, Typography, Paper, Stack } from '@mui/material';
+import {
+  useGameStateStore,
+  selectCurrentGameState,
+  selectWorldStatePinnedKeys
+} from '../../state/useGameStateStore';
+import { flattenJsonObject } from '../../utils/jsonUtils';
+import { PinnedEntityGroup } from './PinnedEntityGroup';
+
+export const PinnedItemsView: React.FC = React.memo(() => {
+  const gameState = useGameStateStore(selectCurrentGameState);
+  const worldStatePinnedKeys = useGameStateStore(selectWorldStatePinnedKeys);
+  const toggleWorldStatePin = useGameStateStore(state => state.toggleWorldStatePin);
+
+  const worldState = gameState?.worldState || {};
+
+  const flattenedWorld = React.useMemo(() => {
+    return flattenJsonObject(worldState);
+  }, [worldState]);
+
+  const pinnedItems = React.useMemo(() => {
+    const items = worldStatePinnedKeys
+      .map((key: string) => ({
+        key,
+        value: flattenedWorld[key],
+      }))
+      .filter(item => item.value !== undefined);
+
+    return items;
+  }, [worldStatePinnedKeys, flattenedWorld]);
+
+  const groupedPinnedItems = React.useMemo(() => {
+    const grouped: { [entityPath: string]: { label: string; value: any; fullKey: string }[] } = {};
+    pinnedItems.forEach(item => {
+      const parts = item.key.split('.');
+      if (parts.length >= 2) {
+        const secondPart = parts[1];
+        const isTaggedEntity = secondPart.startsWith('#') || secondPart.startsWith('@') || secondPart.startsWith('$');
+        let entityPath: string;
+        let label: string;
+
+        if (parts.length >= 3 && isTaggedEntity) {
+          entityPath = parts.slice(0, 2).join('.');
+          label = parts.slice(2).join('.');
+        } else {
+          entityPath = parts[0];
+          label = parts.slice(1).join('.');
+        }
+
+        if (label === '') {
+          label = parts[parts.length - 1];
+        }
+
+        grouped[entityPath] = grouped[entityPath] || [];
+        grouped[entityPath].push({ label, value: item.value, fullKey: item.key });
+      }
+    });
+
+    Object.keys(grouped).forEach(entityPath => {
+      grouped[entityPath].sort((a, b) => a.label.localeCompare(b.label));
+    });
+
+    return grouped;
+  }, [pinnedItems]);
+
+  const handleUnpinEntity = useCallback((entityPath: string) => {
+    toggleWorldStatePin(entityPath, 'entity');
+  }, [toggleWorldStatePin]);
+
+  const handleUnpinVariable = useCallback((key: string) => {
+    toggleWorldStatePin(key, 'variable');
+  }, [toggleWorldStatePin]);
+
+  useEffect(() => {
+    console.log("[PinnedItemsView] Re-rendered");
+    console.log("Pinned keys:", worldStatePinnedKeys);
+    console.log("Total grouped items:", Object.keys(groupedPinnedItems).length);
+  }, [worldStatePinnedKeys, pinnedItems, groupedPinnedItems]);
+
+  if (pinnedItems.length === 0) {
+    return (
+      <Paper
+        elevation={0}
+        sx={{ p: 1.5, mt: 1, backgroundColor: (theme) => theme.palette.background.default }}
+      >
+        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
+          No items pinned. Right-click or long-press items in the World State screen to pin them here.
+        </Typography>
+      </Paper>
+    );
+  }
+
+  return (
+    <Stack
+      direction="row"
+      spacing={2}
+      sx={{
+        py: 1,
+        overflowX: 'auto',
+        backgroundColor: 'transparent',
+      }}
+    >
+      {Object.entries(groupedPinnedItems).map(([entityPath, attributes]) => (
+        <PinnedEntityGroup
+          key={entityPath}
+          entityPath={entityPath}
+          attributes={attributes}
+          onUnpinEntity={handleUnpinEntity}
+          onUnpinVariable={handleUnpinVariable}
+        />
+      ))}
+    </Stack>
+  );
+});
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/PromptCard.tsx =====
+// src/ui/components/PromptCardCard.tsx
+import React from 'react';
+import {
+  Card, CardContent, CardActions, Typography, IconButton, Tooltip,
+} from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import type { PromptCard } from '../../models';
+
+interface PromptCardCardProps {
+  card: PromptCard;
+  onEdit: () => void;
+  onDelete: () => void;
+}
+
+export const PromptCardCard: React.FC<PromptCardCardProps> = ({ card, onEdit, onDelete }) => {
+  return (
+    <Card variant="outlined" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <CardContent sx={{ flexGrow: 1 }}>
+        <Typography variant="h6" gutterBottom>{card.title || 'Untitled Card'}</Typography>
+        <Typography variant="body2" color="text.secondary">
+          {card.prompt.slice(0, 100)}{card.prompt.length > 100 ? '…' : ''}
+        </Typography>
+      </CardContent>
+      <CardActions>
+        <Tooltip title="Edit Card">
+          <IconButton onClick={onEdit}><EditIcon /></IconButton>
+        </Tooltip>
+        <Tooltip title="Delete Card">
+          <IconButton onClick={onDelete}><DeleteIcon /></IconButton>
+        </Tooltip>
+      </CardActions>
+    </Card>
+  );
+};
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/PromptCardEditorDialog.tsx =====
+// src/ui/components/PromptCardEditorDialog.tsx
+
+import React, { useState, useEffect } from 'react';
+import {
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  Button, Box, TextField
+} from '@mui/material';
+import type { PromptCard } from '../../models';
+import {
+  DEFAULT_EMIT_SKELETON_STRING,
+  DEFAULT_FIRST_TURN_PROMPT_BLOCK,
+  defaultAiSettingsInCard,
+  defaultStackInstructions
+} from '../../data/config/promptCardDefaults'; // ✅ Use existing constants instead
+
+import { EmitSkeletonSection } from './PromptCardEditorSections/EmitSkeletonSection.tsx';
+import { PromptSection } from './PromptCardEditorSections/PromptSection.tsx';
+import { WorldStateInitSection } from './PromptCardEditorSections/WorldStateInitSection.tsx';
+import { GameRulesSection } from './PromptCardEditorSections/GameRulesSection.tsx';
+import { AiSettingsSection } from './PromptCardEditorSections/AiSettingsSection.tsx';
+
+interface PromptCardEditorDialogProps {
+  open: boolean;
+  initialCard: PromptCard | null;
+  onClose: () => void;
+  onSave: (card: PromptCard) => void;
+}
+
+// ✅ Local helper: mock default PromptCard (not persisted or valid for storage yet)
+const createBlankPromptCard = (): PromptCard => ({
+  id: 'temporary-id',
+  rootId: 'temporary-id',
+  parentId: null,
+  ownerId: 'preview',
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  title: 'Untitled Card',
+  prompt: '',
+  description: null,
+  firstTurnOnlyBlock: DEFAULT_FIRST_TURN_PROMPT_BLOCK,
+  stackInstructions: defaultStackInstructions,
+  emitSkeleton: DEFAULT_EMIT_SKELETON_STRING,
+  worldStateInit: '',
+  gameRules: '',
+  aiSettings: { ...defaultAiSettingsInCard },
+  helperAiSettings: { ...defaultAiSettingsInCard },
+  isHelperAiEnabled: false,
+  tags: [],
+  isExample: false,
+  functionDefs: '',
+  isPublic: false,
+  historyBrowsingEnabled: true,
+  contentHash: '',
+});
+
+export const PromptCardEditorDialog: React.FC<PromptCardEditorDialogProps> = ({
+  open,
+  initialCard,
+  onClose,
+  onSave,
+}) => {
+  const [card, setCard] = useState<PromptCard>(initialCard || createBlankPromptCard());
+
+  useEffect(() => {
+    if (initialCard) {
+      setCard(initialCard);
+    } else {
+      setCard(createBlankPromptCard());
+    }
+  }, [initialCard]);
+
+  const handleChange = <K extends keyof PromptCard>(key: K, value: PromptCard[K]) => {
+    setCard(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSave = () => {
+    onSave(card);
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} fullScreen scroll="paper">
+      <DialogTitle>{initialCard ? 'Edit Prompt Card' : 'New Prompt Card'}</DialogTitle>
+      <DialogContent dividers>
+        <Box sx={{ mb: 2 }}>
+          <TextField
+            fullWidth
+            label="Card Title"
+            value={card.title}
+            onChange={(e) => handleChange('title', e.target.value)}
+          />
+        </Box>
+
+        <PromptSection prompt={card.prompt} onChange={(v) => handleChange('prompt', v)} />
+
+        <EmitSkeletonSection emitSkeleton={card.emitSkeleton} onChange={(v) => handleChange('emitSkeleton', v)} />
+
+        <WorldStateInitSection worldState={card.worldStateInit} onChange={(v) => handleChange('worldStateInit', v)} />
+
+        <GameRulesSection gameRules={card.gameRules} onChange={(v) => handleChange('gameRules', v)} />
+
+        <AiSettingsSection settings={card.aiSettings} onChange={(v) => handleChange('aiSettings', v)} />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={handleSave} variant="contained">Save</Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/PromptCardEditorPanel.tsx =====
+// src/ui/components/PromptCardEditorPanel.tsx
+import React from 'react';
+import { Box, Typography, Button, CircularProgress } from '@mui/material';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import type { PromptCard, AiConnection } from '../../models';
+import PromptCardEditor from '../screens/PromptCardEditor'; // Note: This should eventually move to components
+
+interface PromptCardEditorPanelProps {
+  localEditedCard: PromptCard | null;
+  isCardDirty: boolean;
+  availableConnections: AiConnection[];
+  onCardChange: (updatedCard: PromptCard) => void;
+  onRevert: () => void;
+  onSave: () => void;
+  onSaveAs: () => void;
+  onStartGame: () => void;
+}
+
+export const PromptCardEditorPanel: React.FC<PromptCardEditorPanelProps> = ({
+  localEditedCard,
+  isCardDirty,
+  availableConnections,
+  onCardChange,
+  onRevert,
+  onSave,
+  onSaveAs,
+  onStartGame,
+}) => {
+  if (!localEditedCard) {
+    return (
+      <Box sx={{ textAlign: 'center', p: 4, mt: 4 }}>
+        <Typography variant="h6" color="text.secondary">
+          Select a card or create a new one to begin editing.
+        </Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <>
+      <Box
+        sx={{
+          p: 2,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          position: 'sticky',
+          top: 0,
+          backgroundColor: 'background.paper',
+          zIndex: 1,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 1,
+        }}
+      >
+        <Typography variant="h6">{localEditedCard.title}</Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {isCardDirty && (
+            <>
+              <Button variant="outlined" onClick={onRevert}>
+                Revert
+              </Button>
+              <Button variant="contained" onClick={onSave}>
+                Save Changes
+              </Button>
+            </>
+          )}
+          <Button variant="outlined" onClick={onSaveAs}>
+            Save As...
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={onStartGame}
+            startIcon={<PlayArrowIcon />}
+            disabled={isCardDirty}
+          >
+            Start Game
+          </Button>
+        </Box>
+      </Box>
+      <PromptCardEditor
+        card={localEditedCard}
+        onCardChange={onCardChange}
+        availableConnections={availableConnections}
+      />
+    </>
+  );
+};
+@@END_FILE@@
+
+@@FILE: src/ui/components/PromptCardEditorSections/AiSettingsSection.tsx =====
+// src/ui/components/PromptCardEditorSections/AiSettingsSection.tsx
+import React from 'react';
+import { Box, Typography, Slider, TextField } from '@mui/material';
+import type { AiSettings } from '../../../models';
+import { useSettingsStore } from '../../../state/useSettingsStore';
+
+interface AiSettingsSectionProps {
+  settings: AiSettings;
+  onChange: (newSettings: AiSettings) => void;
+}
+
+export const AiSettingsSection: React.FC<AiSettingsSectionProps> = ({ settings, onChange }) => {
+  const update = <K extends keyof AiSettings>(key: K, value: AiSettings[K]) => {
+    onChange({ ...settings, [key]: value });
+  };
+
+  const availableConnections = useSettingsStore((state) => state.aiConnections);
+  const selectedConnection = availableConnections.find(
+    (conn) => conn.id === settings.selectedConnectionId
+  );
+
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom>AI Settings</Typography>
+
+      <Box sx={{ mt: 2 }}>
+        <Typography gutterBottom>Model Name</Typography>
+        <TextField
+          fullWidth
+          value={selectedConnection?.modelName || "Unknown"}
+          disabled // 👈 Make this readonly
+        />
+      </Box>
+
+
+      <Box sx={{ mt: 3 }}>
+        <Typography gutterBottom>Temperature: {settings.temperature}</Typography>
+        <Slider
+          value={settings.temperature}
+          min={0}
+          max={1.5}
+          step={0.05}
+          onChange={(_, val) => update('temperature', val as number)}
+        />
+      </Box>
+
+      <Box sx={{ mt: 3 }}>
+        <Typography gutterBottom>Top P: {settings.topP}</Typography>
+        <Slider
+          value={settings.topP}
+          min={0}
+          max={1}
+          step={0.05}
+          onChange={(_, val) => update('topP', val as number)}
+        />
+      </Box>
+
+      <Box sx={{ mt: 3 }}>
+        <Typography gutterBottom>Max Tokens</Typography>
+        <TextField
+          type="number"
+          fullWidth
+          value={settings.maxTokens}
+          onChange={(e) => update('maxTokens', parseInt(e.target.value) || 0)}
+        />
+      </Box>
+
+      <Box sx={{ mt: 3 }}>
+        <Typography gutterBottom>Presence Penalty: {settings.presencePenalty}</Typography>
+        <Slider
+          value={settings.presencePenalty}
+          min={-2}
+          max={2}
+          step={0.1}
+          onChange={(_, val) => update('presencePenalty', val as number)}
+        />
+      </Box>
+
+      <Box sx={{ mt: 3 }}>
+        <Typography gutterBottom>Frequency Penalty: {settings.frequencyPenalty}</Typography>
+        <Slider
+          value={settings.frequencyPenalty}
+          min={-2}
+          max={2}
+          step={0.1}
+          onChange={(_, val) => update('frequencyPenalty', val as number)}
+        />
+      </Box>
+    </Box>
+  );
+};
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/PromptCardEditorSections/EmitSkeletonSection.tsx =====
+// src/ui/components/PromptCardEditorSections/EmitSkeletonSection.tsx
+import React from 'react';
+import { Box, Typography, TextField } from '@mui/material';
+
+interface EmitSkeletonSectionProps {
+  emitSkeleton: string;
+  onChange: (value: string) => void;
+}
+
+export const EmitSkeletonSection: React.FC<EmitSkeletonSectionProps> = ({ emitSkeleton, onChange }) => {
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom>Emit Skeleton</Typography>
+      <TextField
+        label="Emit Skeleton JSON"
+        multiline
+        fullWidth
+        minRows={6}
+        value={emitSkeleton}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </Box>
+  );
+};
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/PromptCardEditorSections/GameRulesSection.tsx =====
+// src/ui/components/PromptCardEditorSections/GameRulesSection.tsx
+import React from 'react';
+import { Box, Typography, TextField } from '@mui/material';
+
+interface GameRulesSectionProps {
+  gameRules: string;
+  onChange: (value: string) => void;
+}
+
+export const GameRulesSection: React.FC<GameRulesSectionProps> = ({ gameRules, onChange }) => {
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom>Game Rules</Typography>
+      <TextField
+        label="Rules Text"
+        multiline
+        fullWidth
+        minRows={6}
+        value={gameRules}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </Box>
+  );
+};
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/PromptCardEditorSections/PromptSection.tsx =====
+// src/ui/components/PromptCardEditorSections/PromptSection.tsx
+import React from 'react';
+import { Box, Typography, TextField } from '@mui/material';
+
+interface PromptSectionProps {
+  prompt: string;
+  onChange: (value: string) => void;
+}
+
+export const PromptSection: React.FC<PromptSectionProps> = ({ prompt, onChange }) => {
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom>Core Prompt</Typography>
+      <TextField
+        label="Prompt Text"
+        multiline
+        fullWidth
+        minRows={6}
+        value={prompt}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </Box>
+  );
+};
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/PromptCardEditorSections/WorldStateInitSection.tsx =====
+// src/ui/components/PromptCardEditorSections/WorldStateInitSection.tsx
+import React from 'react';
+import { Box, Typography, TextField } from '@mui/material';
+
+interface WorldStateInitSectionProps {
+  worldState: string;
+  onChange: (value: string) => void;
+}
+
+export const WorldStateInitSection: React.FC<WorldStateInitSectionProps> = ({ worldState, onChange }) => {
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" gutterBottom>Initial World State</Typography>
+      <TextField
+        label="World State JSON"
+        multiline
+        fullWidth
+        minRows={8}
+        value={worldState}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </Box>
+  );
+};
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/PromptCardList.tsx =====
+import React from 'react';
+import {
+  List,
+  ListItem,
+  ListItemText,
+  ListItemButton,
+  Typography,
+  Divider,
+  IconButton,
+  Box,
+} from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import type { PromptCard } from '../../models';
+
+interface PromptCardListProps {
+  cards: PromptCard[];
+  activeCardId: string | null;
+  onSelectCard: (card: PromptCard) => void;
+  onDeleteCard: (cardId: string) => void;
+  onDuplicateCard: (cardId: string) => void;
+  onExportCard: (cardId: string) => void;
+}
+
+export const PromptCardList: React.FC<PromptCardListProps> = ({
+  cards,
+  activeCardId,
+  onSelectCard,
+  onDeleteCard,
+  onDuplicateCard,
+  onExportCard,
+}) => {
+  return (
+    <>
+      <Typography variant="h6" sx={{ p: 2, pb: 1 }}>
+        Your Cards
+      </Typography>
+      <Divider />
+      <List>
+        {cards.length === 0 ? (
+          <ListItem>
+            <ListItemText
+              primary="No cards yet. Create one!"
+              sx={{ textAlign: 'center' }}
+            />
+          </ListItem>
+        ) : (
+          cards.map((card) => (
+            <ListItem
+              key={card.id}
+              disablePadding
+              secondaryAction={
+                <Box>
+                  <IconButton
+                    edge="end"
+                    aria-label="duplicate"
+                    onClick={() => onDuplicateCard(card.id)}
+                  >
+                    <ContentCopyIcon />
+                  </IconButton>
+                  <IconButton
+                    edge="end"
+                    aria-label="export"
+                    onClick={() => onExportCard(card.id)}
+                  >
+                    <FileDownloadIcon />
+                  </IconButton>
+                  <IconButton
+                    edge="end"
+                    aria-label="delete"
+                    onClick={() => onDeleteCard(card.id)}
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </Box>
+              }
+            >
+              <ListItemButton
+                selected={activeCardId === card.id}
+                onClick={() => onSelectCard(card)}
+              >
+                <ListItemText primary={card.title || 'Untitled Card'} />
+              </ListItemButton>
+            </ListItem>
+          ))
+        )}
+      </List>
+    </>
+  );
+};
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/PromptCardListPanel.tsx =====
+// src/ui/components/PromptCardListPanel.tsx
+import React from 'react';
+import { Box, Typography, Button } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import FileUploadIcon from '@mui/icons-material/FileUpload';
+import type { PromptCard } from '../../models';
+import { PromptCardList } from './PromptCardList';
+
+interface PromptCardListPanelProps {
+  cards: PromptCard[];
+  activeCardId: string | null;
+  onSelectCard: (card: PromptCard) => void;
+  onDeleteCard: (cardId: string) => void;
+  onDuplicateCard: (cardId: string) => void;
+  onExportCard: (cardId: string) => void;
+  onNewCard: () => void;
+  onImport: (event: React.ChangeEvent<HTMLInputElement>) => void;
+}
+
+export const PromptCardListPanel: React.FC<PromptCardListPanelProps> = ({
+  cards,
+  activeCardId,
+  onSelectCard,
+  onDeleteCard,
+  onDuplicateCard,
+  onExportCard,
+  onNewCard,
+  onImport,
+}) => {
+  return (
+    <>
+      <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Typography variant="h6" component="h2">
+          Card Library
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1, mt: 2, flexWrap: 'wrap' }}>
+          <Button
+            variant="contained"
+            onClick={onNewCard}
+            startIcon={<AddIcon />}
+            size="small"
+          >
+            New Card
+          </Button>
+          <Button
+            variant="outlined"
+            component="label"
+            startIcon={<FileUploadIcon />}
+            size="small"
+          >
+            Import
+            <input type="file" hidden accept=".json" onChange={onImport} multiple />
+          </Button>
+        </Box>
+      </Box>
+      <PromptCardList
+        cards={cards}
+        activeCardId={activeCardId}
+        onSelectCard={onSelectCard}
+        onDeleteCard={onDeleteCard}
+        onDuplicateCard={onDuplicateCard}
+        onExportCard={onExportCard}
+      />
+    </>
+  );
+};
+@@END_FILE@@
+
+@@FILE: src/ui/components/ProtectedRoute.tsx =====
+// src/ui/components/ProtectedRoute.tsx
+import React from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
+import { useAuthStore } from '../../state/useAuthStore';
+import { Box, CircularProgress, Typography } from '@mui/material';
+
+interface ProtectedRouteProps {
+  children: JSX.Element;
+}
+
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+  const { user, isLoading } = useAuthStore();
+  const location = useLocation();
+
+  if (isLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress />
+        <Typography variant="h6" ml={2}>Verifying Authentication...</Typography>
+      </Box>
+    );
+  }
+
+  if (!user) {
+    // Redirect them to the /login page, but save the current location they were
+    // trying to go to. This allows us to send them along to that page after they login.
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  return children;
+};
+
+export default ProtectedRoute;
+@@END_FILE@@
+
+@@FILE: src/ui/components/SourceDumpPanel.tsx =====
+// src/ui/components/SourceDumpPanel.tsx
+import React from 'react';
+import {
+  Box, Typography, Stack, Chip, Tooltip, IconButton, Divider, ListItemText
+} from '@mui/material';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import ArchiveIcon from '@mui/icons-material/Archive';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+
+let TreeItem: any = null;
+let TreeView: any = null;
+if (import.meta.env.DEV) {
+  // Only load in dev so it doesn't bloat prod
+  TreeItem = require('@mui/x-tree-view/TreeItem').TreeItem;
+  TreeView = require('@mui/x-tree-view/TreeView').TreeView;
+}
+
+const BEGIN_SIG = '===== BEGIN FILE: ';
+const END_SIG = '===== END FILE';
+
+type Manifest = {
+  generatedAt: string;
+  totalFiles: number;
+  totalBytes: number;
+  files: { path: string; bytes: number }[];
+  groups?: {
+    name: string;
+    fileCount: number;
+    byteCount: number;
+    txt: string;
+    zip: string;
+    b64: string;
+  }[];
+};
+
+type ParsedTxt = Map<string, string>;
+
+function fmtBytes(n: number) {
+  if (n < 1024) return `${n} B`;
+  const units = ['KB', 'MB', 'GB'];
+  let u = -1;
+  let v = n;
+  do { v /= 1024; u++; } while (v >= 1024 && u < units.length - 1);
+  return `${v >= 10 ? v.toFixed(0) : v.toFixed(1)} ${units[u]}`;
+}
+
+function parseTxtDump(txt: string): ParsedTxt {
+  const map = new Map<string, string>();
+  const lines = txt.split('\n');
+  let current: string | null = null;
+  const buf: string[] = [];
+  for (const line of lines) {
+    if (current === null) {
+      if (line.startsWith(BEGIN_SIG)) {
+        const filePath = line.slice(BEGIN_SIG.length).replace(/ =====$/, '').trim();
+        current = filePath;
+        buf.length = 0;
+      }
+    } else {
+      if (line === END_SIG) {
+        map.set(current, buf.join('\n'));
+        current = null;
+        buf.length = 0;
+      } else {
+        buf.push(line);
+      }
+    }
+  }
+  return map;
+}
+
+type FileNode = {
+  id: string;
+  name: string;
+  path: string;
+  bytes: number;
+  children?: FileNode[];
+  isFolder: boolean;
+};
+
+function buildTree(files: { path: string; bytes: number }[]): FileNode {
+  const root: FileNode = { id: '(root)', name: '(repo root)', path: '', bytes: 0, isFolder: true, children: [] };
+  const ensure = (segments: string[]): FileNode => {
+    let node = root;
+    let acc = '';
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i];
+      const isLast = i === segments.length - 1;
+      acc = acc ? `${acc}/${seg}` : seg;
+      if (isLast) {
+        const f: FileNode = { id: acc, name: seg, path: acc, bytes: 0, isFolder: false };
+        node.children!.push(f);
+      } else {
+        let child = node.children!.find(c => c.isFolder && c.name === seg);
+        if (!child) {
+          child = { id: acc, name: seg, path: acc, bytes: 0, isFolder: true, children: [] };
+          node.children!.push(child);
+        }
+        node = child;
+      }
+    }
+    return node;
+  };
+
+  for (const f of files) {
+    const parts = f.path.split('/');
+    ensure(parts);
+  }
+
+  function annotateSizes(n: FileNode): number {
+    if (!n.isFolder) {
+      const match = files.find(f => f.path === n.path);
+      n.bytes = match ? match.bytes : 0;
+      return n.bytes;
+    }
+    let total = 0;
+    for (const c of n.children || []) total += annotateSizes(c);
+    n.bytes = total;
+    n.children?.sort((a, b) => {
+      if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    return total;
+  }
+  annotateSizes(root);
+  return root;
+}
+
+function sanitizeFolderKey(p: string) {
+  return (p || '(repo root)').replace(/[^\w.\- ()]/g, '_');
+}
+
+function groupsIndex(groups?: Manifest['groups']) {
+  const map = new Map<string, { txt: string; b64: string }>();
+  if (!groups) return map;
+  for (const g of groups) {
+    map.set(g.name, { txt: g.txt, b64: g.b64 });
+  }
+  return map;
+}
+
+async function fetchPublicText(publicPath: string): Promise<string | null> {
+  const rel = publicPath.replace(/^public\//, '');
+  try {
+    const res = await fetch('/' + rel, { cache: 'no-store' });
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  }
+}
+
+export const SourceDumpPanel: React.FC = () => {
+  if (!import.meta.env.DEV) {
+    return (
+      <Box p={2}>
+        <Typography variant="body2" color="text.secondary">
+          Source dump disabled in production
+        </Typography>
+      </Box>
+    );
+  }
+
+  const [manifest, setManifest] = React.useState<Manifest | null>(null);
+  const [txtMap, setTxtMap] = React.useState<ParsedTxt | null>(null);
+  const [rawTxt, setRawTxt] = React.useState<string>('');
+  const [zipB64All, setZipB64All] = React.useState<string>('');
+
+  React.useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const [mRes, tRes, bRes] = await Promise.all([
+          fetch('/source-dump-manifest.json', { cache: 'no-store' }),
+          fetch('/source-dump.txt', { cache: 'no-store' }),
+          fetch('/source-dump.b64.txt', { cache: 'no-store' }),
+        ]);
+        if (!mRes.ok || !tRes.ok || !bRes.ok) throw new Error('fetch failed');
+        const m = (await mRes.json()) as Manifest;
+        const t = await tRes.text();
+        const b = await bRes.text();
+        if (!mounted) return;
+        setManifest(m);
+        setRawTxt(t);
+        setTxtMap(parseTxtDump(t));
+        setZipB64All(b.trim());
+      } catch (e) {
+        console.error('[SourceDumpPanel] load error', e);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  const copyText = async (text?: string | null) => {
+    if (!text) return;
+    try { await navigator.clipboard.writeText(text); } catch (e) { console.error('clipboard failed', e); }
+  };
+
+  const copyFolderTxt = async (folderPath: string) => {
+    if (!manifest || !txtMap) return;
+    const pre = await tryFetchFolderTxt(folderPath, manifest);
+    if (pre) {
+      await copyText(pre);
+      return;
+    }
+    const files = manifest.files
+      .filter(f => folderPath === '' ? !f.path.includes('/') : f.path.startsWith(folderPath + '/'))
+      .map(f => f.path);
+    const chunks: string[] = [];
+    chunks.push(`# Group: ${folderPath || '(repo root)'}`);
+    chunks.push(`# Files: ${files.length}`);
+    chunks.push('');
+    for (const p of files) {
+      const c = txtMap.get(p) ?? '';
+      chunks.push(`${BEGIN_SIG}${p} =====`);
+      chunks.push(c);
+      chunks.push(END_SIG);
+      chunks.push('');
+    }
+    await copyText(chunks.join('\n'));
+  };
+
+  const copyFolderZipB64 = async (folderPath: string) => {
+    const b64 = await tryFetchFolderB64(folderPath, manifest || undefined);
+    await copyText(b64 || zipB64All);
+  };
+
+  const tryFetchFolderTxt = async (folderPath: string, m: Manifest): Promise<string | null> => {
+    const idx = groupsIndex(m.groups);
+    const key = folderKey(folderPath);
+    const fromManifest = idx.get(key);
+    if (fromManifest?.txt) {
+      const txt = await fetchPublicText(fromManifest.txt);
+      if (txt) return txt;
+    }
+    const guess = `public/source-dump/folders/${sanitizeFolderKey(key)}.txt`;
+    return await fetchPublicText(guess);
+  };
+
+  const tryFetchFolderB64 = async (folderPath: string, m?: Manifest): Promise<string | null> => {
+    const key = folderKey(folderPath);
+    if (m?.groups) {
+      const idx = groupsIndex(m.groups);
+      const fromManifest = idx.get(key);
+      if (fromManifest?.b64) {
+        const txt = await fetchPublicText(fromManifest.b64);
+        if (txt) return txt.trim();
+      }
+    }
+    const guess = `public/source-dump/folders/${sanitizeFolderKey(key)}.b64.txt`;
+    const txt = await fetchPublicText(guess);
+    return txt ? txt.trim() : null;
+  };
+
+  const folderKey = (folderPath: string) => (folderPath || '(repo root)');
+
+  if (!manifest) {
+    return (
+      <Box p={2}>
+        <Typography variant="body2">Loading source dump…</Typography>
+      </Box>
+    );
+  }
+
+  const tree = buildTree(manifest.files);
+
+  return (
+    <Box p={1}>
+      <Stack direction="row" spacing={1} alignItems="center" mb={1}>
+        <Typography variant="subtitle2">Source Dump</Typography>
+        <Chip size="small" label={`${manifest.totalFiles} files`} />
+        <Chip size="small" label={fmtBytes(manifest.totalBytes)} />
+        <Chip size="small" label={new Date(manifest.generatedAt).toLocaleString()} />
+        <Box flex={1} />
+        <Tooltip title="Copy ENTIRE TXT dump">
+          <IconButton size="small" onClick={() => copyText(rawTxt)}>
+            <ContentCopyIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="Copy ENTIRE ZIP Base64">
+          <IconButton size="small" onClick={() => copyText(zipB64All)}>
+            <ArchiveIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Stack>
+
+      <Divider sx={{ mb: 1 }} />
+
+      {TreeView && TreeItem && (
+        <TreeView
+          defaultCollapseIcon={<ExpandMoreIcon />}
+          defaultExpandIcon={<ChevronRightIcon />}
+        >
+          {tree.children?.map(child => (
+            <TreeBranch key={child.id} node={child} renderLabel={n => renderLabel(n, copyFolderTxt, copyFolderZipB64, txtMap, zipB64All, copyText)} />
+          ))}
+        </TreeView>
+      )}
+    </Box>
+  );
+};
+
+const TreeBranch = ({ node, renderLabel }: { node: FileNode; renderLabel: (n: FileNode) => React.ReactNode }) => {
+  return node.isFolder
+    ? <TreeItem nodeId={node.id} label={renderLabel(node)}>
+        {node.children?.map(c => (
+          <TreeBranch key={c.id} node={c} renderLabel={renderLabel} />
+        ))}
+      </TreeItem>
+    : <TreeItem nodeId={node.id} label={renderLabel(node)} />;
+};
+
+function renderLabel(node: FileNode, copyFolderTxt: any, copyFolderZipB64: any, txtMap: any, zipB64All: any, copyText: any) {
+  return (
+    <Stack direction="row" spacing={1} alignItems="center" sx={{ pr: 1, flex: 1, minWidth: 0 }}>
+      <ListItemText
+        primary={node.name}
+        secondary={fmtBytes(node.bytes)}
+        primaryTypographyProps={{ variant: 'body2', noWrap: true }}
+        secondaryTypographyProps={{ variant: 'caption' }}
+        sx={{ mr: 1, overflow: 'hidden' }}
+      />
+      {node.isFolder ? (
+        <Stack direction="row" spacing={0.5} onClick={e => e.stopPropagation()}>
+          <Tooltip title="Copy folder TXT">
+            <IconButton size="small" onClick={() => copyFolderTxt(node.path)}>
+              <ContentCopyIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Copy folder ZIP Base64">
+            <IconButton size="small" onClick={() => copyFolderZipB64(node.path)}>
+              <ArchiveIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+      ) : (
+        <Stack direction="row" spacing={0.5} onClick={e => e.stopPropagation()}>
+          <Tooltip title="Copy file TXT">
+            <IconButton size="small" onClick={() => copyText(txtMap?.get(node.path))}>
+              <ContentCopyIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Copy ENTIRE ZIP Base64">
+            <IconButton size="small" onClick={() => copyText(zipB64All)}>
+              <ArchiveIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+      )}
+    </Stack>
+  );
+}
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/stackInstructions/DigestPolicyEditor.tsx =====
+// src/ui/components/stackInstructions/DigestPolicyEditor.tsx
+import React from 'react';
+import {
+  Box,
+  Typography,
+  TextField,
+  FormControl,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  Grid,
+  Switch,
+} from '@mui/material';
+import type {
+  DigestFilterPolicy,
+  EmissionRule
+} from '../../../models';
+
+import  {
+  StackMode,
+  FilterMode,
+} from '../../../models';
+import { InfoDialog } from '../InfoDialog';
+
+interface DigestPolicyEditorProps {
+  digestPolicy: DigestFilterPolicy;
+  digestEmission: Record<number, EmissionRule>;
+  onPolicyChange: (updatedPolicy: DigestFilterPolicy) => void;
+  onEmissionChange: (updatedEmission: Record<number, EmissionRule>) => void;
+}
+
+export const DigestPolicyEditor: React.FC<DigestPolicyEditorProps> = ({
+  digestPolicy,
+  digestEmission,
+  onPolicyChange,
+  onEmissionChange,
+}) => {
+  const handleEmissionRuleChange = (score: number, field: keyof EmissionRule, value: any) => {
+    const currentRule = digestEmission[score] || { mode: StackMode.NEVER, n: 0 };
+    onEmissionChange({
+      ...digestEmission,
+      [score]: { ...currentRule, [field]: value },
+    });
+  };
+
+  return (
+    <Box sx={{ mb: 4, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6" sx={{ flexGrow: 1 }}>
+          Digest Lines Emission & Policy
+        </Typography>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={digestPolicy.enabled ?? false}
+              onChange={(e) => onPolicyChange({ ...digestPolicy, enabled: e.target.checked })}
+            />
+          }
+          label="Enable"
+          labelPlacement="start"
+        />
+      </Box>
+      <Box sx={{ opacity: digestPolicy.enabled ? 1 : 0.5, pointerEvents: digestPolicy.enabled ? 'auto' : 'none' }}>
+        <Typography gutterBottom>
+          Global Digest Filtering Policy
+          <InfoDialog
+            title="Global Digest Filtering Policy"
+            content={`Applies a filter to ALL digest lines before their individual emission rules are checked.\n\n- NONE: No global filtering.\n- SCENE_ONLY: Only consider digests relevant to the current scene.\n- TAGGED: Only consider digests that have any tags.`}
+          />
+        </Typography>
+        <FormControl component="fieldset" fullWidth margin="normal">
+          <RadioGroup
+            row
+            value={digestPolicy.filtering}
+            onChange={(e) => onPolicyChange({ ...digestPolicy, filtering: e.target.value as FilterMode })}
+          >
+            {Object.values(FilterMode).map((mode) => (
+              <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
+            ))}
+          </RadioGroup>
+        </FormControl>
+        <Grid container spacing={2} sx={{ mt: 2 }}>
+          {[5, 4, 3, 2, 1].map((score) => (
+            // 1. Grid item is now ONLY responsible for layout.
+            <Grid item xs={12} sm={6} md={4} key={score}>
+              {/* 2. A nested Box handles ALL styling (border, padding). This resolves the error. */}
+              <Box sx={{ border: '1px solid', borderColor: 'divider', p: 1.5, borderRadius: 1 }}>
+                <Typography variant="subtitle2">
+                  Importance {score} Digests
+                  <InfoDialog
+                    title={`Digest Importance Score ${score} Rule`}
+                    content={`Determines how digest lines with an importance score of ${score} are included.`}
+                  />
+                </Typography>
+                <FormControl component="fieldset" fullWidth size="small">
+                  <RadioGroup
+                    row
+                    value={digestEmission[score]?.mode || StackMode.NEVER}
+                    onChange={(e) => handleEmissionRuleChange(score, 'mode', e.target.value as StackMode)}
+                  >
+                    {Object.values(StackMode).filter(m => m !== StackMode.FILTERED).map((mode) => (
+                      <FormControlLabel key={mode} value={mode} control={<Radio size="small" />} label={mode} sx={{ mb: -1 }}/>
+                    ))}
+                  </RadioGroup>
+                  {(digestEmission[score]?.mode === StackMode.FIRST_N ||
+                    digestEmission[score]?.mode === StackMode.AFTER_N) && (
+                      <TextField
+                        label="N"
+                        type="number"
+                        value={digestEmission[score]?.n || 0}
+                        onChange={(e) => handleEmissionRuleChange(score, 'n', parseInt(e.target.value))}
+                        size="small"
+                        sx={{ mt: 1, width: '100px' }}
+                        inputProps={{ min: 0 }}
+                      />
+                    )}
+                </FormControl>
+              </Box>
+            </Grid>
+          ))}
+        </Grid>        
+      </Box>
+    </Box>
+  );
+};
+@@END_FILE@@
+
+@@FILE: src/ui/components/stackInstructions/PolicyEditor.tsx =====
+// src/ui/components/stackInstructions/PolicyEditor.tsx
+import React from 'react';
+import {
+  Box,
+  Typography,
+  TextField,
+  FormControl,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  InputLabel,
+  Select,
+  MenuItem,
+  Switch,
+} from '@mui/material';
+import type { ProsePolicy} from '../../../models';
+import {StackMode, FilterMode } from '../../../models';
+import { InfoDialog } from '../InfoDialog';
+
+interface PolicyEditorProps {
+  title: string;
+  policy: ProsePolicy;
+  onPolicyChange: (updatedPolicy: ProsePolicy) => void;
+  infoContent: {
+    main: string;
+    mode: string;
+    filtering: string;
+  };
+}
+
+export const PolicyEditor: React.FC<PolicyEditorProps> = ({
+  title,
+  policy,
+  onPolicyChange,
+  infoContent,
+}) => {
+  const handleFieldChange = (field: keyof ProsePolicy, value: any) => {
+    onPolicyChange({ ...policy, [field]: value });
+  };
+
+  return (
+    <Box sx={{ mb: 4, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6" sx={{ flexGrow: 1 }}>
+          {title}
+          <InfoDialog title={title} content={infoContent.main} />
+        </Typography>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={policy.enabled ?? false}
+              onChange={(e) => handleFieldChange('enabled', e.target.checked)}
+            />
+          }
+          label="Enable"
+          labelPlacement="start"
+        />
+      </Box>
+      <Box sx={{ opacity: policy.enabled ? 1 : 0.5, pointerEvents: policy.enabled ? 'auto' : 'none' }}>
+        <Typography gutterBottom>
+          Mode
+          <InfoDialog title={`${title} Mode`} content={infoContent.mode} />
+        </Typography>
+        <FormControl component="fieldset" fullWidth margin="normal">
+          <RadioGroup
+            row
+            value={policy.mode}
+            onChange={(e) => handleFieldChange('mode', e.target.value as StackMode)}
+          >
+            {Object.values(StackMode).filter(m => m !== StackMode.FILTERED).map((mode) => (
+              <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
+            ))}
+          </RadioGroup>
+          {(policy.mode === StackMode.FIRST_N || policy.mode === StackMode.AFTER_N) && (
+            <TextField
+              label="N (Turns)"
+              type="number"
+              value={policy.n}
+              onChange={(e) => handleFieldChange('n', parseInt(e.target.value))}
+              sx={{ mt: 1, width: '150px' }}
+              inputProps={{ min: 0 }}
+            />
+          )}
+        </FormControl>
+
+        <Typography gutterBottom sx={{ mt: 2 }}>
+          Filtering
+          <InfoDialog title={`${title} Filtering`} content={infoContent.filtering} />
+        </Typography>
+        <FormControl fullWidth>
+          <InputLabel id={`${title}-filtering-label`}>Filtering</InputLabel>
+          <Select
+            labelId={`${title}-filtering-label`}
+            value={policy.filtering}
+            label="Filtering"
+            onChange={(e) => handleFieldChange('filtering', e.target.value as FilterMode)}
+          >
+            {Object.values(FilterMode).map((mode) => (
+              <MenuItem key={mode} value={mode}>{mode}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
+    </Box>
+  );
+};
+@@END_FILE@@
+
+@@FILE: src/ui/components/stackInstructions/TokenPolicyEditor.tsx =====
+// src/ui/components/stackInstructions/TokenPolicyEditor.tsx
+import React from 'react';
+import { Box, Typography, TextField } from '@mui/material';
+import type { TokenPolicy } from '../../../models';
+import { InfoDialog } from '../InfoDialog';
+
+interface TokenPolicyEditorProps {
+  tokenPolicy: TokenPolicy;
+  onPolicyChange: (updatedPolicy: TokenPolicy) => void;
+}
+
+export const TokenPolicyEditor: React.FC<TokenPolicyEditorProps> = ({
+  tokenPolicy,
+  onPolicyChange,
+}) => {
+  const handleFieldChange = (field: keyof TokenPolicy, value: any) => {
+    onPolicyChange({ ...tokenPolicy, [field]: value });
+  };
+
+  return (
+    <Box>
+      <Typography variant="h6" gutterBottom>
+        Token Policy
+      </Typography>
+      <TextField
+        fullWidth
+        label="Min Tokens"
+        type="number"
+        value={tokenPolicy.minTokens}
+        onChange={(e) => handleFieldChange('minTokens', parseInt(e.target.value))}
+        sx={{ mb: 2 }}
+        inputProps={{ min: 0 }}
+        InputProps={{
+          endAdornment: <InfoDialog title="Min Tokens" content="The AI will attempt to generate a response of at least this many tokens." />
+        }}
+      />
+      <TextField
+        fullWidth
+        label="Max Tokens"
+        type="number"
+        value={tokenPolicy.maxTokens}
+        onChange={(e) => handleFieldChange('maxTokens', parseInt(e.target.value))}
+        sx={{ mb: 2 }}
+        inputProps={{ min: 0 }}
+        InputProps={{
+          endAdornment: <InfoDialog title="Max Tokens" content="The absolute maximum number of tokens the AI can generate." />
+        }}
+      />
+      <TextField
+        fullWidth
+        label="Fallback Plan"
+        value={tokenPolicy.fallbackPlan.join(', ')}
+        onChange={(e) => handleFieldChange('fallbackPlan', e.target.value.split(',').map((s) => s.trim()))}
+        sx={{ mb: 2 }}
+        InputProps={{
+          endAdornment: <InfoDialog title="Fallback Plan" content={`A prioritized, comma-separated list of strategies the system will use to reduce the *input prompt's* token count if it exceeds the AI model's context window.\n\nCommon Strategies:\ndrop_known_entities, drop_low_importance_digest, truncate_expression_logs, drop_narrator_prose, truncate_conversation_history`} />
+        }}
+      />
+    </Box>
+  );
+};
+@@END_FILE@@
+
+@@FILE: src/ui/components/StackInstructionsEditor.tsx =====
+// src/ui/components/StackInstructionsEditor.tsx
+import React from 'react';
+import { Box, Typography, Divider, Checkbox, FormControlLabel, TextField } from '@mui/material';
+import { CollapsibleSection } from './CollapsibleSection';
+import { InfoDialog } from './InfoDialog';
+import type { StackInstructions, ProsePolicy, DigestFilterPolicy, TokenPolicy, EmissionRule } from '../../models';
+
+// Import the new, smaller components
+import { PolicyEditor } from './stackInstructions/PolicyEditor';
+import { DigestPolicyEditor } from './stackInstructions/DigestPolicyEditor';
+import { TokenPolicyEditor } from './stackInstructions/TokenPolicyEditor';
+
+interface StackInstructionsEditorProps {
+  stackInstructions: StackInstructions;
+  onStackInstructionsChange: (updatedInstructions: StackInstructions) => void;
+}
+
+const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
+  stackInstructions,
+  onStackInstructionsChange,
+}) => {
+  // Generic handler to update a top-level policy object in the main state
+  const handlePolicyChange = (
+    policyKey: keyof StackInstructions,
+    value: ProsePolicy | DigestFilterPolicy | TokenPolicy | Record<number, EmissionRule> | boolean | number
+  ) => {
+    onStackInstructionsChange({
+      ...stackInstructions,
+      [policyKey]: value,
+    });
+  };
+
+  return (
+    <CollapsibleSection title="🧠 Stack Instructions" initiallyExpanded={false}>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="body2" color="text.secondary">
+          These settings control how previous game information (the 'context stack') is assembled
+          and presented to the AI for each new turn.
+          <InfoDialog
+            title="Understanding the Context Stack"
+            content={`The AI's 'memory' for each turn is built from a 'context stack'. The order and content of this stack significantly impact AI responses. Each section below can be individually enabled/disabled.`}
+          />
+        </Typography>
+      </Box>
+
+      {/* -- Use the new PolicyEditor for repeating patterns -- */}
+      <PolicyEditor
+        title="Narrator Prose Emission"
+        policy={stackInstructions.narratorProseEmission}
+        onPolicyChange={(p) => handlePolicyChange('narratorProseEmission', p)}
+        infoContent={{
+          main: "Controls how past narrator output (the main story text) is included in the AI's context.",
+          mode: "- ALWAYS: Include all past narrator prose.\n- FIRST_N: Include prose only from the first 'N' turns.\n- AFTER_N: Include prose only from turns after 'N'.\n- NEVER: Do not include any past narrator prose.",
+          filtering: "- NONE: Include all prose based on the selected mode.\n- SCENE_ONLY: Only include prose relevant to the current scene.\n- TAGGED: Only include prose that contains any recognized tags."
+        }}
+      />
+
+      <Divider sx={{ my: 3 }} />
+
+      {/* -- Use the new DigestPolicyEditor -- */}
+      <DigestPolicyEditor
+        digestPolicy={stackInstructions.digestPolicy}
+        digestEmission={stackInstructions.digestEmission}
+        onPolicyChange={(p) => handlePolicyChange('digestPolicy', p)}
+        onEmissionChange={(e) => handlePolicyChange('digestEmission', e)}
+      />
+
+      <Divider sx={{ my: 3 }} />
+
+      {/* -- Expression Log is another ProsePolicy, so reuse PolicyEditor -- */}
+      <PolicyEditor
+        title="Expression Log Policy"
+        policy={stackInstructions.expressionLogPolicy}
+        onPolicyChange={(p) => handlePolicyChange('expressionLogPolicy', p)}
+        infoContent={{
+          main: "Controls how character 'expression' (portions of past narrator prose related to character actions/emotions) is included.",
+          mode: "Controls when expression logs are included (Always, First N turns, etc.).",
+          filtering: "Filters which expression logs are included based on tags."
+        }}
+      />
+      {/* Specific fields for Expression Log that aren't in the generic policy */}
+      <Box sx={{ ml: 2, mt: -2, mb: 2 }}>
+        <TextField
+          label="Expression Lines Per Character"
+          type="number"
+          value={stackInstructions.expressionLinesPerCharacter}
+          onChange={(e) => handlePolicyChange('expressionLinesPerCharacter', parseInt(e.target.value))}
+          sx={{ my: 2, width: '250px' }}
+          inputProps={{ min: 0 }}
+          InputProps={{
+            endAdornment: <InfoDialog title="Expression Lines Per Character" content="The maximum number of lines of narrative prose to extract and summarize for character expressions." />
+          }}
+        />
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={stackInstructions.emotionWeighting}
+              onChange={(e) => handlePolicyChange('emotionWeighting', e.target.checked)}
+            />
+          }
+          label="Emotion Weighting"
+        />
+      </Box>
+
+      <Divider sx={{ my: 3 }} />
+
+      <PolicyEditor
+        title="World State Policy"
+        policy={stackInstructions.worldStatePolicy}
+        onPolicyChange={(p) => handlePolicyChange('worldStatePolicy', p)}
+        infoContent={{
+          main: "Controls how the current world state JSON is included in the AI's context.",
+          mode: "Controls when the world state is included.",
+          filtering: "Filters which parts of the world state are included (e.g., scene-only)."
+        }}
+      />
+
+      <Divider sx={{ my: 3 }} />
+
+      <PolicyEditor
+        title="Known Entities Policy"
+        policy={stackInstructions.knownEntitiesPolicy}
+        onPolicyChange={(p) => handlePolicyChange('knownEntitiesPolicy', p)}
+        infoContent={{
+          main: "Controls how a list of 'known entities' (tagged items, characters, locations) is included. This list reminds the AI of important things without sending the full world state.",
+          mode: "Controls when the known entities list is included.",
+          filtering: "Filters which known entities are listed."
+        }}
+      />
+
+      <Divider sx={{ my: 3 }} />
+
+      {/* -- Use the new TokenPolicyEditor -- */}
+      <TokenPolicyEditor
+        tokenPolicy={stackInstructions.tokenPolicy}
+        onPolicyChange={(p) => handlePolicyChange('tokenPolicy', p)}
+      />
+    </CollapsibleSection>
+  );
+};
+
+export { StackInstructionsEditor };
+@@END_FILE@@
+
+@@FILE: src/ui/components/TurnNavigator.tsx =====
+// src/ui/components/TurnNavigator.tsx
+import React from 'react';
+import { Box, IconButton, Typography, Tooltip } from '@mui/material';
+import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
+import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
+
+interface TurnNavigatorProps {
+  currentTurn: number;
+  maxTurn: number;
+  onNavigate: (turn: number) => void;
+  isLoading: boolean;
+}
+
+export const TurnNavigator: React.FC<TurnNavigatorProps> = ({
+  currentTurn,
+  maxTurn,
+  onNavigate,
+  isLoading,
+}) => {
+  const canGoBack = currentTurn > 0;
+  const canGoForward = currentTurn < maxTurn;
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', p: 1, gap: 2, backgroundColor: 'action.selected', borderRadius: 2 }}>
+      <Tooltip title="Previous Turn">
+        <span>
+          <IconButton onClick={() => onNavigate(currentTurn - 1)} disabled={!canGoBack || isLoading}>
+            <ArrowBackIosNewIcon />
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+        Turn {currentTurn} / {maxTurn}
+      </Typography>
+      <Tooltip title="Next Turn">
+        <span>
+          <IconButton onClick={() => onNavigate(currentTurn + 1)} disabled={!canGoForward || isLoading}>
+            <ArrowForwardIosIcon />
+          </IconButton>
+        </span>
+      </Tooltip>
+    </Box>
+  );
+};
+@@END_FILE@@
+
+@@FILE: src/ui/components/WorldStateCategory.tsx =====
+import React from 'react';
+import {
+  Box,
+  Typography,
+  IconButton,
+  Collapse,
+  Checkbox,
+  List,
+  Divider,
+} from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import { WorldStateEntity } from './WorldStateEntity';
+import { WorldStateItemRow } from './WorldStateItemRow';
+
+interface WorldStateCategoryProps {
+  categoryName: string;
+  entities: Record<string, Record<string, any>>;
+  isExpanded: boolean;
+  areAllChildrenPinned: boolean;
+  isAnyChildPinned: boolean;
+  expandedEntities: Set<string>;
+  worldStatePinnedKeys: string[];
+  onToggleExpand: () => void;
+  onTogglePin: () => void;
+  onStartRename: () => void;
+  onDelete: () => void;
+  // Entity-level handlers
+  onToggleEntityExpand: (entityKey: string) => void;
+  onToggleEntityPin: (entityPath: string) => void;
+  onStartRenameEntity: (category: string, entity: string) => void;
+  onDeleteEntity: (category: string, entity: string) => void;
+  // Variable-level handlers
+  onDeleteKey: (key: string) => Promise<void>;
+  onEditKey: (key: string, value: any) => Promise<void>;
+  onToggleVariablePin: (key: string) => void;
+}
+
+export const WorldStateCategory: React.FC<WorldStateCategoryProps> = ({
+  categoryName,
+  entities,
+  isExpanded,
+  areAllChildrenPinned,
+  isAnyChildPinned,
+  expandedEntities,
+  worldStatePinnedKeys,
+  onToggleExpand,
+  onTogglePin,
+  onStartRename,
+  onDelete,
+  onToggleEntityExpand,
+  onToggleEntityPin,
+  onStartRenameEntity,
+  onDeleteEntity,
+  onDeleteKey,
+  onEditKey,
+  onToggleVariablePin,
+}) => {
+  return (
+    <Box
+      sx={{
+        mb: 2,
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 1,
+      }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          p: 1.5,
+          cursor: 'pointer',
+          backgroundColor: 'action.hover',
+        }}
+        onClick={onToggleExpand}
+      >
+        <IconButton size="small" sx={{ mr: 1 }}>
+          {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+        </IconButton>
+        <Typography variant="h6" sx={{ flexGrow: 1 }}>
+          {categoryName}
+        </Typography>
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            onStartRename();
+          }}
+        >
+          <EditIcon fontSize="small" />
+        </IconButton>
+        <Checkbox
+          checked={areAllChildrenPinned}
+          indeterminate={isAnyChildPinned && !areAllChildrenPinned}
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePin();
+          }}
+        />
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+        >
+          <DeleteIcon fontSize="small" color="error" />
+        </IconButton>
+      </Box>
+      <Collapse in={isExpanded}>
+        <Divider />
+        <List component="div" disablePadding sx={{ pl: 2, pr: 1, pt: 1 }}>
+          {Object.entries(entities).map(([entityKey, variables]) => {
+            const entityPath = `${categoryName}.${entityKey}`;
+
+            if (entityKey === '@@_direct') {
+              return Object.entries(variables).map(([varName, value]) => (
+                <WorldStateItemRow
+                  key={`${categoryName}.${varName}`}
+                  itemKey={`${categoryName}.${varName}`}
+                  value={value}
+                  onDelete={onDeleteKey}
+                  onEdit={onEditKey}
+                  isPinned={worldStatePinnedKeys.includes(`${categoryName}.${varName}`)}
+                  onTogglePin={onToggleVariablePin}
+                />
+              ));
+            }
+
+            return (
+              <WorldStateEntity
+                key={entityPath}
+                categoryName={categoryName}
+                entityKey={entityKey}
+                entityPath={entityPath}
+                variables={variables}
+                isExpanded={expandedEntities.has(entityPath)}
+                worldStatePinnedKeys={worldStatePinnedKeys}
+                onToggleExpand={() => onToggleEntityExpand(entityPath)}
+                onTogglePin={() => onToggleEntityPin(entityPath)}
+                onStartRename={() => onStartRenameEntity(categoryName, entityKey)}
+                onDelete={() => onDeleteEntity(categoryName, entityKey)}
+                onDeleteKey={onDeleteKey}
+                onEditKey={onEditKey}
+                onToggleVariablePin={onToggleVariablePin}
+              />
+            );
+          })}
+        </List>
+      </Collapse>
+    </Box>
+  );
+};
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/WorldStateEntity.tsx =====
+import React from 'react';
+import {
+  Box,
+  Typography,
+  IconButton,
+  Collapse,
+  Checkbox,
+  Divider,
+} from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import { WorldStateItemRow } from './WorldStateItemRow';
+import { flattenJsonObject } from '../../utils/jsonUtils';
+
+interface WorldStateEntityProps {
+  categoryName: string;
+  entityKey: string;
+  entityPath: string;
+  variables: Record<string, any>;
+  isExpanded: boolean;
+  worldStatePinnedKeys: string[];
+  onToggleExpand: () => void;
+  onTogglePin: () => void;
+  onStartRename: () => void;
+  onDelete: () => void;
+  onDeleteKey: (key: string) => Promise<void>;
+  onEditKey: (key: string, value: any) => Promise<void>;
+  onToggleVariablePin: (key: string) => void;
+}
+
+export const WorldStateEntity: React.FC<WorldStateEntityProps> = ({
+  entityPath,
+  variables,
+  isExpanded,
+  worldStatePinnedKeys,
+  onToggleExpand,
+  onTogglePin,
+  onStartRename,
+  onDelete,
+  onDeleteKey,
+  onEditKey,
+  onToggleVariablePin,
+}) => {
+  const childVariableKeys = React.useMemo(
+    () => Object.keys(flattenJsonObject(variables, entityPath)),
+    [variables, entityPath]
+  );
+
+  const areAllChildrenPinned =
+    childVariableKeys.length > 0 &&
+    childVariableKeys.every((key) => worldStatePinnedKeys.includes(key));
+
+  const isAnyChildPinned =
+    childVariableKeys.length > 0 &&
+    childVariableKeys.some((key) => worldStatePinnedKeys.includes(key));
+
+  const entityDisplayName = entityPath.split('.').pop() || entityPath;
+
+  return (
+    <Box
+      sx={{
+        mb: 1,
+        border: '1px dashed',
+        borderColor: 'divider',
+        borderRadius: 1,
+        mt: 1,
+      }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          p: 1,
+          cursor: 'pointer',
+        }}
+        onClick={onToggleExpand}
+      >
+        <IconButton size="small" sx={{ mr: 1 }}>
+          {isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+        </IconButton>
+        <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
+          {entityDisplayName}
+        </Typography>
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            onStartRename();
+          }}
+        >
+          <EditIcon fontSize="small" />
+        </IconButton>
+        <Checkbox
+          checked={areAllChildrenPinned}
+          indeterminate={isAnyChildPinned && !areAllChildrenPinned}
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePin();
+          }}
+        />
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+        >
+          <DeleteIcon fontSize="small" color="error" />
+        </IconButton>
+      </Box>
+      <Collapse in={isExpanded}>
+        <Divider />
+        <Box sx={{ p: 1.5 }}>
+          {Object.entries(variables).map(([varName, value]) => (
+            <WorldStateItemRow
+              key={varName}
+              itemKey={`${entityPath}.${varName}`}
+              value={value}
+              onDelete={onDeleteKey}
+              onEdit={onEditKey}
+              isPinned={worldStatePinnedKeys.includes(`${entityPath}.${varName}`)}
+              onTogglePin={() => onToggleVariablePin(`${entityPath}.${varName}`)}
+            />
+          ))}
+        </Box>
+      </Collapse>
+    </Box>
+  );
+};
+
+@@END_FILE@@
+
+@@FILE: src/ui/components/WorldStateItemRow.tsx =====
+// src/ui/components/WorldStateItemRow.tsx
+
+import React, { useState } from 'react';
+import {
+  Box,
+  Typography,
+  IconButton,
+  TextField,
+  InputAdornment,
+  Checkbox,
+} from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import PushPinIcon from '@mui/icons-material/PushPin';
+import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined';
+import { parseJsonPrimitive } from '../../utils/jsonUtils';
+
+interface WorldStateItemRowProps {
+  itemKey: string; // Full key, e.g., "npcs.goblin_1.hp"
+  value: any; // The raw value, JsonElement equivalent
+  onDelete: (key: string) => Promise<void>; // Make it async as store actions might be async
+  onEdit: (key: string, value: any) => Promise<void>; // Make it async
+  isPinned: boolean;
+  onTogglePin: (key: string) => void; // This will call the store's toggleWorldStatePin with 'variable' type
+}
+
+export const WorldStateItemRow: React.FC<WorldStateItemRowProps> = ({
+  itemKey,
+  value,
+  onDelete,
+  onEdit,
+  isPinned,
+  onTogglePin,
+}) => {
+  const [editMode, setEditMode] = useState(false);
+  const [editText, setEditText] = useState(JSON.stringify(value)); // Use JSON.stringify for complex values
+
+  // Extract the last part of the key for display name
+  const displayName = itemKey.substring(itemKey.lastIndexOf('.') + 1);
+
+  const handleEditConfirm = async () => {
+    try {
+      const parsedValue = parseJsonPrimitive(editText);
+      await onEdit(itemKey, parsedValue); // Await the async edit operation
+      setEditMode(false);
+    } catch (e) {
+      console.error("Failed to parse input for world state edit:", e);
+      // TODO: Provide user feedback (e.g., Snackbar) for parsing errors
+    }
+  };
+
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        mb: 1,
+        p: 1,
+        borderRadius: 1,
+        backgroundColor: (theme) => (editMode ? theme.palette.action.hover : 'transparent'),
+      }}
+    >
+      <Typography variant="body2" sx={{ fontWeight: 'bold', flexShrink: 0 }}>
+        {displayName}:
+      </Typography>
+      <Box sx={{ flexGrow: 1 }}>
+        {editMode ? (
+          <TextField
+            fullWidth
+            size="small"
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            onBlur={handleEditConfirm}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter') {
+                handleEditConfirm();
+              }
+            }}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton size="small" onClick={handleEditConfirm}>
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+          />
+        ) : (
+          <Typography
+            variant="body2"
+            sx={{
+              cursor: 'pointer',
+              border: '1px solid',
+              borderColor: (theme) => theme.palette.divider,
+              borderRadius: 1,
+              p: 0.8,
+              '&:hover': { backgroundColor: (theme) => theme.palette.action.hover },
+            }}
+            onClick={() => setEditMode(true)}
+          >
+            {JSON.stringify(value)}
+          </Typography>
+        )}
+      </Box>
+      <Checkbox
+        icon={<PushPinOutlinedIcon fontSize="small" />}
+        checkedIcon={<PushPinIcon fontSize="small" />}
+        checked={isPinned}
+        onChange={() => onTogglePin(itemKey)} // Pass the full itemKey
+        size="small"
+        sx={{ p: 0.5 }}
+      />
+      <IconButton size="small" onClick={() => onDelete(itemKey)} sx={{ p: 0.5 }}>
+        <DeleteIcon fontSize="small" color="error" />
+      </IconButton>
+    </Box>
+  );
+};
+@@END_FILE@@

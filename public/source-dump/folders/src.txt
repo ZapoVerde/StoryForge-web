@@ -1,4 +1,7 @@
-@@FILE: src/App.css
+# Group: src
+# Files: 108
+
+@@FILE: src/App.css =====
 #root {
   max-width: 1280px;
   margin: 0 auto;
@@ -43,7 +46,8 @@
 }
 
 @@END_FILE@@
-@@FILE: src/App.tsx
+
+@@FILE: src/App.tsx =====
 // src/App.tsx
 import React, { useEffect, useRef } from 'react';
 import { BrowserRouter as Router } from 'react-router-dom';
@@ -100,7 +104,8 @@ const App: React.FC = () => {
 
 export default App;
 @@END_FILE@@
-@@FILE: src/AppRoutes.tsx
+
+@@FILE: src/AppRoutes.tsx =====
 // src/AppRoutes.tsx
 import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
@@ -194,10 +199,12 @@ export const AppRoutes = () => {
 };
 
 @@END_FILE@@
-@@FILE: src/assets/react.svg
+
+@@FILE: src/assets/react.svg =====
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" class="iconify iconify--logos" width="35.93" height="32" preserveAspectRatio="xMidYMid meet" viewBox="0 0 256 228"><path fill="#00D8FF" d="M210.483 73.824a171.49 171.49 0 0 0-8.24-2.597c.465-1.9.893-3.777 1.273-5.621c6.238-30.281 2.16-54.676-11.769-62.708c-13.355-7.7-35.196.329-57.254 19.526a171.23 171.23 0 0 0-6.375 5.848a155.866 155.866 0 0 0-4.241-3.917C100.759 3.829 77.587-4.822 63.673 3.233C50.33 10.957 46.379 33.89 51.995 62.588a170.974 170.974 0 0 0 1.892 8.48c-3.28.932-6.445 1.924-9.474 2.98C17.309 83.498 0 98.307 0 113.668c0 15.865 18.582 31.778 46.812 41.427a145.52 145.52 0 0 0 6.921 2.165a167.467 167.467 0 0 0-2.01 9.138c-5.354 28.2-1.173 50.591 12.134 58.266c13.744 7.926 36.812-.22 59.273-19.855a145.567 145.567 0 0 0 5.342-4.923a168.064 168.064 0 0 0 6.92 6.314c21.758 18.722 43.246 26.282 56.54 18.586c13.731-7.949 18.194-32.003 12.4-61.268a145.016 145.016 0 0 0-1.535-6.842c1.62-.48 3.21-.974 4.76-1.488c29.348-9.723 48.443-25.443 48.443-41.52c0-15.417-17.868-30.326-45.517-39.844Zm-6.365 70.984c-1.4.463-2.836.91-4.3 1.345c-3.24-10.257-7.612-21.163-12.963-32.432c5.106-11 9.31-21.767 12.459-31.957c2.619.758 5.16 1.557 7.61 2.4c23.69 8.156 38.14 20.213 38.14 29.504c0 9.896-15.606 22.743-40.946 31.14Zm-10.514 20.834c2.562 12.94 2.927 24.64 1.23 33.787c-1.524 8.219-4.59 13.698-8.382 15.893c-8.067 4.67-25.32-1.4-43.927-17.412a156.726 156.726 0 0 1-6.437-5.87c7.214-7.889 14.423-17.06 21.459-27.246c12.376-1.098 24.068-2.894 34.671-5.345a134.17 134.17 0 0 1 1.386 6.193ZM87.276 214.515c-7.882 2.783-14.16 2.863-17.955.675c-8.075-4.657-11.432-22.636-6.853-46.752a156.923 156.923 0 0 1 1.869-8.499c10.486 2.32 22.093 3.988 34.498 4.994c7.084 9.967 14.501 19.128 21.976 27.15a134.668 134.668 0 0 1-4.877 4.492c-9.933 8.682-19.886 14.842-28.658 17.94ZM50.35 144.747c-12.483-4.267-22.792-9.812-29.858-15.863c-6.35-5.437-9.555-10.836-9.555-15.216c0-9.322 13.897-21.212 37.076-29.293c2.813-.98 5.757-1.905 8.812-2.773c3.204 10.42 7.406 21.315 12.477 32.332c-5.137 11.18-9.399 22.249-12.634 32.792a134.718 134.718 0 0 1-6.318-1.979Zm12.378-84.26c-4.811-24.587-1.616-43.134 6.425-47.789c8.564-4.958 27.502 2.111 47.463 19.835a144.318 144.318 0 0 1 3.841 3.545c-7.438 7.987-14.787 17.08-21.808 26.988c-12.04 1.116-23.565 2.908-34.161 5.309a160.342 160.342 0 0 1-1.76-7.887Zm110.427 27.268a347.8 347.8 0 0 0-7.785-12.803c8.168 1.033 15.994 2.404 23.343 4.08c-2.206 7.072-4.956 14.465-8.193 22.045a381.151 381.151 0 0 0-7.365-13.322Zm-45.032-43.861c5.044 5.465 10.096 11.566 15.065 18.186a322.04 322.04 0 0 0-30.257-.006c4.974-6.559 10.069-12.652 15.192-18.18ZM82.802 87.83a323.167 323.167 0 0 0-7.227 13.238c-3.184-7.553-5.909-14.98-8.134-22.152c7.304-1.634 15.093-2.97 23.209-3.984a321.524 321.524 0 0 0-7.848 12.897Zm8.081 65.352c-8.385-.936-16.291-2.203-23.593-3.793c2.26-7.3 5.045-14.885 8.298-22.6a321.187 321.187 0 0 0 7.257 13.246c2.594 4.48 5.28 8.868 8.038 13.147Zm37.542 31.03c-5.184-5.592-10.354-11.779-15.403-18.433c4.902.192 9.899.29 14.978.29c5.218 0 10.376-.117 15.453-.343c-4.985 6.774-10.018 12.97-15.028 18.486Zm52.198-57.817c3.422 7.8 6.306 15.345 8.596 22.52c-7.422 1.694-15.436 3.058-23.88 4.071a382.417 382.417 0 0 0 7.859-13.026a347.403 347.403 0 0 0 7.425-13.565Zm-16.898 8.101a358.557 358.557 0 0 1-12.281 19.815a329.4 329.4 0 0 1-23.444.823c-7.967 0-15.716-.248-23.178-.732a310.202 310.202 0 0 1-12.513-19.846h.001a307.41 307.41 0 0 1-10.923-20.627a310.278 310.278 0 0 1 10.89-20.637l-.001.001a307.318 307.318 0 0 1 12.413-19.761c7.613-.576 15.42-.876 23.31-.876H128c7.926 0 15.743.303 23.354.883a329.357 329.357 0 0 1 12.335 19.695a358.489 358.489 0 0 1 11.036 20.54a329.472 329.472 0 0 1-11 20.722Zm22.56-122.124c8.572 4.944 11.906 24.881 6.52 51.026c-.344 1.668-.73 3.367-1.15 5.09c-10.622-2.452-22.155-4.275-34.23-5.408c-7.034-10.017-14.323-19.124-21.64-27.008a160.789 160.789 0 0 1 5.888-5.4c18.9-16.447 36.564-22.941 44.612-18.3ZM128 90.808c12.625 0 22.86 10.235 22.86 22.86s-10.235 22.86-22.86 22.86s-22.86-10.235-22.86-22.86s10.235-22.86 22.86-22.86Z"></path></svg>
 @@END_FILE@@
-@@FILE: src/config/navigation.tsx
+
+@@FILE: src/config/navigation.tsx =====
 // src/config/navigation.ts
 import LibraryBooksIcon from '@mui/icons-material/LibraryBooks';
 import StyleIcon from '@mui/icons-material/Style';
@@ -222,7 +229,8 @@ export const getNavItems = (currentSnapshot: GameSnapshot | null) => [
   { text: 'Source Dump', icon: <CodeIcon />, path: '/sourcedump', requiresAuth: false, requiresGame: false, disabled: false },
 ];
 @@END_FILE@@
-@@FILE: src/contexts/GameSessionContext.tsx
+
+@@FILE: src/contexts/GameSessionContext.tsx =====
 // src/contexts/GameSessionContext.tsx
 
 import React, { createContext, useContext } from 'react';
@@ -249,7 +257,8 @@ export const useGameSession = () => {
   return context;
 };
 @@END_FILE@@
-@@FILE: src/contexts/LayoutContext.tsx
+
+@@FILE: src/contexts/LayoutContext.tsx =====
 // src/contexts/LayoutContext.tsx
 import React, { createContext, useContext, useState } from 'react';
 
@@ -284,7 +293,8 @@ export const LayoutProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   );
 };
 @@END_FILE@@
-@@FILE: src/data/config/aiConnectionTemplates.ts
+
+@@FILE: src/data/config/aiConnectionTemplates.ts =====
 // src/data/config/aiConnectionTemplates.ts
 import type { AiConnection } from '../../models';
 export interface ModelInfo {
@@ -373,7 +383,8 @@ export const aiConnectionTemplates: Record<string, AiConnectionTemplate> = {
   },
 };
 @@END_FILE@@
-@@FILE: src/data/config/promptCardDefaults.ts
+
+@@FILE: src/data/config/promptCardDefaults.ts =====
 // src/data/config/promptCardDefaults.ts
 
 // In src/data/config/promptCardDefaults.ts
@@ -503,7 +514,8 @@ The mist curls like spectral fingers around the ancient oaks. #Lyrielle stands r
 
 
 @@END_FILE@@
-@@FILE: src/data/infrastructure/firebaseClient.ts
+
+@@FILE: src/data/infrastructure/firebaseClient.ts =====
 // src/data/infrastructure/firebaseClient.ts
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
@@ -535,7 +547,8 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 @@END_FILE@@
-@@FILE: src/data/repositories/aiConnectionRepository.ts
+
+@@FILE: src/data/repositories/aiConnectionRepository.ts =====
 // src/data/repositories/aiConnectionRepository.ts
 
 import {
@@ -601,7 +614,8 @@ import {
   
   export const aiConnectionRepository = new FirestoreAiConnectionRepository();
 @@END_FILE@@
-@@FILE: src/data/repositories/authRepository.ts
+
+@@FILE: src/data/repositories/authRepository.ts =====
 // src/data/authRepository.ts
 
 import {
@@ -673,7 +687,8 @@ export function getCurrentUser(): User | null {
   return auth.currentUser;
 }
 @@END_FILE@@
-@@FILE: src/data/repositories/gameRepository.ts
+
+@@FILE: src/data/repositories/gameRepository.ts =====
 // src/data/repositories/gameRepository.ts
 
 import {
@@ -783,7 +798,8 @@ class FirestoreGameRepository implements IGameRepository {
 
 export const gameRepository = new FirestoreGameRepository();
 @@END_FILE@@
-@@FILE: src/data/repositories/promptCardRepository.ts
+
+@@FILE: src/data/repositories/promptCardRepository.ts =====
 // src/data/repositories/promptCardRepository.ts
 
 import {
@@ -955,7 +971,8 @@ export class FirestorePromptCardRepository implements IPromptCardRepository {
 // Export a singleton instance of the repository for use throughout the application
 export const promptCardRepository = new FirestorePromptCardRepository();
 @@END_FILE@@
-@@FILE: src/index.css
+
+@@FILE: src/index.css =====
 /* Reset and base styles */
 * {
   box-sizing: border-box;
@@ -983,790 +1000,8 @@ html {
 }
 
 @@END_FILE@@
-@@FILE: src/logic/ContextStackAssembler.ts
-// src/logic/ContextStackAssembler.ts
-import { StackMode, FilterMode } from '../models';
 
-import type {
-  PromptCard,
-  GameState,
-  LogEntry,
-  Message,
-  SceneState,
-  DigestLine,
-} from '../models';
-import type { IContextStackAssembler } from './IContextStackAssembler';
-import { getNestedValue } from '../utils/jsonUtils'; // Assuming you have this utility function
-import { debugLog, errorLog } from '../utils/debug';
-
-
-export class ContextStackAssembler implements IContextStackAssembler {
-  public assembleContext(card: PromptCard, gameState: GameState, logEntries: LogEntry[]): Message[] {
-    const messages: Message[] = [];
-    const { stackInstructions } = card;
-
-    // 1. World State Context
-    if (stackInstructions.worldStatePolicy.enabled) {
-      messages.push({ role: "system", content: `## Current World State\n\`\`\`json\n${JSON.stringify(gameState.worldState, null, 2)}\n\`\`\`` });
-    }
-
-    // 2. Known Entities
-    if (stackInstructions.knownEntitiesPolicy.enabled) {
-      const knownEntities = this.extractKnownEntities(gameState, stackInstructions.knownEntitiesPolicy.n);
-      if (knownEntities.length > 0) {
-        messages.push({ role: "system", content: `## Known Entities\n${knownEntities.join('\n')}` });
-      }
-    }
-
-    // 3. Digest Context
-    if (stackInstructions.digestPolicy.enabled) {
-      const relevantDigests = this.getRelevantDigests(logEntries, gameState, card.stackInstructions);
-      if (relevantDigests.length > 0) {
-        messages.push({ role: "system", content: `## Game Summary Digest\n${relevantDigests.map(d => d.text).join('\n')}` });
-      }
-    }
-
-    // 4. Expression Log
-    if (stackInstructions.expressionLogPolicy.enabled) {
-      // Placeholder for complex expression logic
-    }
-
-    return messages;
-  }
-  
-  private getSceneTags(scene: SceneState, worldState: Record<string, any>): string[] {
-    const tags = new Set<string>();
-    if (scene.location?.startsWith('@')) tags.add(scene.location);
-    scene.present.forEach(path => {
-      const entity = getNestedValue(worldState, path.split('.'));
-      if (entity?.tag) tags.add(entity.tag);
-    });
-    return Array.from(tags);
-  }
-
-  private extractKnownEntities(gameState: GameState, limit: number): string[] {
-    const entities = new Set(this.getSceneTags(gameState.scene, gameState.worldState));
-    return Array.from(entities).slice(0, limit);
-  }
-
-  private getRelevantDigests(logs: LogEntry[], gameState: GameState, instructions: PromptCard['stackInstructions']): DigestLine[] {
-    const relevantDigests: DigestLine[] = [];
-    const sceneTags = this.getSceneTags(gameState.scene, gameState.worldState);
-    for (const log of logs) {
-      for (const digest of log.digestLines) {
-        const rule = instructions.digestEmission[digest.importance];
-        if (!rule || rule.mode === StackMode.NEVER) continue;
-        const meetsCondition = (rule.mode === StackMode.ALWAYS) || (rule.mode === StackMode.FIRST_N && log.turnNumber <= rule.n) || (rule.mode === StackMode.AFTER_N && log.turnNumber >= rule.n);
-        if (meetsCondition) {
-          let include = true;
-          if (instructions.digestPolicy.filtering === FilterMode.SCENE_ONLY) include = digest.tags?.some(tag => sceneTags.includes(tag)) ?? false;
-          else if (instructions.digestPolicy.filtering === FilterMode.TAGGED) include = (digest.tags?.length ?? 0) > 0;
-          if (include) relevantDigests.push(digest);
-        }
-      }
-    }
-    return relevantDigests;
-  }
-}
-@@END_FILE@@
-@@FILE: src/logic/GameStateManager.ts
-// src/logic/GameStateManager.ts
-
-import type { IGameStateManager } from './IGameStateManager';
-import { produce } from 'immer'; // For immutable updates
-import type { GameState, DeltaMap } from '../models';
-/**
- * Manages the mutable aspects of the game state (world state and scene).
- * All mutations here are designed to be immutable, returning new state objects.
- */
-export class GameStateManager implements IGameStateManager {
-
-  /**
-   * Applies delta instructions to the worldState within a given GameState.
-   * @param gameState The current game state to modify.
-   * @param deltas The map of delta instructions to apply.
-   * @returns A new GameState object with deltas applied (immutable update).
-   */
-  public applyDeltasToGameState(gameState: GameState, deltas: DeltaMap): GameState {
-    return produce(gameState, draft => {
-      const updatedWorld = draft.worldState; // immer makes this a mutable draft
-
-      for (const fullKey in deltas) {
-        const instruction = deltas[fullKey];
-        const parts = instruction.key.split('.');
-
-        let currentLevel: Record<string, any> = updatedWorld;
-        for (let i = 0; i < parts.length - 1; i++) {
-          const part = parts[i];
-          if (!currentLevel[part] || typeof currentLevel[part] !== 'object' || Array.isArray(currentLevel[part])) {
-            currentLevel[part] = {};
-          }
-          currentLevel = currentLevel[part];
-        }
-
-        const lastPart = parts[parts.length - 1];
-
-        switch (instruction.op) {
-          case 'add':
-            const prevAddValue = typeof currentLevel[lastPart] === 'number' ? currentLevel[lastPart] : 0;
-            const addValue = typeof instruction.value === 'number' ? instruction.value : 0;
-            currentLevel[lastPart] = prevAddValue + addValue;
-            break;
-          case 'assign':
-            currentLevel[lastPart] = instruction.value;
-            break;
-          case 'declare':
-            if (!(lastPart in currentLevel)) {
-              currentLevel[lastPart] = instruction.value;
-            }
-            break;
-          case 'delete':
-            delete currentLevel[lastPart];
-            break;
-        }
-      }
-    });
-  }
-
-  /**
-   * Updates the scene state within a given GameState based on parsed AI output or inferred deltas.
-   * @param gameState The current game state to modify.
-   * @param parsedScene The parsed scene object from AI output.
-   * @param deltas The delta map (for inference if no explicit scene).
-   * @returns A new GameState object with updated scene (immutable update).
-   */
-  public updateSceneState(
-    gameState: GameState,
-    parsedScene: Record<string, any> | null | undefined,
-    deltas: DeltaMap
-  ): GameState {
-    return produce(gameState, draft => {
-      let newLocation: string | null = draft.scene.location;
-      let newPresent: string[] = [...draft.scene.present];
-
-      if (parsedScene) {
-        if (parsedScene.location !== undefined) {
-          newLocation = typeof parsedScene.location === 'string' ? parsedScene.location : null;
-        }
-        if (Array.isArray(parsedScene.present)) {
-          newPresent = parsedScene.present.filter((item: any) => typeof item === 'string');
-        }
-      } else {
-        if ((!newLocation && newPresent.length === 0) && deltas) {
-          const inferredPresent = new Set<string>();
-          for (const fullKey in deltas) {
-            const instruction = deltas[fullKey];
-            if (instruction.op === 'declare') {
-              const parts = instruction.key.split('.');
-              if (parts.length >= 2) {
-                const category = parts[0];
-                const entity = parts[1];
-                const valueObj = instruction.value as Record<string, any>;
-                if (valueObj && (valueObj.tag === "character" || valueObj.tag === "location")) {
-                  inferredPresent.add(`${category}.${entity}`);
-                }
-              }
-              if (instruction.key === "world.location" && typeof instruction.value === 'string') {
-                newLocation = instruction.value;
-              }
-            }
-          }
-          newPresent = Array.from(inferredPresent);
-        }
-      }
-
-      draft.scene.location = newLocation;
-      draft.scene.present = newPresent;
-    });
-  }
-
-  // --- World State Direct Modification Methods (Immutable) ---
-
-  public renameCategory(currentWorldState: Record<string, any>, currentPinnedKeys: string[], oldName: string, newName: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] } {
-    const updatedWorldState = produce(currentWorldState, draft => {
-      if (draft[oldName]) {
-        draft[newName] = draft[oldName];
-        delete draft[oldName];
-      }
-    });
-
-    const updatedPinnedKeys = currentPinnedKeys.map(key =>
-      key.startsWith(oldName + '.') ? `${newName}${key.substring(oldName.length)}` : key
-    );
-    return { updatedWorldState, updatedPinnedKeys };
-  }
-
-  public renameEntity(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string, oldName: string, newName: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] } {
-    const updatedWorldState = produce(currentWorldState, draft => {
-      const categoryObj = draft[category];
-      if (categoryObj && categoryObj[oldName]) {
-        categoryObj[newName] = categoryObj[oldName];
-        delete categoryObj[oldName];
-      }
-    });
-
-    const oldEntityPath = `${category}.${oldName}`;
-    const newEntityPath = `${category}.${newName}`;
-    const updatedPinnedKeys = currentPinnedKeys.map(key =>
-      key.startsWith(oldEntityPath + '.') ? `${newEntityPath}${key.substring(oldEntityPath.length)}` : key
-    );
-    return { updatedWorldState, updatedPinnedKeys };
-  }
-
-  public deleteCategory(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] } {
-    const updatedWorldState = produce(currentWorldState, draft => {
-      delete draft[category];
-    });
-    const updatedPinnedKeys = currentPinnedKeys.filter(key => !key.startsWith(category + '.'));
-    return { updatedWorldState, updatedPinnedKeys };
-  }
-
-  public deleteEntity(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string, entity: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] } {
-    const updatedWorldState = produce(currentWorldState, draft => {
-      const categoryObj = draft[category];
-      if (categoryObj && categoryObj[entity]) {
-        delete categoryObj[entity];
-      }
-    });
-    const entityPath = `${category}.${entity}`;
-    const updatedPinnedKeys = currentPinnedKeys.filter(key => !key.startsWith(entityPath + '.'));
-    return { updatedWorldState, updatedPinnedKeys };
-  }
-
-  public editKeyValue(currentWorldState: Record<string, any>, key: string, value: any): Record<string, any> {
-    return produce(currentWorldState, draft => {
-      const parts = key.split('.');
-      let current: any = draft;
-      for (let i = 0; i < parts.length - 1; i++) {
-        const part = parts[i];
-        if (!current[part] || typeof current[part] !== 'object') {
-          current[part] = {};
-        }
-        current = current[part];
-      }
-      current[parts[parts.length - 1]] = value;
-    });
-  }
-
-  public deleteKey(currentWorldState: Record<string, any>, currentPinnedKeys: string[], key: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] } {
-    const updatedWorldState = produce(currentWorldState, draft => {
-      const parts = key.split('.');
-      let current: any = draft;
-      for (let i = 0; i < parts.length - 1; i++) {
-        const part = parts[i];
-        if (!(part in current)) {
-          return; // Path doesn't exist, nothing to delete
-        }
-        current = current[part];
-      }
-      delete current[parts[parts.length - 1]];
-    });
-    const updatedPinnedKeys = currentPinnedKeys.filter(pk => pk !== key);
-    return { updatedWorldState, updatedPinnedKeys };
-  }
-}
-@@END_FILE@@
-@@FILE: src/logic/IContextStackAssembler.ts
-// src/logic/IContextStackAssembler.ts
-import type { PromptCard, GameState, LogEntry, Message } from '../models';
-
-/**
- * Defines the contract for a service that assembles the dynamic parts
- * of an AI prompt's context based on StackInstructions.
- */
-export interface IContextStackAssembler {
-  /**
-   * Assembles the full dynamic context stack based on the rules in the prompt card.
-   * @param card The active PromptCard containing the StackInstructions.
-   * @param gameState The current GameState.
-   * @param logEntries The history of log entries for the session.
-   * @returns An array of Message objects representing the assembled context.
-   */
-  assembleContext(
-    card: PromptCard,
-    gameState: GameState,
-    logEntries: LogEntry[]
-  ): Message[];
-}
-
-
-@@END_FILE@@
-@@FILE: src/logic/IGameStateManager.ts
-// src/logic/IGameStateManager.ts
-
-import type { GameState, DeltaMap } from '../models';
-
-/**
- * Defines the contract for managing the mutable state of the game (worldState and scene).
- * This manager operates on GameState objects and does not directly interact with repositories.
- */
-export interface IGameStateManager {
-  /**
-   * Applies delta instructions to the worldState within a given GameState.
-   * @param gameState The current game state to modify.
-   * @param deltas The map of delta instructions to apply.
-   * @returns A new GameState object with deltas applied (immutable update).
-   */
-  applyDeltasToGameState(gameState: GameState, deltas: DeltaMap): GameState;
-
-  /**
-   * Updates the scene state within a given GameState based on parsed AI output or inferred deltas.
-   * @param gameState The current game state to modify.
-   * @param parsedScene The parsed scene object from AI output.
-   * @param deltas The delta map (for inference if no explicit scene).
-   * @returns A new GameState object with updated scene (immutable update).
-   */
-  updateSceneState(gameState: GameState, parsedScene: Record<string, any> | null | undefined, deltas: DeltaMap): GameState;
-
-  // Methods for direct world state modification (now immutable operations)
-  renameCategory(currentWorldState: Record<string, any>, currentPinnedKeys: string[], oldName: string, newName: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] };
-  renameEntity(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string, oldName: string, newName: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] };
-  deleteCategory(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] };
-  deleteEntity(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string, entity: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] };
-  editKeyValue(currentWorldState: Record<string, any>, key: string, value: any): Record<string, any>;
-  deleteKey(currentWorldState: Record<string, any>, currentPinnedKeys: string[], key: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] };
-}
-@@END_FILE@@
-@@FILE: src/logic/ISnapshotUpdater.ts
-// src/logic/ISnapshotUpdater.ts
-import type { GameSnapshot, ParsedNarrationOutput, LogEntry } from '../models';
-
-export interface ITurnResult {
-  parsedOutput: ParsedNarrationOutput;
-  logEntry: LogEntry;
-  playerAction?: string; // Include the player's action for conversation history
-}
-
-export interface ISnapshotUpdater {
-  /**
-   * Applies the result of a processed turn to a game snapshot.
-   * This handles updating game state from deltas, scene changes, adding logs,
-   * updating conversation history, and incrementing the turn counter.
-   * @param snapshot The current GameSnapshot.
-   * @param turnResult The result from the TurnProcessor.
-   * @returns A new, updated GameSnapshot.
-   */
-  applyTurnResultToSnapshot(snapshot: GameSnapshot, turnResult: ITurnResult): GameSnapshot;
-
-  /**
-   * Applies a direct world state category rename to the snapshot.
-   * @returns A new, updated GameSnapshot.
-   */
-  applyCategoryRename(snapshot: GameSnapshot, oldName: string, newName: string): GameSnapshot;
-
-  /**
-   * Applies a direct world state entity rename to the snapshot.
-   * @returns A new, updated GameSnapshot.
-   */
-  applyEntityRename(snapshot: GameSnapshot, category: string, oldName: string, newName: string): GameSnapshot;
-  applyCategoryDelete(snapshot: GameSnapshot, category: string): GameSnapshot;
-  applyEntityDelete(snapshot: GameSnapshot, category: string, entity: string): GameSnapshot;
-  applyKeyValueEdit(snapshot: GameSnapshot, key: string, value: any): GameSnapshot;
-  applyKeyDelete(snapshot: GameSnapshot, key: string): GameSnapshot;
-  applyPinToggle(snapshot: GameSnapshot, keyPath: string, type: 'variable' | 'entity' | 'category'): GameSnapshot;
-}
-@@END_FILE@@
-@@FILE: src/logic/ITurnProcessor.ts
-// src/logic/ITurnProcessor.ts
-
-import type {
-  PromptCard,
-  GameState,
-  LogEntry,
-  Message,
-  AiConnection,
-  ParsedNarrationOutput,
-  TokenSummary
-} from '../models';
-
-/**
- * Defines the contract for processing individual game turns, including AI interaction.
- */
-export interface ITurnProcessor {
-  /**
-   * Processes a player's action, generating the AI response and updating conversation history/logs.
-   * Handles both the initial turn and subsequent turns.
-   *
-   * @param userId The ID of the current user.
-   * @param card The PromptCard used for the game.
-   * @param currentGameState The current game state before the turn.
-   * @param logs The current game logs.
-   * @param conversationHistory The current conversation history.
-   * @param action The player's input string.
-   * @param turnNumber The current turn number.
-   * @param useDummyNarrator Flag to use a dummy AI.
-   * @param aiConnections User's configured AI connections.
-   * @param isFirstPlayerAction True if this is the first player input after game start.
-   */
-  processPlayerTurn(
-    userId: string,
-    card: PromptCard,
-    currentGameState: GameState,
-    logs: LogEntry[],
-    conversationHistory: Message[],
-    action: string,
-    turnNumber: number,
-    useDummyNarrator: boolean,
-    aiConnections: AiConnection[],
-    isFirstPlayerAction: boolean // <-- PATCHED
-  ): Promise<{
-    parsedOutput: ParsedNarrationOutput;
-    logEntry: LogEntry;
-    aiRawOutput: string;
-    tokenUsage: TokenSummary | null;
-  }>;
-}
-
-@@END_FILE@@
-@@FILE: src/logic/SnapshotUpdater.ts
-// src/logic/SnapshotUpdater.ts
-import { produce } from 'immer';
-import type { GameSnapshot } from '../models';
-import type { IGameStateManager } from './IGameStateManager';
-import type { ISnapshotUpdater, ITurnResult } from './ISnapshotUpdater';
-import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
-
-export class SnapshotUpdater implements ISnapshotUpdater {
-  constructor(private gameStateManager: IGameStateManager) {
-    console.log('[SnapshotUpdater.ts] SnapshotUpdater constructor called.');
-  }
-
-  public applyTurnResultToSnapshot(snapshot: GameSnapshot, turnResult: ITurnResult): GameSnapshot {
-    console.log(`[SnapshotUpdater.ts] applyTurnResultToSnapshot: Starting for snapshot ${snapshot.id}. Turn: ${snapshot.currentTurn}`);
-    const { parsedOutput, logEntry, playerAction } = turnResult;
-
-    const newSnapshot = produce(snapshot, draft => {
-      let stateAfterDeltas = this.gameStateManager.applyDeltasToGameState(draft.gameState, parsedOutput.deltas);
-      let finalGameState = this.gameStateManager.updateSceneState(stateAfterDeltas, parsedOutput.scene, parsedOutput.deltas);
-
-      finalGameState.narration = parsedOutput.prose;
-      draft.gameState = finalGameState;
-
-      if (playerAction) {
-        draft.conversationHistory.push({ role: 'user', content: playerAction });
-      }
-      draft.conversationHistory.push({ role: 'assistant', content: parsedOutput.prose });
-      
-      draft.logs.push(logEntry);
-
-      draft.currentTurn += 1;
-      draft.updatedAt = new Date().toISOString();
-    });
-    console.log(`[SnapshotUpdater.ts] applyTurnResultToSnapshot: Finished. New snapshot ID: ${newSnapshot.id}.`);
-    return newSnapshot;
-  }
-
-  public applyCategoryRename(snapshot: GameSnapshot, oldName: string, newName: string): GameSnapshot {
-    console.log(`[SnapshotUpdater.ts] applyCategoryRename: ${oldName} -> ${newName}`);
-    return produce(snapshot, draft => {
-      const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.renameCategory(
-        draft.gameState.worldState,
-        draft.worldStatePinnedKeys,
-        oldName,
-        newName
-      );
-      draft.gameState.worldState = updatedWorldState;
-      draft.worldStatePinnedKeys = updatedPinnedKeys;
-      draft.updatedAt = new Date().toISOString();
-    });
-  }
-
-  public applyEntityRename(snapshot: GameSnapshot, category: string, oldName: string, newName: string): GameSnapshot {
-    console.log(`[SnapshotUpdater.ts] applyEntityRename: ${category}.${oldName} -> ${category}.${newName}`);
-    return produce(snapshot, draft => {
-      const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.renameEntity(
-        draft.gameState.worldState,
-        draft.worldStatePinnedKeys,
-        category,
-        oldName,
-        newName
-      );
-      draft.gameState.worldState = updatedWorldState;
-      draft.worldStatePinnedKeys = updatedPinnedKeys;
-      draft.updatedAt = new Date().toISOString();
-    });
-  }
-  
-  public applyCategoryDelete(snapshot: GameSnapshot, category: string): GameSnapshot {
-    console.log(`[SnapshotUpdater.ts] applyCategoryDelete: ${category}`);
-     return produce(snapshot, draft => {
-      const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.deleteCategory(
-        draft.gameState.worldState,
-        draft.worldStatePinnedKeys,
-        category
-      );
-      draft.gameState.worldState = updatedWorldState;
-      draft.worldStatePinnedKeys = updatedPinnedKeys;
-      draft.updatedAt = new Date().toISOString();
-    });
-  }
-
-  public applyEntityDelete(snapshot: GameSnapshot, category: string, entity: string): GameSnapshot {
-    console.log(`[SnapshotUpdater.ts] applyEntityDelete: ${category}.${entity}`);
-     return produce(snapshot, draft => {
-      const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.deleteEntity(
-        draft.gameState.worldState,
-        draft.worldStatePinnedKeys,
-        category,
-        entity
-      );
-      draft.gameState.worldState = updatedWorldState;
-      draft.worldStatePinnedKeys = updatedPinnedKeys;
-      draft.updatedAt = new Date().toISOString();
-    });
-  }
-
-  public applyKeyValueEdit(snapshot: GameSnapshot, key: string, value: any): GameSnapshot {
-    console.log(`[SnapshotUpdater.ts] applyKeyValueEdit: ${key} = ${JSON.stringify(value)}`);
-     return produce(snapshot, draft => {
-      draft.gameState.worldState = this.gameStateManager.editKeyValue(
-        draft.gameState.worldState,
-        key,
-        value
-      );
-      draft.updatedAt = new Date().toISOString();
-    });
-  }
-
-  public applyKeyDelete(snapshot: GameSnapshot, key: string): GameSnapshot {
-    console.log(`[SnapshotUpdater.ts] applyKeyDelete: ${key}`);
-     return produce(snapshot, draft => {
-      const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.deleteKey(
-        draft.gameState.worldState,
-        draft.worldStatePinnedKeys,
-        key
-      );
-      draft.gameState.worldState = updatedWorldState;
-      draft.worldStatePinnedKeys = updatedPinnedKeys;
-      draft.updatedAt = new Date().toISOString();
-    });
-  }
-
-  public applyPinToggle(snapshot: GameSnapshot, keyPath: string, type: 'variable' | 'entity' | 'category'): GameSnapshot {
-    console.log(`[SnapshotUpdater.ts] applyPinToggle: Starting for snapshot ${snapshot.id}, keyPath: ${keyPath}, type: ${type}.`);
-    const newSnapshot = produce(snapshot, draft => {
-      const currentWorldState = draft.gameState.worldState || {};
-      const currentPinnedKeys = draft.worldStatePinnedKeys || [];
-      const newPinnedKeys = new Set(currentPinnedKeys);
-
-      const getAllChildVariableKeys = (basePath: string): string[] => {
-        const nestedData = getNestedValue(currentWorldState, basePath.split('.'));
-        if (typeof nestedData !== 'object' || nestedData === null) return [];
-        const flattened = flattenJsonObject(nestedData, basePath);
-        return Object.keys(flattened).filter(key => flattened[key] !== undefined); // Only include existing keys
-      };
-
-      let relevantKeysToToggle: string[] = [];
-      if (type === 'variable') {
-        relevantKeysToToggle = [keyPath];
-      } else { // 'entity' or 'category'
-        relevantKeysToToggle = getAllChildVariableKeys(keyPath);
-      }
-
-      // If there are no keys to toggle (e.g., entity doesn't exist), do nothing.
-      if (relevantKeysToToggle.length === 0) {
-        console.warn(`[SnapshotUpdater.ts] applyPinToggle: No relevant keys found for ${type} at "${keyPath}". No change.`);
-        return; // No changes to draft
-      }
-      
-      const areAllChildrenCurrentlyPinned = relevantKeysToToggle.every(key => newPinnedKeys.has(key));
-      const shouldPin = !areAllChildrenCurrentlyPinned; 
-
-      console.log(`[SnapshotUpdater.ts] applyPinToggle: Relevant keys (${relevantKeysToToggle.length}): ${relevantKeysToToggle.join(', ')}. ShouldPin: ${shouldPin}`);
-
-      relevantKeysToToggle.forEach(key => {
-        if (shouldPin) {
-          newPinnedKeys.add(key);
-        } else {
-          newPinnedKeys.delete(key);
-        }
-      });
-
-      draft.worldStatePinnedKeys = Array.from(newPinnedKeys).sort();
-      draft.updatedAt = new Date().toISOString();
-      console.log(`[SnapshotUpdater.ts] applyPinToggle: Final pinned keys count: ${draft.worldStatePinnedKeys.length}.`);
-    });
-    console.log(`[SnapshotUpdater.ts] applyPinToggle: Finished. New snapshot ID: ${newSnapshot.id}.`);
-    return newSnapshot;
-  }
-}
-@@END_FILE@@
-@@FILE: src/logic/TurnProcessor.ts
-// src/logic/TurnProcessor.ts
-
-import type { AiSettings, AiConnection, GameState, LogEntry, Message, ParsedNarrationOutput, PromptCard, TokenSummary } from '../models';
-import type { IAiClient } from './aiClient';
-import { parseNarratorOutput } from './deltaParser';
-import type { ILogManager } from './logManager';
-import type { IPromptBuilder } from './promptBuilder';
-import type { ITurnProcessor } from './ITurnProcessor';
-import type { ModelInfo } from '../data/config/aiConnectionTemplates';
-
-// Define a simple DummyAiClient for testing and dev
-class DummyAiClient implements IAiClient {
-  async generateCompletion(
-    connection: AiConnection,
-    messages: Message[],
-    settings: AiSettings
-  ): Promise<string> {
-    console.log("Dummy Narrator: Simulating AI response...");
-    const lastUserMessage = messages.slice().reverse().find(m => m.role === 'user')?.content || 'No user input.';
-    const dummyResponse = {
-      choices: [{
-        message: {
-          content: `The dummy narrator observes your action: "${lastUserMessage}". A ripple of arcane energy flows through the air, subtly shifting the very fabric of reality around you. You hear a distant chime, and a curious, ancient tome appears at your feet.
-
-@digest
-\`\`\`json
-[
-  { "text": "The world reacted to your input: '${lastUserMessage}'.", "importance": 2 },
-  { "text": "Something new has manifested nearby: the $enchanted_quill.", "importance": 4, "tags": ["$enchanted_quill"] },
-  { "text": "#Brom's disposition shifted slightly.", "importance": 3, "tags": ["#brom"] },
-  { "text": "A critical system event occurred, requiring your attention!", "importance": 5 }
-]
-\`\`\`
-
-@delta
-\`\`\`json
-{
-  "=player.hp": 85,
-  "+player.gold": 5,
-  "!items.$enchanted_quill.description": "A quill that seems to hum with forgotten magic, vibrating faintly.",
-  "-npcs.#old_sage.wisdom" : true,
-  "=player.status": "observant"
-}
-\`\`\`
-
-@scene
-\`\`\`json
-{
-  "location": "@forest_clearing",
-  "present": ["#you", "#lyrielle", "$enchanted_quill"],
-  "weather": "clear and crisp"
-}
-\`\`\`
-`
-        }
-      }],
-      usage: {
-        prompt_tokens: 10,
-        completion_tokens: 150,
-        total_tokens: 160,
-      }
-    };
-    return Promise.resolve(JSON.stringify(dummyResponse));
-  }
-
-  async testConnection(connection: AiConnection): Promise<{ success: boolean; message: string }> {
-    return Promise.resolve({
-      success: true,
-      message: "Dummy client: test always passes."
-    });
-  }
-
-  async listModels(connection: Pick<AiConnection, 'apiUrl' | 'apiToken'>): Promise<ModelInfo[]> {
-    return Promise.resolve([
-      { id: 'dummy-model', name: 'Dummy Model' }
-    ]);
-  }
-}
-
-export class TurnProcessor implements ITurnProcessor {
-  private realAiClient: IAiClient;
-  private dummyAiClient: IAiClient;
-  private builder: IPromptBuilder;
-  private logManager: ILogManager;
-
-  constructor(
-    aiClient: IAiClient,
-    promptBuilder: IPromptBuilder,
-    logManager: ILogManager
-  ) {
-    this.realAiClient = aiClient;
-    this.builder = promptBuilder;
-    this.logManager = logManager;
-    this.dummyAiClient = new DummyAiClient();
-  }
-
-  private async executeAiCall(
-    connection: AiConnection,
-    messages: Message[],
-    settings: AiSettings,
-    useDummyNarrator: boolean
-  ): Promise<{ aiRawOutput: string; tokenUsage: TokenSummary | null; fullResponse: string }> {
-    const activeClient = useDummyNarrator ? this.dummyAiClient : this.realAiClient;
-    const fullResponse = await activeClient.generateCompletion(connection, messages, settings);
-
-    let aiRawOutput = '';
-    let tokenUsage: TokenSummary | null = null;
-    try {
-      const parsedJson = JSON.parse(fullResponse);
-      aiRawOutput = parsedJson.choices?.[0]?.message?.content?.trim() || fullResponse;
-      tokenUsage = parsedJson.usage ? {
-        inputTokens: parsedJson.usage.prompt_tokens || 0,
-        outputTokens: parsedJson.usage.completion_tokens || 0,
-        totalTokens: parsedJson.usage.total_tokens || 0,
-      } : null;
-    } catch (e) {
-      aiRawOutput = fullResponse;
-    }
-    return { aiRawOutput, tokenUsage, fullResponse };
-  }
-
-  async processPlayerTurn(
-    userId: string,
-    card: PromptCard,
-    currentGameState: GameState,
-    logs: LogEntry[],
-    conversationHistory: Message[],
-    action: string,
-    turnNumber: number,
-    useDummyNarrator: boolean,
-    aiConnections: AiConnection[],
-    isFirstPlayerAction: boolean
-  ): Promise<{ parsedOutput: ParsedNarrationOutput; logEntry: LogEntry; aiRawOutput: string; tokenUsage: TokenSummary | null; }> {
-    const messagesToSend = this.builder.buildEveryTurnPrompt(
-      card,
-      currentGameState,
-      logs,
-      conversationHistory,
-      action,
-      isFirstPlayerAction
-    );
-    const contextSnapshotForLog = JSON.stringify(messagesToSend, null, 2);
-
-    const connection = aiConnections.find(c => c.id === card.aiSettings.selectedConnectionId);
-    if (!connection && !useDummyNarrator) {
-      throw new Error(`AI connection ${card.aiSettings.selectedConnectionId} not found.`);
-    }
-
-    const startTime = performance.now();
-    const { aiRawOutput, tokenUsage, fullResponse } = await this.executeAiCall(connection!, messagesToSend, card.aiSettings, useDummyNarrator);
-    const latencyMs = Math.round(performance.now() - startTime);
-
-    const parsedOutput = parseNarratorOutput(aiRawOutput);
-
-    const logEntry = this.logManager.assembleTurnLogEntry({
-      turnNumber: turnNumber,
-      userInput: action,
-      rawNarratorOutput: aiRawOutput,
-      parsedOutput: parsedOutput,
-      contextSnapshot: contextSnapshotForLog,
-      tokenUsage: tokenUsage,
-      aiSettings: card.aiSettings,
-      apiRequestBody: JSON.stringify({ model: connection?.modelSlug, messages: "..." }, null, 2),
-      apiResponseBody: fullResponse,
-      apiUrl: connection ? new URL("chat/completions", connection.apiUrl).href : 'dummy-url',
-      latencyMs: latencyMs,
-      modelSlugUsed: connection?.modelSlug || 'dummy-model',
-    });
-
-    return { parsedOutput, logEntry, aiRawOutput, tokenUsage };
-  }
-}
-
-@@END_FILE@@
-@@FILE: src/logic/aiClient.ts
+@@FILE: src/logic/aiClient.ts =====
 // src/logic/aiClient.ts
 
 import type { ModelInfo } from '../data/config/aiConnectionTemplates';
@@ -1931,7 +1166,8 @@ class AiClient implements IAiClient {
 // Export a singleton instance of the AI client.
 export const aiClient = new AiClient();
 @@END_FILE@@
-@@FILE: src/logic/cardManager.ts
+
+@@FILE: src/logic/cardManager.ts =====
 // src/logic/cardManager.ts
 
 import type { PromptCard, NewPromptCardData, StackInstructions} from '../models';
@@ -2201,7 +1437,95 @@ export class PromptCardManager implements ICardManager {
 // Export a singleton instance of the manager
 export const promptCardManager = new PromptCardManager(promptCardRepository);
 @@END_FILE@@
-@@FILE: src/logic/deltaParser.ts
+
+@@FILE: src/logic/ContextStackAssembler.ts =====
+// src/logic/ContextStackAssembler.ts
+import { StackMode, FilterMode } from '../models';
+
+import type {
+  PromptCard,
+  GameState,
+  LogEntry,
+  Message,
+  SceneState,
+  DigestLine,
+} from '../models';
+import type { IContextStackAssembler } from './IContextStackAssembler';
+import { getNestedValue } from '../utils/jsonUtils'; // Assuming you have this utility function
+import { debugLog, errorLog } from '../utils/debug';
+
+
+export class ContextStackAssembler implements IContextStackAssembler {
+  public assembleContext(card: PromptCard, gameState: GameState, logEntries: LogEntry[]): Message[] {
+    const messages: Message[] = [];
+    const { stackInstructions } = card;
+
+    // 1. World State Context
+    if (stackInstructions.worldStatePolicy.enabled) {
+      messages.push({ role: "system", content: `## Current World State\n\`\`\`json\n${JSON.stringify(gameState.worldState, null, 2)}\n\`\`\`` });
+    }
+
+    // 2. Known Entities
+    if (stackInstructions.knownEntitiesPolicy.enabled) {
+      const knownEntities = this.extractKnownEntities(gameState, stackInstructions.knownEntitiesPolicy.n);
+      if (knownEntities.length > 0) {
+        messages.push({ role: "system", content: `## Known Entities\n${knownEntities.join('\n')}` });
+      }
+    }
+
+    // 3. Digest Context
+    if (stackInstructions.digestPolicy.enabled) {
+      const relevantDigests = this.getRelevantDigests(logEntries, gameState, card.stackInstructions);
+      if (relevantDigests.length > 0) {
+        messages.push({ role: "system", content: `## Game Summary Digest\n${relevantDigests.map(d => d.text).join('\n')}` });
+      }
+    }
+
+    // 4. Expression Log
+    if (stackInstructions.expressionLogPolicy.enabled) {
+      // Placeholder for complex expression logic
+    }
+
+    return messages;
+  }
+  
+  private getSceneTags(scene: SceneState, worldState: Record<string, any>): string[] {
+    const tags = new Set<string>();
+    if (scene.location?.startsWith('@')) tags.add(scene.location);
+    scene.present.forEach(path => {
+      const entity = getNestedValue(worldState, path.split('.'));
+      if (entity?.tag) tags.add(entity.tag);
+    });
+    return Array.from(tags);
+  }
+
+  private extractKnownEntities(gameState: GameState, limit: number): string[] {
+    const entities = new Set(this.getSceneTags(gameState.scene, gameState.worldState));
+    return Array.from(entities).slice(0, limit);
+  }
+
+  private getRelevantDigests(logs: LogEntry[], gameState: GameState, instructions: PromptCard['stackInstructions']): DigestLine[] {
+    const relevantDigests: DigestLine[] = [];
+    const sceneTags = this.getSceneTags(gameState.scene, gameState.worldState);
+    for (const log of logs) {
+      for (const digest of log.digestLines) {
+        const rule = instructions.digestEmission[digest.importance];
+        if (!rule || rule.mode === StackMode.NEVER) continue;
+        const meetsCondition = (rule.mode === StackMode.ALWAYS) || (rule.mode === StackMode.FIRST_N && log.turnNumber <= rule.n) || (rule.mode === StackMode.AFTER_N && log.turnNumber >= rule.n);
+        if (meetsCondition) {
+          let include = true;
+          if (instructions.digestPolicy.filtering === FilterMode.SCENE_ONLY) include = digest.tags?.some(tag => sceneTags.includes(tag)) ?? false;
+          else if (instructions.digestPolicy.filtering === FilterMode.TAGGED) include = (digest.tags?.length ?? 0) > 0;
+          if (include) relevantDigests.push(digest);
+        }
+      }
+    }
+    return relevantDigests;
+  }
+}
+@@END_FILE@@
+
+@@FILE: src/logic/deltaParser.ts =====
 // src/logic/deltaParser.ts
 import type { DeltaInstruction, DeltaMap,DigestLine, ParsedNarrationOutput} from '../models';
 import { debugLog, errorLog } from '../utils/debug';
@@ -2384,7 +1708,8 @@ export function parseNarratorOutput(rawAiOutput: string): ParsedNarrationOutput 
   };
 }
 @@END_FILE@@
-@@FILE: src/logic/gameSession.ts
+
+@@FILE: src/logic/gameSession.ts =====
 import type { IGameRepository } from '../data/repositories/gameRepository';
 import type { IPromptCardRepository } from '../data/repositories/promptCardRepository';
 import type { GameSnapshot, PromptCard, AiConnection, LogEntry  } from '../models';
@@ -2557,7 +1882,8 @@ export class GameSession implements IGameSession {
 }
 
 @@END_FILE@@
-@@FILE: src/logic/gameSessionServices.ts
+
+@@FILE: src/logic/gameSessionServices.ts =====
 // src/logic/gameSessionServices.ts
 import { GameStateManager } from './GameStateManager.ts';
 import { SnapshotUpdater } from './SnapshotUpdater.ts'; // CORRECTED
@@ -2571,7 +1897,362 @@ const gameStateManager = new GameStateManager();
 export const snapshotUpdater = new SnapshotUpdater(gameStateManager);
 export const turnProcessor = new TurnProcessor(aiClient, promptBuilder, logManager);
 @@END_FILE@@
-@@FILE: src/logic/logManager.ts
+
+@@FILE: src/logic/GameStateManager.ts =====
+// src/logic/GameStateManager.ts
+
+import type { IGameStateManager } from './IGameStateManager';
+import { produce } from 'immer'; // For immutable updates
+import type { GameState, DeltaMap } from '../models';
+/**
+ * Manages the mutable aspects of the game state (world state and scene).
+ * All mutations here are designed to be immutable, returning new state objects.
+ */
+export class GameStateManager implements IGameStateManager {
+
+  /**
+   * Applies delta instructions to the worldState within a given GameState.
+   * @param gameState The current game state to modify.
+   * @param deltas The map of delta instructions to apply.
+   * @returns A new GameState object with deltas applied (immutable update).
+   */
+  public applyDeltasToGameState(gameState: GameState, deltas: DeltaMap): GameState {
+    return produce(gameState, draft => {
+      const updatedWorld = draft.worldState; // immer makes this a mutable draft
+
+      for (const fullKey in deltas) {
+        const instruction = deltas[fullKey];
+        const parts = instruction.key.split('.');
+
+        let currentLevel: Record<string, any> = updatedWorld;
+        for (let i = 0; i < parts.length - 1; i++) {
+          const part = parts[i];
+          if (!currentLevel[part] || typeof currentLevel[part] !== 'object' || Array.isArray(currentLevel[part])) {
+            currentLevel[part] = {};
+          }
+          currentLevel = currentLevel[part];
+        }
+
+        const lastPart = parts[parts.length - 1];
+
+        switch (instruction.op) {
+          case 'add':
+            const prevAddValue = typeof currentLevel[lastPart] === 'number' ? currentLevel[lastPart] : 0;
+            const addValue = typeof instruction.value === 'number' ? instruction.value : 0;
+            currentLevel[lastPart] = prevAddValue + addValue;
+            break;
+          case 'assign':
+            currentLevel[lastPart] = instruction.value;
+            break;
+          case 'declare':
+            if (!(lastPart in currentLevel)) {
+              currentLevel[lastPart] = instruction.value;
+            }
+            break;
+          case 'delete':
+            delete currentLevel[lastPart];
+            break;
+        }
+      }
+    });
+  }
+
+  /**
+   * Updates the scene state within a given GameState based on parsed AI output or inferred deltas.
+   * @param gameState The current game state to modify.
+   * @param parsedScene The parsed scene object from AI output.
+   * @param deltas The delta map (for inference if no explicit scene).
+   * @returns A new GameState object with updated scene (immutable update).
+   */
+  public updateSceneState(
+    gameState: GameState,
+    parsedScene: Record<string, any> | null | undefined,
+    deltas: DeltaMap
+  ): GameState {
+    return produce(gameState, draft => {
+      let newLocation: string | null = draft.scene.location;
+      let newPresent: string[] = [...draft.scene.present];
+
+      if (parsedScene) {
+        if (parsedScene.location !== undefined) {
+          newLocation = typeof parsedScene.location === 'string' ? parsedScene.location : null;
+        }
+        if (Array.isArray(parsedScene.present)) {
+          newPresent = parsedScene.present.filter((item: any) => typeof item === 'string');
+        }
+      } else {
+        if ((!newLocation && newPresent.length === 0) && deltas) {
+          const inferredPresent = new Set<string>();
+          for (const fullKey in deltas) {
+            const instruction = deltas[fullKey];
+            if (instruction.op === 'declare') {
+              const parts = instruction.key.split('.');
+              if (parts.length >= 2) {
+                const category = parts[0];
+                const entity = parts[1];
+                const valueObj = instruction.value as Record<string, any>;
+                if (valueObj && (valueObj.tag === "character" || valueObj.tag === "location")) {
+                  inferredPresent.add(`${category}.${entity}`);
+                }
+              }
+              if (instruction.key === "world.location" && typeof instruction.value === 'string') {
+                newLocation = instruction.value;
+              }
+            }
+          }
+          newPresent = Array.from(inferredPresent);
+        }
+      }
+
+      draft.scene.location = newLocation;
+      draft.scene.present = newPresent;
+    });
+  }
+
+  // --- World State Direct Modification Methods (Immutable) ---
+
+  public renameCategory(currentWorldState: Record<string, any>, currentPinnedKeys: string[], oldName: string, newName: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] } {
+    const updatedWorldState = produce(currentWorldState, draft => {
+      if (draft[oldName]) {
+        draft[newName] = draft[oldName];
+        delete draft[oldName];
+      }
+    });
+
+    const updatedPinnedKeys = currentPinnedKeys.map(key =>
+      key.startsWith(oldName + '.') ? `${newName}${key.substring(oldName.length)}` : key
+    );
+    return { updatedWorldState, updatedPinnedKeys };
+  }
+
+  public renameEntity(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string, oldName: string, newName: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] } {
+    const updatedWorldState = produce(currentWorldState, draft => {
+      const categoryObj = draft[category];
+      if (categoryObj && categoryObj[oldName]) {
+        categoryObj[newName] = categoryObj[oldName];
+        delete categoryObj[oldName];
+      }
+    });
+
+    const oldEntityPath = `${category}.${oldName}`;
+    const newEntityPath = `${category}.${newName}`;
+    const updatedPinnedKeys = currentPinnedKeys.map(key =>
+      key.startsWith(oldEntityPath + '.') ? `${newEntityPath}${key.substring(oldEntityPath.length)}` : key
+    );
+    return { updatedWorldState, updatedPinnedKeys };
+  }
+
+  public deleteCategory(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] } {
+    const updatedWorldState = produce(currentWorldState, draft => {
+      delete draft[category];
+    });
+    const updatedPinnedKeys = currentPinnedKeys.filter(key => !key.startsWith(category + '.'));
+    return { updatedWorldState, updatedPinnedKeys };
+  }
+
+  public deleteEntity(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string, entity: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] } {
+    const updatedWorldState = produce(currentWorldState, draft => {
+      const categoryObj = draft[category];
+      if (categoryObj && categoryObj[entity]) {
+        delete categoryObj[entity];
+      }
+    });
+    const entityPath = `${category}.${entity}`;
+    const updatedPinnedKeys = currentPinnedKeys.filter(key => !key.startsWith(entityPath + '.'));
+    return { updatedWorldState, updatedPinnedKeys };
+  }
+
+  public editKeyValue(currentWorldState: Record<string, any>, key: string, value: any): Record<string, any> {
+    return produce(currentWorldState, draft => {
+      const parts = key.split('.');
+      let current: any = draft;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        if (!current[part] || typeof current[part] !== 'object') {
+          current[part] = {};
+        }
+        current = current[part];
+      }
+      current[parts[parts.length - 1]] = value;
+    });
+  }
+
+  public deleteKey(currentWorldState: Record<string, any>, currentPinnedKeys: string[], key: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] } {
+    const updatedWorldState = produce(currentWorldState, draft => {
+      const parts = key.split('.');
+      let current: any = draft;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const part = parts[i];
+        if (!(part in current)) {
+          return; // Path doesn't exist, nothing to delete
+        }
+        current = current[part];
+      }
+      delete current[parts[parts.length - 1]];
+    });
+    const updatedPinnedKeys = currentPinnedKeys.filter(pk => pk !== key);
+    return { updatedWorldState, updatedPinnedKeys };
+  }
+}
+@@END_FILE@@
+
+@@FILE: src/logic/IContextStackAssembler.ts =====
+// src/logic/IContextStackAssembler.ts
+import type { PromptCard, GameState, LogEntry, Message } from '../models';
+
+/**
+ * Defines the contract for a service that assembles the dynamic parts
+ * of an AI prompt's context based on StackInstructions.
+ */
+export interface IContextStackAssembler {
+  /**
+   * Assembles the full dynamic context stack based on the rules in the prompt card.
+   * @param card The active PromptCard containing the StackInstructions.
+   * @param gameState The current GameState.
+   * @param logEntries The history of log entries for the session.
+   * @returns An array of Message objects representing the assembled context.
+   */
+  assembleContext(
+    card: PromptCard,
+    gameState: GameState,
+    logEntries: LogEntry[]
+  ): Message[];
+}
+
+
+@@END_FILE@@
+
+@@FILE: src/logic/IGameStateManager.ts =====
+// src/logic/IGameStateManager.ts
+
+import type { GameState, DeltaMap } from '../models';
+
+/**
+ * Defines the contract for managing the mutable state of the game (worldState and scene).
+ * This manager operates on GameState objects and does not directly interact with repositories.
+ */
+export interface IGameStateManager {
+  /**
+   * Applies delta instructions to the worldState within a given GameState.
+   * @param gameState The current game state to modify.
+   * @param deltas The map of delta instructions to apply.
+   * @returns A new GameState object with deltas applied (immutable update).
+   */
+  applyDeltasToGameState(gameState: GameState, deltas: DeltaMap): GameState;
+
+  /**
+   * Updates the scene state within a given GameState based on parsed AI output or inferred deltas.
+   * @param gameState The current game state to modify.
+   * @param parsedScene The parsed scene object from AI output.
+   * @param deltas The delta map (for inference if no explicit scene).
+   * @returns A new GameState object with updated scene (immutable update).
+   */
+  updateSceneState(gameState: GameState, parsedScene: Record<string, any> | null | undefined, deltas: DeltaMap): GameState;
+
+  // Methods for direct world state modification (now immutable operations)
+  renameCategory(currentWorldState: Record<string, any>, currentPinnedKeys: string[], oldName: string, newName: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] };
+  renameEntity(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string, oldName: string, newName: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] };
+  deleteCategory(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] };
+  deleteEntity(currentWorldState: Record<string, any>, currentPinnedKeys: string[], category: string, entity: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] };
+  editKeyValue(currentWorldState: Record<string, any>, key: string, value: any): Record<string, any>;
+  deleteKey(currentWorldState: Record<string, any>, currentPinnedKeys: string[], key: string): { updatedWorldState: Record<string, any>; updatedPinnedKeys: string[] };
+}
+@@END_FILE@@
+
+@@FILE: src/logic/ISnapshotUpdater.ts =====
+// src/logic/ISnapshotUpdater.ts
+import type { GameSnapshot, ParsedNarrationOutput, LogEntry } from '../models';
+
+export interface ITurnResult {
+  parsedOutput: ParsedNarrationOutput;
+  logEntry: LogEntry;
+  playerAction?: string; // Include the player's action for conversation history
+}
+
+export interface ISnapshotUpdater {
+  /**
+   * Applies the result of a processed turn to a game snapshot.
+   * This handles updating game state from deltas, scene changes, adding logs,
+   * updating conversation history, and incrementing the turn counter.
+   * @param snapshot The current GameSnapshot.
+   * @param turnResult The result from the TurnProcessor.
+   * @returns A new, updated GameSnapshot.
+   */
+  applyTurnResultToSnapshot(snapshot: GameSnapshot, turnResult: ITurnResult): GameSnapshot;
+
+  /**
+   * Applies a direct world state category rename to the snapshot.
+   * @returns A new, updated GameSnapshot.
+   */
+  applyCategoryRename(snapshot: GameSnapshot, oldName: string, newName: string): GameSnapshot;
+
+  /**
+   * Applies a direct world state entity rename to the snapshot.
+   * @returns A new, updated GameSnapshot.
+   */
+  applyEntityRename(snapshot: GameSnapshot, category: string, oldName: string, newName: string): GameSnapshot;
+  applyCategoryDelete(snapshot: GameSnapshot, category: string): GameSnapshot;
+  applyEntityDelete(snapshot: GameSnapshot, category: string, entity: string): GameSnapshot;
+  applyKeyValueEdit(snapshot: GameSnapshot, key: string, value: any): GameSnapshot;
+  applyKeyDelete(snapshot: GameSnapshot, key: string): GameSnapshot;
+  applyPinToggle(snapshot: GameSnapshot, keyPath: string, type: 'variable' | 'entity' | 'category'): GameSnapshot;
+}
+@@END_FILE@@
+
+@@FILE: src/logic/ITurnProcessor.ts =====
+// src/logic/ITurnProcessor.ts
+
+import type {
+  PromptCard,
+  GameState,
+  LogEntry,
+  Message,
+  AiConnection,
+  ParsedNarrationOutput,
+  TokenSummary
+} from '../models';
+
+/**
+ * Defines the contract for processing individual game turns, including AI interaction.
+ */
+export interface ITurnProcessor {
+  /**
+   * Processes a player's action, generating the AI response and updating conversation history/logs.
+   * Handles both the initial turn and subsequent turns.
+   *
+   * @param userId The ID of the current user.
+   * @param card The PromptCard used for the game.
+   * @param currentGameState The current game state before the turn.
+   * @param logs The current game logs.
+   * @param conversationHistory The current conversation history.
+   * @param action The player's input string.
+   * @param turnNumber The current turn number.
+   * @param useDummyNarrator Flag to use a dummy AI.
+   * @param aiConnections User's configured AI connections.
+   * @param isFirstPlayerAction True if this is the first player input after game start.
+   */
+  processPlayerTurn(
+    userId: string,
+    card: PromptCard,
+    currentGameState: GameState,
+    logs: LogEntry[],
+    conversationHistory: Message[],
+    action: string,
+    turnNumber: number,
+    useDummyNarrator: boolean,
+    aiConnections: AiConnection[],
+    isFirstPlayerAction: boolean // <-- PATCHED
+  ): Promise<{
+    parsedOutput: ParsedNarrationOutput;
+    logEntry: LogEntry;
+    aiRawOutput: string;
+    tokenUsage: TokenSummary | null;
+  }>;
+}
+
+@@END_FILE@@
+
+@@FILE: src/logic/logManager.ts =====
 // src/logic/logManager.ts
 
 import { DELTA_MARKER } from './deltaParser'; // Import DELTA_MARKER
@@ -2768,7 +2449,8 @@ class LogManager implements ILogManager {
 
 export const logManager = new LogManager();
 @@END_FILE@@
-@@FILE: src/logic/promptBuilder.ts
+
+@@FILE: src/logic/promptBuilder.ts =====
 // src/logic/promptBuilder.ts
 import type { PromptCard, GameState, LogEntry, Message } from '../models';
 
@@ -2852,7 +2534,358 @@ export class PromptBuilder implements IPromptBuilder {
 export const promptBuilder = new PromptBuilder();
 
 @@END_FILE@@
-@@FILE: src/main.tsx
+
+@@FILE: src/logic/SnapshotUpdater.ts =====
+// src/logic/SnapshotUpdater.ts
+import { produce } from 'immer';
+import type { GameSnapshot } from '../models';
+import type { IGameStateManager } from './IGameStateManager';
+import type { ISnapshotUpdater, ITurnResult } from './ISnapshotUpdater';
+import { flattenJsonObject, getNestedValue } from '../utils/jsonUtils';
+
+export class SnapshotUpdater implements ISnapshotUpdater {
+  constructor(private gameStateManager: IGameStateManager) {
+    console.log('[SnapshotUpdater.ts] SnapshotUpdater constructor called.');
+  }
+
+  public applyTurnResultToSnapshot(snapshot: GameSnapshot, turnResult: ITurnResult): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyTurnResultToSnapshot: Starting for snapshot ${snapshot.id}. Turn: ${snapshot.currentTurn}`);
+    const { parsedOutput, logEntry, playerAction } = turnResult;
+
+    const newSnapshot = produce(snapshot, draft => {
+      let stateAfterDeltas = this.gameStateManager.applyDeltasToGameState(draft.gameState, parsedOutput.deltas);
+      let finalGameState = this.gameStateManager.updateSceneState(stateAfterDeltas, parsedOutput.scene, parsedOutput.deltas);
+
+      finalGameState.narration = parsedOutput.prose;
+      draft.gameState = finalGameState;
+
+      if (playerAction) {
+        draft.conversationHistory.push({ role: 'user', content: playerAction });
+      }
+      draft.conversationHistory.push({ role: 'assistant', content: parsedOutput.prose });
+      
+      draft.logs.push(logEntry);
+
+      draft.currentTurn += 1;
+      draft.updatedAt = new Date().toISOString();
+    });
+    console.log(`[SnapshotUpdater.ts] applyTurnResultToSnapshot: Finished. New snapshot ID: ${newSnapshot.id}.`);
+    return newSnapshot;
+  }
+
+  public applyCategoryRename(snapshot: GameSnapshot, oldName: string, newName: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyCategoryRename: ${oldName} -> ${newName}`);
+    return produce(snapshot, draft => {
+      const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.renameCategory(
+        draft.gameState.worldState,
+        draft.worldStatePinnedKeys,
+        oldName,
+        newName
+      );
+      draft.gameState.worldState = updatedWorldState;
+      draft.worldStatePinnedKeys = updatedPinnedKeys;
+      draft.updatedAt = new Date().toISOString();
+    });
+  }
+
+  public applyEntityRename(snapshot: GameSnapshot, category: string, oldName: string, newName: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyEntityRename: ${category}.${oldName} -> ${category}.${newName}`);
+    return produce(snapshot, draft => {
+      const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.renameEntity(
+        draft.gameState.worldState,
+        draft.worldStatePinnedKeys,
+        category,
+        oldName,
+        newName
+      );
+      draft.gameState.worldState = updatedWorldState;
+      draft.worldStatePinnedKeys = updatedPinnedKeys;
+      draft.updatedAt = new Date().toISOString();
+    });
+  }
+  
+  public applyCategoryDelete(snapshot: GameSnapshot, category: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyCategoryDelete: ${category}`);
+     return produce(snapshot, draft => {
+      const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.deleteCategory(
+        draft.gameState.worldState,
+        draft.worldStatePinnedKeys,
+        category
+      );
+      draft.gameState.worldState = updatedWorldState;
+      draft.worldStatePinnedKeys = updatedPinnedKeys;
+      draft.updatedAt = new Date().toISOString();
+    });
+  }
+
+  public applyEntityDelete(snapshot: GameSnapshot, category: string, entity: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyEntityDelete: ${category}.${entity}`);
+     return produce(snapshot, draft => {
+      const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.deleteEntity(
+        draft.gameState.worldState,
+        draft.worldStatePinnedKeys,
+        category,
+        entity
+      );
+      draft.gameState.worldState = updatedWorldState;
+      draft.worldStatePinnedKeys = updatedPinnedKeys;
+      draft.updatedAt = new Date().toISOString();
+    });
+  }
+
+  public applyKeyValueEdit(snapshot: GameSnapshot, key: string, value: any): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyKeyValueEdit: ${key} = ${JSON.stringify(value)}`);
+     return produce(snapshot, draft => {
+      draft.gameState.worldState = this.gameStateManager.editKeyValue(
+        draft.gameState.worldState,
+        key,
+        value
+      );
+      draft.updatedAt = new Date().toISOString();
+    });
+  }
+
+  public applyKeyDelete(snapshot: GameSnapshot, key: string): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyKeyDelete: ${key}`);
+     return produce(snapshot, draft => {
+      const { updatedWorldState, updatedPinnedKeys } = this.gameStateManager.deleteKey(
+        draft.gameState.worldState,
+        draft.worldStatePinnedKeys,
+        key
+      );
+      draft.gameState.worldState = updatedWorldState;
+      draft.worldStatePinnedKeys = updatedPinnedKeys;
+      draft.updatedAt = new Date().toISOString();
+    });
+  }
+
+  public applyPinToggle(snapshot: GameSnapshot, keyPath: string, type: 'variable' | 'entity' | 'category'): GameSnapshot {
+    console.log(`[SnapshotUpdater.ts] applyPinToggle: Starting for snapshot ${snapshot.id}, keyPath: ${keyPath}, type: ${type}.`);
+    const newSnapshot = produce(snapshot, draft => {
+      const currentWorldState = draft.gameState.worldState || {};
+      const currentPinnedKeys = draft.worldStatePinnedKeys || [];
+      const newPinnedKeys = new Set(currentPinnedKeys);
+
+      const getAllChildVariableKeys = (basePath: string): string[] => {
+        const nestedData = getNestedValue(currentWorldState, basePath.split('.'));
+        if (typeof nestedData !== 'object' || nestedData === null) return [];
+        const flattened = flattenJsonObject(nestedData, basePath);
+        return Object.keys(flattened).filter(key => flattened[key] !== undefined); // Only include existing keys
+      };
+
+      let relevantKeysToToggle: string[] = [];
+      if (type === 'variable') {
+        relevantKeysToToggle = [keyPath];
+      } else { // 'entity' or 'category'
+        relevantKeysToToggle = getAllChildVariableKeys(keyPath);
+      }
+
+      // If there are no keys to toggle (e.g., entity doesn't exist), do nothing.
+      if (relevantKeysToToggle.length === 0) {
+        console.warn(`[SnapshotUpdater.ts] applyPinToggle: No relevant keys found for ${type} at "${keyPath}". No change.`);
+        return; // No changes to draft
+      }
+      
+      const areAllChildrenCurrentlyPinned = relevantKeysToToggle.every(key => newPinnedKeys.has(key));
+      const shouldPin = !areAllChildrenCurrentlyPinned; 
+
+      console.log(`[SnapshotUpdater.ts] applyPinToggle: Relevant keys (${relevantKeysToToggle.length}): ${relevantKeysToToggle.join(', ')}. ShouldPin: ${shouldPin}`);
+
+      relevantKeysToToggle.forEach(key => {
+        if (shouldPin) {
+          newPinnedKeys.add(key);
+        } else {
+          newPinnedKeys.delete(key);
+        }
+      });
+
+      draft.worldStatePinnedKeys = Array.from(newPinnedKeys).sort();
+      draft.updatedAt = new Date().toISOString();
+      console.log(`[SnapshotUpdater.ts] applyPinToggle: Final pinned keys count: ${draft.worldStatePinnedKeys.length}.`);
+    });
+    console.log(`[SnapshotUpdater.ts] applyPinToggle: Finished. New snapshot ID: ${newSnapshot.id}.`);
+    return newSnapshot;
+  }
+}
+@@END_FILE@@
+
+@@FILE: src/logic/TurnProcessor.ts =====
+// src/logic/TurnProcessor.ts
+
+import type { AiSettings, AiConnection, GameState, LogEntry, Message, ParsedNarrationOutput, PromptCard, TokenSummary } from '../models';
+import type { IAiClient } from './aiClient';
+import { parseNarratorOutput } from './deltaParser';
+import type { ILogManager } from './logManager';
+import type { IPromptBuilder } from './promptBuilder';
+import type { ITurnProcessor } from './ITurnProcessor';
+import type { ModelInfo } from '../data/config/aiConnectionTemplates';
+
+// Define a simple DummyAiClient for testing and dev
+class DummyAiClient implements IAiClient {
+  async generateCompletion(
+    connection: AiConnection,
+    messages: Message[],
+    settings: AiSettings
+  ): Promise<string> {
+    console.log("Dummy Narrator: Simulating AI response...");
+    const lastUserMessage = messages.slice().reverse().find(m => m.role === 'user')?.content || 'No user input.';
+    const dummyResponse = {
+      choices: [{
+        message: {
+          content: `The dummy narrator observes your action: "${lastUserMessage}". A ripple of arcane energy flows through the air, subtly shifting the very fabric of reality around you. You hear a distant chime, and a curious, ancient tome appears at your feet.
+
+@digest
+\`\`\`json
+[
+  { "text": "The world reacted to your input: '${lastUserMessage}'.", "importance": 2 },
+  { "text": "Something new has manifested nearby: the $enchanted_quill.", "importance": 4, "tags": ["$enchanted_quill"] },
+  { "text": "#Brom's disposition shifted slightly.", "importance": 3, "tags": ["#brom"] },
+  { "text": "A critical system event occurred, requiring your attention!", "importance": 5 }
+]
+\`\`\`
+
+@delta
+\`\`\`json
+{
+  "=player.hp": 85,
+  "+player.gold": 5,
+  "!items.$enchanted_quill.description": "A quill that seems to hum with forgotten magic, vibrating faintly.",
+  "-npcs.#old_sage.wisdom" : true,
+  "=player.status": "observant"
+}
+\`\`\`
+
+@scene
+\`\`\`json
+{
+  "location": "@forest_clearing",
+  "present": ["#you", "#lyrielle", "$enchanted_quill"],
+  "weather": "clear and crisp"
+}
+\`\`\`
+`
+        }
+      }],
+      usage: {
+        prompt_tokens: 10,
+        completion_tokens: 150,
+        total_tokens: 160,
+      }
+    };
+    return Promise.resolve(JSON.stringify(dummyResponse));
+  }
+
+  async testConnection(connection: AiConnection): Promise<{ success: boolean; message: string }> {
+    return Promise.resolve({
+      success: true,
+      message: "Dummy client: test always passes."
+    });
+  }
+
+  async listModels(connection: Pick<AiConnection, 'apiUrl' | 'apiToken'>): Promise<ModelInfo[]> {
+    return Promise.resolve([
+      { id: 'dummy-model', name: 'Dummy Model' }
+    ]);
+  }
+}
+
+export class TurnProcessor implements ITurnProcessor {
+  private realAiClient: IAiClient;
+  private dummyAiClient: IAiClient;
+  private builder: IPromptBuilder;
+  private logManager: ILogManager;
+
+  constructor(
+    aiClient: IAiClient,
+    promptBuilder: IPromptBuilder,
+    logManager: ILogManager
+  ) {
+    this.realAiClient = aiClient;
+    this.builder = promptBuilder;
+    this.logManager = logManager;
+    this.dummyAiClient = new DummyAiClient();
+  }
+
+  private async executeAiCall(
+    connection: AiConnection,
+    messages: Message[],
+    settings: AiSettings,
+    useDummyNarrator: boolean
+  ): Promise<{ aiRawOutput: string; tokenUsage: TokenSummary | null; fullResponse: string }> {
+    const activeClient = useDummyNarrator ? this.dummyAiClient : this.realAiClient;
+    const fullResponse = await activeClient.generateCompletion(connection, messages, settings);
+
+    let aiRawOutput = '';
+    let tokenUsage: TokenSummary | null = null;
+    try {
+      const parsedJson = JSON.parse(fullResponse);
+      aiRawOutput = parsedJson.choices?.[0]?.message?.content?.trim() || fullResponse;
+      tokenUsage = parsedJson.usage ? {
+        inputTokens: parsedJson.usage.prompt_tokens || 0,
+        outputTokens: parsedJson.usage.completion_tokens || 0,
+        totalTokens: parsedJson.usage.total_tokens || 0,
+      } : null;
+    } catch (e) {
+      aiRawOutput = fullResponse;
+    }
+    return { aiRawOutput, tokenUsage, fullResponse };
+  }
+
+  async processPlayerTurn(
+    userId: string,
+    card: PromptCard,
+    currentGameState: GameState,
+    logs: LogEntry[],
+    conversationHistory: Message[],
+    action: string,
+    turnNumber: number,
+    useDummyNarrator: boolean,
+    aiConnections: AiConnection[],
+    isFirstPlayerAction: boolean
+  ): Promise<{ parsedOutput: ParsedNarrationOutput; logEntry: LogEntry; aiRawOutput: string; tokenUsage: TokenSummary | null; }> {
+    const messagesToSend = this.builder.buildEveryTurnPrompt(
+      card,
+      currentGameState,
+      logs,
+      conversationHistory,
+      action,
+      isFirstPlayerAction
+    );
+    const contextSnapshotForLog = JSON.stringify(messagesToSend, null, 2);
+
+    const connection = aiConnections.find(c => c.id === card.aiSettings.selectedConnectionId);
+    if (!connection && !useDummyNarrator) {
+      throw new Error(`AI connection ${card.aiSettings.selectedConnectionId} not found.`);
+    }
+
+    const startTime = performance.now();
+    const { aiRawOutput, tokenUsage, fullResponse } = await this.executeAiCall(connection!, messagesToSend, card.aiSettings, useDummyNarrator);
+    const latencyMs = Math.round(performance.now() - startTime);
+
+    const parsedOutput = parseNarratorOutput(aiRawOutput);
+
+    const logEntry = this.logManager.assembleTurnLogEntry({
+      turnNumber: turnNumber,
+      userInput: action,
+      rawNarratorOutput: aiRawOutput,
+      parsedOutput: parsedOutput,
+      contextSnapshot: contextSnapshotForLog,
+      tokenUsage: tokenUsage,
+      aiSettings: card.aiSettings,
+      apiRequestBody: JSON.stringify({ model: connection?.modelSlug, messages: "..." }, null, 2),
+      apiResponseBody: fullResponse,
+      apiUrl: connection ? new URL("chat/completions", connection.apiUrl).href : 'dummy-url',
+      latencyMs: latencyMs,
+      modelSlugUsed: connection?.modelSlug || 'dummy-model',
+    });
+
+    return { parsedOutput, logEntry, aiRawOutput, tokenUsage };
+  }
+}
+
+@@END_FILE@@
+
+@@FILE: src/main.tsx =====
 // src/main.tsx
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -2871,7 +2904,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>,
 );
 @@END_FILE@@
-@@FILE: src/models/AiConnection.ts
+
+@@FILE: src/models/AiConnection.ts =====
 // src/models/AiConnection.ts
 
 /**
@@ -2893,7 +2927,8 @@ export interface AiConnection {
   lastUpdated: string; // ISO 8601 string
 }
 @@END_FILE@@
-@@FILE: src/models/DeltaInstruction.ts
+
+@@FILE: src/models/DeltaInstruction.ts =====
 // src/models/DeltaInstruction.ts
 
 /**
@@ -2913,7 +2948,8 @@ export type DeltaInstruction =
 // Helper type for the map of deltas
 export type DeltaMap = { [fullKey: string]: DeltaInstruction };
 @@END_FILE@@
-@@FILE: src/models/GameSnapshot.ts
+
+@@FILE: src/models/GameSnapshot.ts =====
 // src/models/GameSnapshot.ts
 
 import type { GameState, LogEntry, Message } from './index';
@@ -2949,7 +2985,8 @@ export interface GameSnapshot {
   worldStatePinnedKeys: string[]; // Stores full variable paths, e.g., "npcs.#fox.hp"
 }
 @@END_FILE@@
-@@FILE: src/models/GameState.ts
+
+@@FILE: src/models/GameState.ts =====
 // src/models/GameState.ts
 
 /**
@@ -2971,7 +3008,24 @@ export interface GameState {
   scene: SceneState; // The current scene state
 }
 @@END_FILE@@
-@@FILE: src/models/LogEntry.ts
+
+@@FILE: src/models/index.ts =====
+// src/models/index.ts
+
+// Re-export all models for easier importing
+export * from './AiConnection';
+export * from './DeltaInstruction';
+export * from './GameSnapshot';
+export * from './GameState.ts';
+export * from './LogEntry';
+export * from './LogEntryElements';
+export * from './Message';
+export * from './ParsedNarrationOutput';
+export * from './PromptCard';
+export * from './StackInstructions';
+@@END_FILE@@
+
+@@FILE: src/models/LogEntry.ts =====
 // src/models/LogEntry.ts
 
 import type { DeltaMap, DigestLine, TokenSummary, LogErrorFlag, AiSettings } from './index';
@@ -3003,7 +3057,8 @@ export interface LogEntry {
  modelSlugUsed: string;
 }
 @@END_FILE@@
-@@FILE: src/models/LogEntryElements.ts
+
+@@FILE: src/models/LogEntryElements.ts =====
 // src/models/LogEntryElements.ts
 
 /**
@@ -3041,7 +3096,8 @@ export type LogErrorFlag =
   | 'UNKNOWN_ERROR';
 // Add more flags as needed based on your LogErrorFlag enum/sealed class if it exists.
 @@END_FILE@@
-@@FILE: src/models/Message.ts
+
+@@FILE: src/models/Message.ts =====
 // src/models/Message.ts
 
 /**
@@ -3053,7 +3109,8 @@ export interface Message {
   content: string;
 }
 @@END_FILE@@
-@@FILE: src/models/ParsedNarrationOutput.ts
+
+@@FILE: src/models/ParsedNarrationOutput.ts =====
 // src/models/ParsedNarrationOutput.ts
 
 import type { DeltaMap, DigestLine} from './index';
@@ -3074,7 +3131,8 @@ export interface ParsedNarrationOutput {
   scene?: Record<string, any> | null; // Corresponds to the JsonObject? for the @scene block
 }
 @@END_FILE@@
-@@FILE: src/models/PromptCard.ts
+
+@@FILE: src/models/PromptCard.ts =====
 // src/models/PromptCard.ts
 
 import type { StackInstructions} from './index';
@@ -3151,7 +3209,8 @@ export interface NewPromptCardData {
   historyBrowsingEnabled?: boolean;
 }
 @@END_FILE@@
-@@FILE: src/models/StackInstructions.ts
+
+@@FILE: src/models/StackInstructions.ts =====
 // src/models/StackInstructions.ts
 
 /**
@@ -3235,22 +3294,8 @@ export interface StackInstructions {
   tokenPolicy: TokenPolicy;
 }
 @@END_FILE@@
-@@FILE: src/models/index.ts
-// src/models/index.ts
 
-// Re-export all models for easier importing
-export * from './AiConnection';
-export * from './DeltaInstruction';
-export * from './GameSnapshot';
-export * from './GameState.ts';
-export * from './LogEntry';
-export * from './LogEntryElements';
-export * from './Message';
-export * from './ParsedNarrationOutput';
-export * from './PromptCard';
-export * from './StackInstructions';
-@@END_FILE@@
-@@FILE: src/pages/SourceDump.tsx
+@@FILE: src/pages/SourceDump.tsx =====
 //SourceDump.tsx
 import React, { useEffect, useState } from 'react';
 
@@ -3280,7 +3325,8 @@ const SourceDump: React.FC = () => {
 export default SourceDump;
 
 @@END_FILE@@
-@@FILE: src/providers/GameSessionAndStoreProvider.tsx
+
+@@FILE: src/providers/GameSessionAndStoreProvider.tsx =====
 import React, { useRef } from 'react';
 import { GameSession } from '../logic/gameSession';
 import type { IGameSession } from '../logic/gameSession';
@@ -3316,7 +3362,8 @@ export const GameSessionAndStoreProvider: React.FC<GameSessionAndStoreProviderPr
 };
 
 @@END_FILE@@
-@@FILE: src/state/useAuthStore.ts
+
+@@FILE: src/state/useAuthStore.ts =====
 // src/state/useAuthStore.ts
 
 import { create } from 'zustand';
@@ -3383,7 +3430,8 @@ const unsubscribe = subscribeToAuthChanges((user) => {
 // If you were to integrate this into a React component's useEffect, you'd return the unsubscribe function.
 // For a global store, we typically let it live.
 @@END_FILE@@
-@@FILE: src/state/useGameStateStore.ts
+
+@@FILE: src/state/useGameStateStore.ts =====
 // src/state/useGameStateStore.ts
 import { create } from 'zustand';
 import type { GameSnapshot, GameState, LogEntry, Message } from '../models';
@@ -3672,7 +3720,8 @@ export const selectWorldStatePinnedKeys = (state: GameStateStore): string[] => {
   return state.currentSnapshot?.worldStatePinnedKeys ?? [];
 };
 @@END_FILE@@
-@@FILE: src/state/useLogStore.ts
+
+@@FILE: src/state/useLogStore.ts =====
 // src/state/useLogStore.ts
 
 import { create } from 'zustand';
@@ -3711,7 +3760,8 @@ export const useLogStore = create<LogState>((set) => ({
   },
 }));
 @@END_FILE@@
-@@FILE: src/state/usePromptCardStore.ts
+
+@@FILE: src/state/usePromptCardStore.ts =====
 // src/state/usePromptCardStore.ts
 
 import { create } from 'zustand';
@@ -3884,7 +3934,8 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
   },
 }));
 @@END_FILE@@
-@@FILE: src/state/useSettingsStore.ts
+
+@@FILE: src/state/useSettingsStore.ts =====
 // src/state/useSettingsStore.ts
 
 import { create } from 'zustand';
@@ -4058,7 +4109,8 @@ export const useSettingsStore = create<SettingsState>()(
 );
 
 @@END_FILE@@
-@@FILE: src/theme/index.ts
+
+@@FILE: src/theme/index.ts =====
 // src/theme/index.ts
 import { createTheme } from '@mui/material/styles';
 
@@ -4216,7 +4268,8 @@ export const getAppTheme = (mode: 'light' | 'dark') => {
 };
 
 @@END_FILE@@
-@@FILE: src/ui/components/AiSettingsEditor.tsx
+
+@@FILE: src/ui/components/AiSettingsEditor.tsx =====
 // src/ui/components/AiSettingsEditor.tsx
 
 import React from 'react';
@@ -4389,7 +4442,8 @@ export const AiSettingsEditor: React.FC<AiSettingsEditorProps> = ({
   );
 };
 @@END_FILE@@
-@@FILE: src/ui/components/AuthOrchestrator.tsx
+
+@@FILE: src/ui/components/AuthOrchestrator.tsx =====
 // src/ui/components/AuthOrchestrator.tsx
 import React, { useEffect, useReducer } from 'react';
 import { useAuthStore } from '../../state/useAuthStore';
@@ -4492,7 +4546,8 @@ const AuthOrchestrator: React.FC = () => {
 
 export default AuthOrchestrator;
 @@END_FILE@@
-@@FILE: src/ui/components/CollapsibleLogEntry.tsx
+
+@@FILE: src/ui/components/CollapsibleLogEntry.tsx =====
 // src/ui/components/CollapsibleLogEntry.tsx
 
 import React from 'react';
@@ -4543,7 +4598,8 @@ export const CollapsibleLogEntry: React.FC<CollapsibleLogEntryProps> = ({ entry,
 };
 
 @@END_FILE@@
-@@FILE: src/ui/components/CollapsibleSection.tsx
+
+@@FILE: src/ui/components/CollapsibleSection.tsx =====
 // src/ui/components/CollapsibleSection.tsx
 
 import React from 'react';
@@ -4608,7 +4664,8 @@ export const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   );
 };
 @@END_FILE@@
-@@FILE: src/ui/components/DetailedLogTurnView.tsx
+
+@@FILE: src/ui/components/DetailedLogTurnView.tsx =====
 // src/ui/components/DetailedLogTurnView.tsx
 
 import React from 'react';
@@ -4670,7 +4727,8 @@ export const DetailedLogTurnView: React.FC<DetailedLogTurnViewProps> = ({ entry,
   );
 };
 @@END_FILE@@
-@@FILE: src/ui/components/InfoDialog.tsx
+
+@@FILE: src/ui/components/InfoDialog.tsx =====
 // src/ui/components/InfoDialog.tsx
 
 import React, { useState } from 'react';
@@ -4722,7 +4780,8 @@ export const InfoDialog: React.FC<InfoDialogProps> = ({ title, content, iconSize
   );
 };
 @@END_FILE@@
-@@FILE: src/ui/components/LogEntryDisplay.tsx
+
+@@FILE: src/ui/components/LogEntryDisplay.tsx =====
 // src/ui/components/LogEntryDisplay.tsx
 
 import React from 'react';
@@ -4824,7 +4883,8 @@ export const LogEntryDisplay: React.FC<LogEntryDisplayProps> = ({ mode, entry })
   );
 };
 @@END_FILE@@
-@@FILE: src/ui/components/LogView.tsx
+
+@@FILE: src/ui/components/LogView.tsx =====
 // src/ui/components/LogView.tsx
 
 import React from 'react';
@@ -4913,7 +4973,8 @@ export const LogView: React.FC<LogViewProps> = ({
   );
 };
 @@END_FILE@@
-@@FILE: src/ui/components/MainLayout.tsx
+
+@@FILE: src/ui/components/MainLayout.tsx =====
 // src/ui/components/MainLayout.tsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -5022,7 +5083,8 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
 export default MainLayout;
 @@END_FILE@@
-@@FILE: src/ui/components/PinnedAttributeChip.tsx
+
+@@FILE: src/ui/components/PinnedAttributeChip.tsx =====
 // src/ui/components/PinnedAttributeChip.tsx
 
 import React from 'react';
@@ -5076,7 +5138,8 @@ export const PinnedAttributeChip: React.FC<PinnedAttributeChipProps> = React.mem
 );
 
 @@END_FILE@@
-@@FILE: src/ui/components/PinnedEntityGroup.tsx
+
+@@FILE: src/ui/components/PinnedEntityGroup.tsx =====
 // src/ui/components/PinnedEntityGroup.tsx
 
 import React from 'react';
@@ -5159,7 +5222,8 @@ export const PinnedEntityGroup: React.FC<PinnedEntityGroupProps> = ({
 };
 
 @@END_FILE@@
-@@FILE: src/ui/components/PinnedItemsView.tsx
+
+@@FILE: src/ui/components/PinnedItemsView.tsx =====
 import React, { useEffect, useCallback } from 'react';
 import { Box, Typography, Paper, Stack } from '@mui/material';
 import {
@@ -5277,7 +5341,8 @@ export const PinnedItemsView: React.FC = React.memo(() => {
 });
 
 @@END_FILE@@
-@@FILE: src/ui/components/PromptCard.tsx
+
+@@FILE: src/ui/components/PromptCard.tsx =====
 // src/ui/components/PromptCardCard.tsx
 import React from 'react';
 import {
@@ -5315,7 +5380,8 @@ export const PromptCardCard: React.FC<PromptCardCardProps> = ({ card, onEdit, on
 };
 
 @@END_FILE@@
-@@FILE: src/ui/components/PromptCardEditorDialog.tsx
+
+@@FILE: src/ui/components/PromptCardEditorDialog.tsx =====
 // src/ui/components/PromptCardEditorDialog.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -5427,7 +5493,8 @@ export const PromptCardEditorDialog: React.FC<PromptCardEditorDialogProps> = ({
 };
 
 @@END_FILE@@
-@@FILE: src/ui/components/PromptCardEditorPanel.tsx
+
+@@FILE: src/ui/components/PromptCardEditorPanel.tsx =====
 // src/ui/components/PromptCardEditorPanel.tsx
 import React from 'react';
 import { Box, Typography, Button, CircularProgress } from '@mui/material';
@@ -5519,7 +5586,8 @@ export const PromptCardEditorPanel: React.FC<PromptCardEditorPanelProps> = ({
   );
 };
 @@END_FILE@@
-@@FILE: src/ui/components/PromptCardEditorSections/AiSettingsSection.tsx
+
+@@FILE: src/ui/components/PromptCardEditorSections/AiSettingsSection.tsx =====
 // src/ui/components/PromptCardEditorSections/AiSettingsSection.tsx
 import React from 'react';
 import { Box, Typography, Slider, TextField } from '@mui/material';
@@ -5613,7 +5681,8 @@ export const AiSettingsSection: React.FC<AiSettingsSectionProps> = ({ settings, 
 };
 
 @@END_FILE@@
-@@FILE: src/ui/components/PromptCardEditorSections/EmitSkeletonSection.tsx
+
+@@FILE: src/ui/components/PromptCardEditorSections/EmitSkeletonSection.tsx =====
 // src/ui/components/PromptCardEditorSections/EmitSkeletonSection.tsx
 import React from 'react';
 import { Box, Typography, TextField } from '@mui/material';
@@ -5640,7 +5709,8 @@ export const EmitSkeletonSection: React.FC<EmitSkeletonSectionProps> = ({ emitSk
 };
 
 @@END_FILE@@
-@@FILE: src/ui/components/PromptCardEditorSections/GameRulesSection.tsx
+
+@@FILE: src/ui/components/PromptCardEditorSections/GameRulesSection.tsx =====
 // src/ui/components/PromptCardEditorSections/GameRulesSection.tsx
 import React from 'react';
 import { Box, Typography, TextField } from '@mui/material';
@@ -5667,7 +5737,8 @@ export const GameRulesSection: React.FC<GameRulesSectionProps> = ({ gameRules, o
 };
 
 @@END_FILE@@
-@@FILE: src/ui/components/PromptCardEditorSections/PromptSection.tsx
+
+@@FILE: src/ui/components/PromptCardEditorSections/PromptSection.tsx =====
 // src/ui/components/PromptCardEditorSections/PromptSection.tsx
 import React from 'react';
 import { Box, Typography, TextField } from '@mui/material';
@@ -5694,7 +5765,8 @@ export const PromptSection: React.FC<PromptSectionProps> = ({ prompt, onChange }
 };
 
 @@END_FILE@@
-@@FILE: src/ui/components/PromptCardEditorSections/WorldStateInitSection.tsx
+
+@@FILE: src/ui/components/PromptCardEditorSections/WorldStateInitSection.tsx =====
 // src/ui/components/PromptCardEditorSections/WorldStateInitSection.tsx
 import React from 'react';
 import { Box, Typography, TextField } from '@mui/material';
@@ -5721,7 +5793,8 @@ export const WorldStateInitSection: React.FC<WorldStateInitSectionProps> = ({ wo
 };
 
 @@END_FILE@@
-@@FILE: src/ui/components/PromptCardList.tsx
+
+@@FILE: src/ui/components/PromptCardList.tsx =====
 import React from 'react';
 import {
   List,
@@ -5815,7 +5888,8 @@ export const PromptCardList: React.FC<PromptCardListProps> = ({
 };
 
 @@END_FILE@@
-@@FILE: src/ui/components/PromptCardListPanel.tsx
+
+@@FILE: src/ui/components/PromptCardListPanel.tsx =====
 // src/ui/components/PromptCardListPanel.tsx
 import React from 'react';
 import { Box, Typography, Button } from '@mui/material';
@@ -5883,7 +5957,8 @@ export const PromptCardListPanel: React.FC<PromptCardListPanelProps> = ({
   );
 };
 @@END_FILE@@
-@@FILE: src/ui/components/ProtectedRoute.tsx
+
+@@FILE: src/ui/components/ProtectedRoute.tsx =====
 // src/ui/components/ProtectedRoute.tsx
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
@@ -5918,7 +5993,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
 
 export default ProtectedRoute;
 @@END_FILE@@
-@@FILE: src/ui/components/SourceDumpPanel.tsx
+
+@@FILE: src/ui/components/SourceDumpPanel.tsx =====
 // src/ui/components/SourceDumpPanel.tsx
 import React from 'react';
 import {
@@ -6274,7 +6350,309 @@ function renderLabel(node: FileNode, copyFolderTxt: any, copyFolderZipB64: any, 
 }
 
 @@END_FILE@@
-@@FILE: src/ui/components/StackInstructionsEditor.tsx
+
+@@FILE: src/ui/components/stackInstructions/DigestPolicyEditor.tsx =====
+// src/ui/components/stackInstructions/DigestPolicyEditor.tsx
+import React from 'react';
+import {
+  Box,
+  Typography,
+  TextField,
+  FormControl,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  Grid,
+  Switch,
+} from '@mui/material';
+import type {
+  DigestFilterPolicy,
+  EmissionRule
+} from '../../../models';
+
+import  {
+  StackMode,
+  FilterMode,
+} from '../../../models';
+import { InfoDialog } from '../InfoDialog';
+
+interface DigestPolicyEditorProps {
+  digestPolicy: DigestFilterPolicy;
+  digestEmission: Record<number, EmissionRule>;
+  onPolicyChange: (updatedPolicy: DigestFilterPolicy) => void;
+  onEmissionChange: (updatedEmission: Record<number, EmissionRule>) => void;
+}
+
+export const DigestPolicyEditor: React.FC<DigestPolicyEditorProps> = ({
+  digestPolicy,
+  digestEmission,
+  onPolicyChange,
+  onEmissionChange,
+}) => {
+  const handleEmissionRuleChange = (score: number, field: keyof EmissionRule, value: any) => {
+    const currentRule = digestEmission[score] || { mode: StackMode.NEVER, n: 0 };
+    onEmissionChange({
+      ...digestEmission,
+      [score]: { ...currentRule, [field]: value },
+    });
+  };
+
+  return (
+    <Box sx={{ mb: 4, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6" sx={{ flexGrow: 1 }}>
+          Digest Lines Emission & Policy
+        </Typography>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={digestPolicy.enabled ?? false}
+              onChange={(e) => onPolicyChange({ ...digestPolicy, enabled: e.target.checked })}
+            />
+          }
+          label="Enable"
+          labelPlacement="start"
+        />
+      </Box>
+      <Box sx={{ opacity: digestPolicy.enabled ? 1 : 0.5, pointerEvents: digestPolicy.enabled ? 'auto' : 'none' }}>
+        <Typography gutterBottom>
+          Global Digest Filtering Policy
+          <InfoDialog
+            title="Global Digest Filtering Policy"
+            content={`Applies a filter to ALL digest lines before their individual emission rules are checked.\n\n- NONE: No global filtering.\n- SCENE_ONLY: Only consider digests relevant to the current scene.\n- TAGGED: Only consider digests that have any tags.`}
+          />
+        </Typography>
+        <FormControl component="fieldset" fullWidth margin="normal">
+          <RadioGroup
+            row
+            value={digestPolicy.filtering}
+            onChange={(e) => onPolicyChange({ ...digestPolicy, filtering: e.target.value as FilterMode })}
+          >
+            {Object.values(FilterMode).map((mode) => (
+              <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
+            ))}
+          </RadioGroup>
+        </FormControl>
+        <Grid container spacing={2} sx={{ mt: 2 }}>
+          {[5, 4, 3, 2, 1].map((score) => (
+            // 1. Grid item is now ONLY responsible for layout.
+            <Grid item xs={12} sm={6} md={4} key={score}>
+              {/* 2. A nested Box handles ALL styling (border, padding). This resolves the error. */}
+              <Box sx={{ border: '1px solid', borderColor: 'divider', p: 1.5, borderRadius: 1 }}>
+                <Typography variant="subtitle2">
+                  Importance {score} Digests
+                  <InfoDialog
+                    title={`Digest Importance Score ${score} Rule`}
+                    content={`Determines how digest lines with an importance score of ${score} are included.`}
+                  />
+                </Typography>
+                <FormControl component="fieldset" fullWidth size="small">
+                  <RadioGroup
+                    row
+                    value={digestEmission[score]?.mode || StackMode.NEVER}
+                    onChange={(e) => handleEmissionRuleChange(score, 'mode', e.target.value as StackMode)}
+                  >
+                    {Object.values(StackMode).filter(m => m !== StackMode.FILTERED).map((mode) => (
+                      <FormControlLabel key={mode} value={mode} control={<Radio size="small" />} label={mode} sx={{ mb: -1 }}/>
+                    ))}
+                  </RadioGroup>
+                  {(digestEmission[score]?.mode === StackMode.FIRST_N ||
+                    digestEmission[score]?.mode === StackMode.AFTER_N) && (
+                      <TextField
+                        label="N"
+                        type="number"
+                        value={digestEmission[score]?.n || 0}
+                        onChange={(e) => handleEmissionRuleChange(score, 'n', parseInt(e.target.value))}
+                        size="small"
+                        sx={{ mt: 1, width: '100px' }}
+                        inputProps={{ min: 0 }}
+                      />
+                    )}
+                </FormControl>
+              </Box>
+            </Grid>
+          ))}
+        </Grid>        
+      </Box>
+    </Box>
+  );
+};
+@@END_FILE@@
+
+@@FILE: src/ui/components/stackInstructions/PolicyEditor.tsx =====
+// src/ui/components/stackInstructions/PolicyEditor.tsx
+import React from 'react';
+import {
+  Box,
+  Typography,
+  TextField,
+  FormControl,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  InputLabel,
+  Select,
+  MenuItem,
+  Switch,
+} from '@mui/material';
+import type { ProsePolicy} from '../../../models';
+import {StackMode, FilterMode } from '../../../models';
+import { InfoDialog } from '../InfoDialog';
+
+interface PolicyEditorProps {
+  title: string;
+  policy: ProsePolicy;
+  onPolicyChange: (updatedPolicy: ProsePolicy) => void;
+  infoContent: {
+    main: string;
+    mode: string;
+    filtering: string;
+  };
+}
+
+export const PolicyEditor: React.FC<PolicyEditorProps> = ({
+  title,
+  policy,
+  onPolicyChange,
+  infoContent,
+}) => {
+  const handleFieldChange = (field: keyof ProsePolicy, value: any) => {
+    onPolicyChange({ ...policy, [field]: value });
+  };
+
+  return (
+    <Box sx={{ mb: 4, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6" sx={{ flexGrow: 1 }}>
+          {title}
+          <InfoDialog title={title} content={infoContent.main} />
+        </Typography>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={policy.enabled ?? false}
+              onChange={(e) => handleFieldChange('enabled', e.target.checked)}
+            />
+          }
+          label="Enable"
+          labelPlacement="start"
+        />
+      </Box>
+      <Box sx={{ opacity: policy.enabled ? 1 : 0.5, pointerEvents: policy.enabled ? 'auto' : 'none' }}>
+        <Typography gutterBottom>
+          Mode
+          <InfoDialog title={`${title} Mode`} content={infoContent.mode} />
+        </Typography>
+        <FormControl component="fieldset" fullWidth margin="normal">
+          <RadioGroup
+            row
+            value={policy.mode}
+            onChange={(e) => handleFieldChange('mode', e.target.value as StackMode)}
+          >
+            {Object.values(StackMode).filter(m => m !== StackMode.FILTERED).map((mode) => (
+              <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
+            ))}
+          </RadioGroup>
+          {(policy.mode === StackMode.FIRST_N || policy.mode === StackMode.AFTER_N) && (
+            <TextField
+              label="N (Turns)"
+              type="number"
+              value={policy.n}
+              onChange={(e) => handleFieldChange('n', parseInt(e.target.value))}
+              sx={{ mt: 1, width: '150px' }}
+              inputProps={{ min: 0 }}
+            />
+          )}
+        </FormControl>
+
+        <Typography gutterBottom sx={{ mt: 2 }}>
+          Filtering
+          <InfoDialog title={`${title} Filtering`} content={infoContent.filtering} />
+        </Typography>
+        <FormControl fullWidth>
+          <InputLabel id={`${title}-filtering-label`}>Filtering</InputLabel>
+          <Select
+            labelId={`${title}-filtering-label`}
+            value={policy.filtering}
+            label="Filtering"
+            onChange={(e) => handleFieldChange('filtering', e.target.value as FilterMode)}
+          >
+            {Object.values(FilterMode).map((mode) => (
+              <MenuItem key={mode} value={mode}>{mode}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
+    </Box>
+  );
+};
+@@END_FILE@@
+
+@@FILE: src/ui/components/stackInstructions/TokenPolicyEditor.tsx =====
+// src/ui/components/stackInstructions/TokenPolicyEditor.tsx
+import React from 'react';
+import { Box, Typography, TextField } from '@mui/material';
+import type { TokenPolicy } from '../../../models';
+import { InfoDialog } from '../InfoDialog';
+
+interface TokenPolicyEditorProps {
+  tokenPolicy: TokenPolicy;
+  onPolicyChange: (updatedPolicy: TokenPolicy) => void;
+}
+
+export const TokenPolicyEditor: React.FC<TokenPolicyEditorProps> = ({
+  tokenPolicy,
+  onPolicyChange,
+}) => {
+  const handleFieldChange = (field: keyof TokenPolicy, value: any) => {
+    onPolicyChange({ ...tokenPolicy, [field]: value });
+  };
+
+  return (
+    <Box>
+      <Typography variant="h6" gutterBottom>
+        Token Policy
+      </Typography>
+      <TextField
+        fullWidth
+        label="Min Tokens"
+        type="number"
+        value={tokenPolicy.minTokens}
+        onChange={(e) => handleFieldChange('minTokens', parseInt(e.target.value))}
+        sx={{ mb: 2 }}
+        inputProps={{ min: 0 }}
+        InputProps={{
+          endAdornment: <InfoDialog title="Min Tokens" content="The AI will attempt to generate a response of at least this many tokens." />
+        }}
+      />
+      <TextField
+        fullWidth
+        label="Max Tokens"
+        type="number"
+        value={tokenPolicy.maxTokens}
+        onChange={(e) => handleFieldChange('maxTokens', parseInt(e.target.value))}
+        sx={{ mb: 2 }}
+        inputProps={{ min: 0 }}
+        InputProps={{
+          endAdornment: <InfoDialog title="Max Tokens" content="The absolute maximum number of tokens the AI can generate." />
+        }}
+      />
+      <TextField
+        fullWidth
+        label="Fallback Plan"
+        value={tokenPolicy.fallbackPlan.join(', ')}
+        onChange={(e) => handleFieldChange('fallbackPlan', e.target.value.split(',').map((s) => s.trim()))}
+        sx={{ mb: 2 }}
+        InputProps={{
+          endAdornment: <InfoDialog title="Fallback Plan" content={`A prioritized, comma-separated list of strategies the system will use to reduce the *input prompt's* token count if it exceeds the AI model's context window.\n\nCommon Strategies:\ndrop_known_entities, drop_low_importance_digest, truncate_expression_logs, drop_narrator_prose, truncate_conversation_history`} />
+        }}
+      />
+    </Box>
+  );
+};
+@@END_FILE@@
+
+@@FILE: src/ui/components/StackInstructionsEditor.tsx =====
 // src/ui/components/StackInstructionsEditor.tsx
 import React from 'react';
 import { Box, Typography, Divider, Checkbox, FormControlLabel, TextField } from '@mui/material';
@@ -6418,7 +6796,8 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
 
 export { StackInstructionsEditor };
 @@END_FILE@@
-@@FILE: src/ui/components/TurnNavigator.tsx
+
+@@FILE: src/ui/components/TurnNavigator.tsx =====
 // src/ui/components/TurnNavigator.tsx
 import React from 'react';
 import { Box, IconButton, Typography, Tooltip } from '@mui/material';
@@ -6464,7 +6843,8 @@ export const TurnNavigator: React.FC<TurnNavigatorProps> = ({
   );
 };
 @@END_FILE@@
-@@FILE: src/ui/components/WorldStateCategory.tsx
+
+@@FILE: src/ui/components/WorldStateCategory.tsx =====
 import React from 'react';
 import {
   Box,
@@ -6623,7 +7003,8 @@ export const WorldStateCategory: React.FC<WorldStateCategoryProps> = ({
 };
 
 @@END_FILE@@
-@@FILE: src/ui/components/WorldStateEntity.tsx
+
+@@FILE: src/ui/components/WorldStateEntity.tsx =====
 import React from 'react';
 import {
   Box,
@@ -6757,7 +7138,8 @@ export const WorldStateEntity: React.FC<WorldStateEntityProps> = ({
 };
 
 @@END_FILE@@
-@@FILE: src/ui/components/WorldStateItemRow.tsx
+
+@@FILE: src/ui/components/WorldStateItemRow.tsx =====
 // src/ui/components/WorldStateItemRow.tsx
 
 import React, { useState } from 'react';
@@ -6879,305 +7261,8 @@ export const WorldStateItemRow: React.FC<WorldStateItemRowProps> = ({
   );
 };
 @@END_FILE@@
-@@FILE: src/ui/components/stackInstructions/DigestPolicyEditor.tsx
-// src/ui/components/stackInstructions/DigestPolicyEditor.tsx
-import React from 'react';
-import {
-  Box,
-  Typography,
-  TextField,
-  FormControl,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  Grid,
-  Switch,
-} from '@mui/material';
-import type {
-  DigestFilterPolicy,
-  EmissionRule
-} from '../../../models';
 
-import  {
-  StackMode,
-  FilterMode,
-} from '../../../models';
-import { InfoDialog } from '../InfoDialog';
-
-interface DigestPolicyEditorProps {
-  digestPolicy: DigestFilterPolicy;
-  digestEmission: Record<number, EmissionRule>;
-  onPolicyChange: (updatedPolicy: DigestFilterPolicy) => void;
-  onEmissionChange: (updatedEmission: Record<number, EmissionRule>) => void;
-}
-
-export const DigestPolicyEditor: React.FC<DigestPolicyEditorProps> = ({
-  digestPolicy,
-  digestEmission,
-  onPolicyChange,
-  onEmissionChange,
-}) => {
-  const handleEmissionRuleChange = (score: number, field: keyof EmissionRule, value: any) => {
-    const currentRule = digestEmission[score] || { mode: StackMode.NEVER, n: 0 };
-    onEmissionChange({
-      ...digestEmission,
-      [score]: { ...currentRule, [field]: value },
-    });
-  };
-
-  return (
-    <Box sx={{ mb: 4, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6" sx={{ flexGrow: 1 }}>
-          Digest Lines Emission & Policy
-        </Typography>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={digestPolicy.enabled ?? false}
-              onChange={(e) => onPolicyChange({ ...digestPolicy, enabled: e.target.checked })}
-            />
-          }
-          label="Enable"
-          labelPlacement="start"
-        />
-      </Box>
-      <Box sx={{ opacity: digestPolicy.enabled ? 1 : 0.5, pointerEvents: digestPolicy.enabled ? 'auto' : 'none' }}>
-        <Typography gutterBottom>
-          Global Digest Filtering Policy
-          <InfoDialog
-            title="Global Digest Filtering Policy"
-            content={`Applies a filter to ALL digest lines before their individual emission rules are checked.\n\n- NONE: No global filtering.\n- SCENE_ONLY: Only consider digests relevant to the current scene.\n- TAGGED: Only consider digests that have any tags.`}
-          />
-        </Typography>
-        <FormControl component="fieldset" fullWidth margin="normal">
-          <RadioGroup
-            row
-            value={digestPolicy.filtering}
-            onChange={(e) => onPolicyChange({ ...digestPolicy, filtering: e.target.value as FilterMode })}
-          >
-            {Object.values(FilterMode).map((mode) => (
-              <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
-            ))}
-          </RadioGroup>
-        </FormControl>
-        <Grid container spacing={2} sx={{ mt: 2 }}>
-          {[5, 4, 3, 2, 1].map((score) => (
-            // 1. Grid item is now ONLY responsible for layout.
-            <Grid item xs={12} sm={6} md={4} key={score}>
-              {/* 2. A nested Box handles ALL styling (border, padding). This resolves the error. */}
-              <Box sx={{ border: '1px solid', borderColor: 'divider', p: 1.5, borderRadius: 1 }}>
-                <Typography variant="subtitle2">
-                  Importance {score} Digests
-                  <InfoDialog
-                    title={`Digest Importance Score ${score} Rule`}
-                    content={`Determines how digest lines with an importance score of ${score} are included.`}
-                  />
-                </Typography>
-                <FormControl component="fieldset" fullWidth size="small">
-                  <RadioGroup
-                    row
-                    value={digestEmission[score]?.mode || StackMode.NEVER}
-                    onChange={(e) => handleEmissionRuleChange(score, 'mode', e.target.value as StackMode)}
-                  >
-                    {Object.values(StackMode).filter(m => m !== StackMode.FILTERED).map((mode) => (
-                      <FormControlLabel key={mode} value={mode} control={<Radio size="small" />} label={mode} sx={{ mb: -1 }}/>
-                    ))}
-                  </RadioGroup>
-                  {(digestEmission[score]?.mode === StackMode.FIRST_N ||
-                    digestEmission[score]?.mode === StackMode.AFTER_N) && (
-                      <TextField
-                        label="N"
-                        type="number"
-                        value={digestEmission[score]?.n || 0}
-                        onChange={(e) => handleEmissionRuleChange(score, 'n', parseInt(e.target.value))}
-                        size="small"
-                        sx={{ mt: 1, width: '100px' }}
-                        inputProps={{ min: 0 }}
-                      />
-                    )}
-                </FormControl>
-              </Box>
-            </Grid>
-          ))}
-        </Grid>        
-      </Box>
-    </Box>
-  );
-};
-@@END_FILE@@
-@@FILE: src/ui/components/stackInstructions/PolicyEditor.tsx
-// src/ui/components/stackInstructions/PolicyEditor.tsx
-import React from 'react';
-import {
-  Box,
-  Typography,
-  TextField,
-  FormControl,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  InputLabel,
-  Select,
-  MenuItem,
-  Switch,
-} from '@mui/material';
-import type { ProsePolicy} from '../../../models';
-import {StackMode, FilterMode } from '../../../models';
-import { InfoDialog } from '../InfoDialog';
-
-interface PolicyEditorProps {
-  title: string;
-  policy: ProsePolicy;
-  onPolicyChange: (updatedPolicy: ProsePolicy) => void;
-  infoContent: {
-    main: string;
-    mode: string;
-    filtering: string;
-  };
-}
-
-export const PolicyEditor: React.FC<PolicyEditorProps> = ({
-  title,
-  policy,
-  onPolicyChange,
-  infoContent,
-}) => {
-  const handleFieldChange = (field: keyof ProsePolicy, value: any) => {
-    onPolicyChange({ ...policy, [field]: value });
-  };
-
-  return (
-    <Box sx={{ mb: 4, border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6" sx={{ flexGrow: 1 }}>
-          {title}
-          <InfoDialog title={title} content={infoContent.main} />
-        </Typography>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={policy.enabled ?? false}
-              onChange={(e) => handleFieldChange('enabled', e.target.checked)}
-            />
-          }
-          label="Enable"
-          labelPlacement="start"
-        />
-      </Box>
-      <Box sx={{ opacity: policy.enabled ? 1 : 0.5, pointerEvents: policy.enabled ? 'auto' : 'none' }}>
-        <Typography gutterBottom>
-          Mode
-          <InfoDialog title={`${title} Mode`} content={infoContent.mode} />
-        </Typography>
-        <FormControl component="fieldset" fullWidth margin="normal">
-          <RadioGroup
-            row
-            value={policy.mode}
-            onChange={(e) => handleFieldChange('mode', e.target.value as StackMode)}
-          >
-            {Object.values(StackMode).filter(m => m !== StackMode.FILTERED).map((mode) => (
-              <FormControlLabel key={mode} value={mode} control={<Radio />} label={mode} />
-            ))}
-          </RadioGroup>
-          {(policy.mode === StackMode.FIRST_N || policy.mode === StackMode.AFTER_N) && (
-            <TextField
-              label="N (Turns)"
-              type="number"
-              value={policy.n}
-              onChange={(e) => handleFieldChange('n', parseInt(e.target.value))}
-              sx={{ mt: 1, width: '150px' }}
-              inputProps={{ min: 0 }}
-            />
-          )}
-        </FormControl>
-
-        <Typography gutterBottom sx={{ mt: 2 }}>
-          Filtering
-          <InfoDialog title={`${title} Filtering`} content={infoContent.filtering} />
-        </Typography>
-        <FormControl fullWidth>
-          <InputLabel id={`${title}-filtering-label`}>Filtering</InputLabel>
-          <Select
-            labelId={`${title}-filtering-label`}
-            value={policy.filtering}
-            label="Filtering"
-            onChange={(e) => handleFieldChange('filtering', e.target.value as FilterMode)}
-          >
-            {Object.values(FilterMode).map((mode) => (
-              <MenuItem key={mode} value={mode}>{mode}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Box>
-    </Box>
-  );
-};
-@@END_FILE@@
-@@FILE: src/ui/components/stackInstructions/TokenPolicyEditor.tsx
-// src/ui/components/stackInstructions/TokenPolicyEditor.tsx
-import React from 'react';
-import { Box, Typography, TextField } from '@mui/material';
-import type { TokenPolicy } from '../../../models';
-import { InfoDialog } from '../InfoDialog';
-
-interface TokenPolicyEditorProps {
-  tokenPolicy: TokenPolicy;
-  onPolicyChange: (updatedPolicy: TokenPolicy) => void;
-}
-
-export const TokenPolicyEditor: React.FC<TokenPolicyEditorProps> = ({
-  tokenPolicy,
-  onPolicyChange,
-}) => {
-  const handleFieldChange = (field: keyof TokenPolicy, value: any) => {
-    onPolicyChange({ ...tokenPolicy, [field]: value });
-  };
-
-  return (
-    <Box>
-      <Typography variant="h6" gutterBottom>
-        Token Policy
-      </Typography>
-      <TextField
-        fullWidth
-        label="Min Tokens"
-        type="number"
-        value={tokenPolicy.minTokens}
-        onChange={(e) => handleFieldChange('minTokens', parseInt(e.target.value))}
-        sx={{ mb: 2 }}
-        inputProps={{ min: 0 }}
-        InputProps={{
-          endAdornment: <InfoDialog title="Min Tokens" content="The AI will attempt to generate a response of at least this many tokens." />
-        }}
-      />
-      <TextField
-        fullWidth
-        label="Max Tokens"
-        type="number"
-        value={tokenPolicy.maxTokens}
-        onChange={(e) => handleFieldChange('maxTokens', parseInt(e.target.value))}
-        sx={{ mb: 2 }}
-        inputProps={{ min: 0 }}
-        InputProps={{
-          endAdornment: <InfoDialog title="Max Tokens" content="The absolute maximum number of tokens the AI can generate." />
-        }}
-      />
-      <TextField
-        fullWidth
-        label="Fallback Plan"
-        value={tokenPolicy.fallbackPlan.join(', ')}
-        onChange={(e) => handleFieldChange('fallbackPlan', e.target.value.split(',').map((s) => s.trim()))}
-        sx={{ mb: 2 }}
-        InputProps={{
-          endAdornment: <InfoDialog title="Fallback Plan" content={`A prioritized, comma-separated list of strategies the system will use to reduce the *input prompt's* token count if it exceeds the AI model's context window.\n\nCommon Strategies:\ndrop_known_entities, drop_low_importance_digest, truncate_expression_logs, drop_narrator_prose, truncate_conversation_history`} />
-        }}
-      />
-    </Box>
-  );
-};
-@@END_FILE@@
-@@FILE: src/ui/screens/CardLibraryScreen.tsx
+@@FILE: src/ui/screens/CardLibraryScreen.tsx =====
 // src/ui/screens/PromptCardLibraryScreen.tsx
 // RENAMED from GameLibraryScreen.tsx
 
@@ -7393,7 +7478,8 @@ const PromptCardLibraryScreen: React.FC<PromptCardLibraryScreenProps> = ({ onNav
 
 export default PromptCardLibraryScreen;
 @@END_FILE@@
-@@FILE: src/ui/screens/GameLibraryScreen.tsx
+
+@@FILE: src/ui/screens/GameLibraryScreen.tsx =====
 import React, { useEffect, useState } from 'react';
 import {
   Box,
@@ -7600,7 +7686,8 @@ const GameLibraryScreen: React.FC = () => {
 export default GameLibraryScreen;
 
 @@END_FILE@@
-@@FILE: src/ui/screens/GameScreen.tsx
+
+@@FILE: src/ui/screens/GameScreen.tsx =====
 // src/ui/screens/GameScreen.tsx
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -7794,7 +7881,86 @@ export const GameScreen: React.FC = () => {
   );
 };
 @@END_FILE@@
-@@FILE: src/ui/screens/LogViewerScreen.tsx
+
+@@FILE: src/ui/screens/LoginScreen.tsx =====
+import React, { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom'; // Add this
+import { useAuthStore } from '../../state/useAuthStore';
+
+const styles: { [key: string]: React.CSSProperties } = {
+  container: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '100vh',
+    backgroundColor: '#f0f2f5',
+    fontFamily: 'Arial, sans-serif',
+    padding: '20px',
+  },
+  button: {
+    padding: '10px 20px',
+    fontSize: '16px',
+    backgroundColor: '#4285F4',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    marginTop: '20px',
+    transition: 'background-color 0.3s ease',
+  },
+  errorText: {
+    color: 'red',
+    marginTop: '10px',
+  },
+};
+
+
+const LoginScreen: React.FC = () => {
+  const { user, isLoading, error, signIn, signOut } = useAuthStore();
+  const navigate = useNavigate(); // Add this
+
+  // ✅ Redirect out of login screen if user is authenticated
+  useEffect(() => {
+    if (user) {
+      navigate('/library', { replace: true });
+    }
+  }, [user, navigate]);
+
+  if (isLoading) {
+    return (
+      <div style={styles.container}>
+        <h2>Loading Authentication Status...</h2>
+      </div>
+    );
+  }
+
+  if (user) {
+    return (
+      <div style={styles.container}>
+        <h2>Welcome, {user.displayName || user.email}!</h2>
+        <p>Your User ID: {user.uid}</p>
+        <button onClick={signOut} style={styles.button}>
+          Sign Out
+        </button>
+      </div>
+    );
+  } else {
+    return (
+      <div style={styles.container}>
+        <h2>Please Log In to StoryForge</h2>
+        {error && <p style={styles.errorText}>Error: {error}</p>}
+        <button onClick={signIn} style={styles.button}>
+          Sign in with Google
+        </button>
+      </div>
+    );
+  }
+};
+export default LoginScreen;
+@@END_FILE@@
+
+@@FILE: src/ui/screens/LogViewerScreen.tsx =====
 // src/ui/screens/LogViewerScreen.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -7895,84 +8061,8 @@ export const LogViewerScreen: React.FC = () => {
   );
 };
 @@END_FILE@@
-@@FILE: src/ui/screens/LoginScreen.tsx
-import React, { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom'; // Add this
-import { useAuthStore } from '../../state/useAuthStore';
 
-const styles: { [key: string]: React.CSSProperties } = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '100vh',
-    backgroundColor: '#f0f2f5',
-    fontFamily: 'Arial, sans-serif',
-    padding: '20px',
-  },
-  button: {
-    padding: '10px 20px',
-    fontSize: '16px',
-    backgroundColor: '#4285F4',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    marginTop: '20px',
-    transition: 'background-color 0.3s ease',
-  },
-  errorText: {
-    color: 'red',
-    marginTop: '10px',
-  },
-};
-
-
-const LoginScreen: React.FC = () => {
-  const { user, isLoading, error, signIn, signOut } = useAuthStore();
-  const navigate = useNavigate(); // Add this
-
-  // ✅ Redirect out of login screen if user is authenticated
-  useEffect(() => {
-    if (user) {
-      navigate('/library', { replace: true });
-    }
-  }, [user, navigate]);
-
-  if (isLoading) {
-    return (
-      <div style={styles.container}>
-        <h2>Loading Authentication Status...</h2>
-      </div>
-    );
-  }
-
-  if (user) {
-    return (
-      <div style={styles.container}>
-        <h2>Welcome, {user.displayName || user.email}!</h2>
-        <p>Your User ID: {user.uid}</p>
-        <button onClick={signOut} style={styles.button}>
-          Sign Out
-        </button>
-      </div>
-    );
-  } else {
-    return (
-      <div style={styles.container}>
-        <h2>Please Log In to StoryForge</h2>
-        {error && <p style={styles.errorText}>Error: {error}</p>}
-        <button onClick={signIn} style={styles.button}>
-          Sign in with Google
-        </button>
-      </div>
-    );
-  }
-};
-export default LoginScreen;
-@@END_FILE@@
-@@FILE: src/ui/screens/PromptCardEditor.tsx
+@@FILE: src/ui/screens/PromptCardEditor.tsx =====
 // src/ui/screens/PromptCardEditor.tsx
 import React from 'react';
 import { Box, Divider, FormControlLabel, Switch, TextField } from '@mui/material';
@@ -8169,7 +8259,8 @@ const PromptCardEditor: React.FC<PromptCardEditorProps> = ({
 
 export default PromptCardEditor;
 @@END_FILE@@
-@@FILE: src/ui/screens/PromptCardManager.tsx
+
+@@FILE: src/ui/screens/PromptCardManager.tsx =====
 // src/ui/screens/PromptCardManager.tsx
 import React from 'react';
 import {
@@ -8268,7 +8359,8 @@ const PromptCardManager: React.FC = () => {
 
 export default PromptCardManager;
 @@END_FILE@@
-@@FILE: src/ui/screens/SettingsScreen.tsx
+
+@@FILE: src/ui/screens/SettingsScreen.tsx =====
 // src/ui/screens/SettingsScreen.tsx
 import React from 'react';
 import {
@@ -8454,7 +8546,8 @@ const SettingsScreen: React.FC = () => {
 
 export default SettingsScreen;
 @@END_FILE@@
-@@FILE: src/ui/screens/SourceDump.tsx
+
+@@FILE: src/ui/screens/SourceDump.tsx =====
 import React, { useEffect, useState } from 'react';
 import { debugLog, errorLog } from '../../utils/debug';
 
@@ -8625,7 +8718,8 @@ function parseDumpToTree(dump: string) {
 }
 
 @@END_FILE@@
-@@FILE: src/ui/screens/SourceDumpScreen.tsx
+
+@@FILE: src/ui/screens/SourceDumpScreen.tsx =====
 // src/ui/screens/SourceDumpScreen.tsx
 import React from 'react';
 import { Box } from '@mui/material';
@@ -8641,7 +8735,8 @@ return (
 
 export default SourceDumpScreen;
 @@END_FILE@@
-@@FILE: src/ui/screens/WorldStateScreen.tsx
+
+@@FILE: src/ui/screens/WorldStateScreen.tsx =====
 // src/ui/screens/WorldStateScreen.tsx
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -8829,7 +8924,8 @@ const WorldStateScreen: React.FC = () => {
 
 export default WorldStateScreen;
 @@END_FILE@@
-@@FILE: src/utils/debug.ts
+
+@@FILE: src/utils/debug.ts =====
 // src/utils/debug.ts
 import { useSettingsStore } from '../state/useSettingsStore';
 
@@ -8855,7 +8951,8 @@ export const errorLog = (message?: any, ...optionalParams: any[]) => {
   console.error(message, ...optionalParams);
 };
 @@END_FILE@@
-@@FILE: src/utils/diceRoller.ts
+
+@@FILE: src/utils/diceRoller.ts =====
 // src/utils/diceRoller.ts
 
 /**
@@ -8917,7 +9014,8 @@ export const DiceRoller = {
   },
 };
 @@END_FILE@@
-@@FILE: src/utils/formatDate.ts
+
+@@FILE: src/utils/formatDate.ts =====
 // src/utils/formatDate.ts
 
 /**
@@ -8961,7 +9059,8 @@ export function toIsoStringIfTimestamp(value: any): string {
 
 
 @@END_FILE@@
-@@FILE: src/utils/hash.ts
+
+@@FILE: src/utils/hash.ts =====
 // src/utils/hash.ts
 
 import type { AiSettings, StackInstructions } from '../models';
@@ -9039,7 +9138,8 @@ export function getPromptCardContentForHash(card: {
   ].join('|||'); // Use a distinctive separator to avoid accidental matches
 }
 @@END_FILE@@
-@@FILE: src/utils/hooks/useDialog.ts
+
+@@FILE: src/utils/hooks/useDialog.ts =====
 // src/utils/hooks/useDialog.ts
 import { useState, useCallback } from 'react';
 
@@ -9064,7 +9164,8 @@ export const useDialog = (initialState = false) => {
   return { isOpen, open, close };
 };
 @@END_FILE@@
-@@FILE: src/utils/hooks/useGameScreenLogic.ts
+
+@@FILE: src/utils/hooks/useGameScreenLogic.ts =====
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../state/useAuthStore';
@@ -9260,7 +9361,8 @@ export const useGameScreenLogic = () => {
 };
 
 @@END_FILE@@
-@@FILE: src/utils/hooks/useLogViewerLogic.ts
+
+@@FILE: src/utils/hooks/useLogViewerLogic.ts =====
 // src/utils/hooks/useLogViewerLogic.ts
 import { useState, useEffect, useCallback } from 'react';
 import { useLogStore } from '../../state/useLogStore';
@@ -9312,7 +9414,8 @@ export const useLogViewerLogic = () => {
   };
 };
 @@END_FILE@@
-@@FILE: src/utils/hooks/useLongPress.ts
+
+@@FILE: src/utils/hooks/useLongPress.ts =====
 // src/utils/hooks/useLongPress.ts
 
 import React, { useRef, useCallback } from 'react';
@@ -9380,7 +9483,8 @@ export function useLongPress<T extends HTMLElement>(
   };
 }
 @@END_FILE@@
-@@FILE: src/utils/hooks/usePromptCardManagerLogic.ts
+
+@@FILE: src/utils/hooks/usePromptCardManagerLogic.ts =====
 // src/utils/hooks/usePromptCardManagerLogic.ts
 import { useState, useEffect, useCallback } from 'react';
 import type { User } from 'firebase/auth';
@@ -9613,7 +9717,8 @@ export const usePromptCardManagerLogic = (user: User | null) => {
   };
 };
 @@END_FILE@@
-@@FILE: src/utils/hooks/useSettingsLogic.ts
+
+@@FILE: src/utils/hooks/useSettingsLogic.ts =====
 // src/utils/hooks/useSettingsLogic.ts
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuthStore } from '../../state/useAuthStore';
@@ -9804,7 +9909,8 @@ export const useSettingsLogic = () => {
   };
 };
 @@END_FILE@@
-@@FILE: src/utils/hooks/useWorldStateViewLogic.ts
+
+@@FILE: src/utils/hooks/useWorldStateViewLogic.ts =====
 // src/utils/hooks/useWorldStateViewLogic.ts
 import { useState, useMemo, useCallback } from 'react';
 // IMPORT THE SELECTOR FOR PINNED KEYS
@@ -10007,7 +10113,8 @@ export const useWorldStateViewLogic = () => {
     };
 };
 @@END_FILE@@
-@@FILE: src/utils/jsonUtils.ts
+
+@@FILE: src/utils/jsonUtils.ts =====
 // src/utils/jsonUtils.ts
 
 
@@ -10079,7 +10186,8 @@ export function getNestedValue(obj: Record<string, any>, pathParts: string[]): a
   return current;
 }
 @@END_FILE@@
-@@FILE: src/utils/types.ts
+
+@@FILE: src/utils/types.ts =====
 // src/utils/types.ts
 
 export enum LogViewMode {
@@ -10098,7 +10206,8 @@ export enum LogViewMode {
   ERROR_FLAGS = 'Error Flags',
 }
 @@END_FILE@@
-@@FILE: src/utils/uuid.ts
+
+@@FILE: src/utils/uuid.ts =====
 // src/utils/uuid.ts
 
 import { v4 as uuidv4 } from 'uuid';
@@ -10111,7 +10220,8 @@ export function generateUuid(): string {
   return uuidv4();
 }
 @@END_FILE@@
-@@FILE: src/vite-env.d.ts
+
+@@FILE: src/vite-env.d.ts =====
 /// <reference types="vite/client" />
 
 @@END_FILE@@

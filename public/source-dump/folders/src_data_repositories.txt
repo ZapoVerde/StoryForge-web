@@ -1,0 +1,426 @@
+# Group: src/data/repositories
+# Files: 4
+
+@@FILE: src/data/repositories/aiConnectionRepository.ts =====
+// src/data/repositories/aiConnectionRepository.ts
+
+import {
+    collection, doc, setDoc, deleteDoc, query, getDocs,
+    serverTimestamp, orderBy, Timestamp
+  } from 'firebase/firestore';
+  import { db } from '../infrastructure/firebaseClient';
+  import { generateUuid } from '../../utils/uuid';
+  import type { AiConnection } from '../../models';
+  
+  // Helper to convert Firestore Timestamp to ISO string
+  const convertTimestamps = <T extends { createdAt?: any; lastUpdated?: any }>(data: any): T => {
+    const convertedData: any = { ...data };
+    if (data.createdAt && data.createdAt instanceof Timestamp) {
+      convertedData.createdAt = data.createdAt.toDate().toISOString();
+    }
+    if (data.lastUpdated && data.lastUpdated instanceof Timestamp) {
+      convertedData.lastUpdated = data.lastUpdated.toDate().toISOString();
+    }
+    return convertedData as T;
+  };
+  
+  export interface IAiConnectionRepository {
+    getAiConnections(userId: string): Promise<AiConnection[]>;
+    saveAiConnection(userId: string, connection: AiConnection): Promise<void>;
+    deleteAiConnection(userId: string, connectionId: string): Promise<void>;
+  }
+  
+  class FirestoreAiConnectionRepository implements IAiConnectionRepository {
+    private getAiConnectionsCollectionRef(userId: string) {
+      return collection(db, 'users', userId, 'aiConnections');
+    }
+  
+    async getAiConnections(userId: string): Promise<AiConnection[]> {
+      const q = query(
+        this.getAiConnectionsCollectionRef(userId),
+        orderBy('displayName', 'asc')
+      );
+      const querySnapshot = await getDocs(q);
+      const connections: AiConnection[] = [];
+      querySnapshot.forEach((docSnap) => {
+        connections.push(convertTimestamps<AiConnection>(docSnap.data()));
+      });
+      return connections;
+    }
+  
+    async saveAiConnection(userId: string, connection: AiConnection): Promise<void> {
+      const connectionDocRef = doc(this.getAiConnectionsCollectionRef(userId), connection.id);
+      await setDoc(connectionDocRef, {
+        ...connection,
+        createdAt: connection.createdAt || serverTimestamp(),
+        lastUpdated: serverTimestamp(),
+      }, { merge: true });
+      console.log(`AI Connection ${connection.id} saved for user ${userId}`);
+    }
+  
+    async deleteAiConnection(userId: string, connectionId: string): Promise<void> {
+      const connectionDocRef = doc(this.getAiConnectionsCollectionRef(userId), connectionId);
+      await deleteDoc(connectionDocRef);
+      console.log(`AI Connection ${connectionId} deleted for user ${userId}`);
+    }
+  }
+  
+  export const aiConnectionRepository = new FirestoreAiConnectionRepository();
+@@END_FILE@@
+
+@@FILE: src/data/repositories/authRepository.ts =====
+// src/data/authRepository.ts
+
+import {
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+  type User,
+} from 'firebase/auth';
+import { auth } from '../infrastructure/firebaseClient'; // Import the auth instance from our firebaseClient
+
+/**
+ * Handles user login using Google as the authentication provider.
+ * @returns A Promise that resolves with the Firebase User credential if successful, or rejects with an error.
+ */
+export async function signInWithGoogle(): Promise<User | null> {
+  const provider = new GoogleAuthProvider();
+  try {
+    const result = await signInWithPopup(auth, provider);
+    // The signed-in user info.
+    const user = result.user;
+    console.log("User logged in:", user.uid);
+    return user;
+  } catch (error: any) {
+    // Handle Errors here.
+    const errorCode = error.code;
+    const errorMessage = error.message;
+    // The email of the user's account used.
+    const email = error.customData?.email;
+    // The AuthCredential type that was used.
+    const credential = GoogleAuthProvider.credentialFromError(error);
+    console.error("Error signing in with Google:", errorCode, errorMessage, email, credential);
+    throw error; // Re-throw the error for the UI to handle
+  }
+}
+
+/**
+ * Handles user logout.
+ * @returns A Promise that resolves when the user is successfully signed out.
+ */
+export async function signOutUser(): Promise<void> {
+  try {
+    await signOut(auth);
+    console.log("User signed out.");
+  } catch (error) {
+    console.error("Error signing out:", error);
+    throw error; // Re-throw the error for the UI to handle
+  }
+}
+
+/**
+ * Subscribes to authentication state changes.
+ * This is crucial for keeping the UI updated about the current user's login status.
+ * @param callback A function to call when the auth state changes, receiving the current Firebase User or null.
+ * @returns An unsubscribe function that can be called to stop listening for changes.
+ */
+export function subscribeToAuthChanges(callback: (user: User | null) => void): () => void {
+  // onAuthStateChanged returns an unsubscribe function
+  const unsubscribe = onAuthStateChanged(auth, (user) => {
+    callback(user);
+  });
+  console.log("Auth state change listener attached.");
+  return unsubscribe;
+}
+
+// Optional: You could also add a way to get the current user synchronously if needed,
+// though `subscribeToAuthChanges` is generally preferred for reactivity.
+export function getCurrentUser(): User | null {
+  return auth.currentUser;
+}
+@@END_FILE@@
+
+@@FILE: src/data/repositories/gameRepository.ts =====
+// src/data/repositories/gameRepository.ts
+
+import {
+  collection, doc, getDoc, setDoc, deleteDoc, query, getDocs,
+  serverTimestamp, orderBy, Timestamp, where, writeBatch
+} from 'firebase/firestore';
+import { db } from '../infrastructure/firebaseClient';
+import type { GameSnapshot } from '../../models';
+
+/**
+ * Defines the contract for GameSnapshot data persistence operations.
+ */
+export interface IGameRepository {
+  saveGameSnapshot(userId: string, snapshot: GameSnapshot): Promise<void>;
+  getGameSnapshot(userId: string, snapshotId: string): Promise<GameSnapshot | null>;
+  getAllGameSnapshots(userId: string): Promise<GameSnapshot[]>;
+  deleteGameSnapshot(userId: string, snapshotId: string): Promise<void>;
+  getGameTimeline(userId: string, gameId: string): Promise<GameSnapshot[]>;
+  deleteFutureTurns(userId: string, gameId: string, fromTurn: number): Promise<void>;
+}
+
+/**
+ * Concrete implementation of IGameRepository using Firestore.
+ */
+class FirestoreGameRepository implements IGameRepository {
+  private getSnapshotsCollectionRef(userId: string) {
+    return collection(db, 'users', userId, 'gameSnapshots');
+  }
+
+  // Helper to convert Firestore Timestamp to ISO string
+  private convertTimestamps<T extends { createdAt?: any; updatedAt?: any }>(data: any): T {
+    const convertedData: any = { ...data };
+    if (data.createdAt && data.createdAt instanceof Timestamp) {
+      convertedData.createdAt = data.createdAt.toDate().toISOString();
+    }
+    if (data.updatedAt && data.updatedAt instanceof Timestamp) {
+      convertedData.updatedAt = data.updatedAt.toDate().toISOString();
+    }
+    return convertedData as T;
+  }
+
+  async saveGameSnapshot(userId: string, snapshot: GameSnapshot): Promise<void> {
+    const snapshotDocRef = doc(this.getSnapshotsCollectionRef(userId), snapshot.id);
+    try {
+      await setDoc(snapshotDocRef, {
+        ...snapshot,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    } catch (e) {
+      console.error(`FirestoreGameRepository: FAILED to setDoc for GameSnapshot ${snapshot.id}:`, e);
+      throw e;
+    }
+  }
+
+  async getGameSnapshot(userId: string, snapshotId: string): Promise<GameSnapshot | null> {
+    const snapshotDocRef = doc(this.getSnapshotsCollectionRef(userId), snapshotId);
+    const snapshotSnap = await getDoc(snapshotDocRef);
+    if (snapshotSnap.exists()) {
+      return this.convertTimestamps<GameSnapshot>(snapshotSnap.data()) as GameSnapshot;
+    } else {
+      return null;
+    }
+  }
+
+  async getAllGameSnapshots(userId: string): Promise<GameSnapshot[]> {
+    const q = query(this.getSnapshotsCollectionRef(userId), orderBy('updatedAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+    const snapshots: GameSnapshot[] = [];
+    querySnapshot.forEach((doc) => {
+      snapshots.push(this.convertTimestamps<GameSnapshot>(doc.data()) as GameSnapshot);
+    });
+    return snapshots;
+  }
+
+  async deleteGameSnapshot(userId: string, snapshotId: string): Promise<void> {
+    const snapshotDocRef = doc(this.getSnapshotsCollectionRef(userId), snapshotId);
+    await deleteDoc(snapshotDocRef);
+  }
+
+  async getGameTimeline(userId: string, gameId: string): Promise<GameSnapshot[]> {
+    const q = query(
+      this.getSnapshotsCollectionRef(userId),
+      where('gameId', '==', gameId),
+      orderBy('currentTurn', 'asc')
+    );
+    const querySnapshot = await getDocs(q);
+    const timeline: GameSnapshot[] = [];
+    querySnapshot.forEach((doc) => {
+      timeline.push(this.convertTimestamps<GameSnapshot>(doc.data()) as GameSnapshot);
+    });
+    return timeline;
+  }
+
+  async deleteFutureTurns(userId: string, gameId: string, fromTurn: number): Promise<void> {
+    const q = query(
+      this.getSnapshotsCollectionRef(userId),
+      where('gameId', '==', gameId),
+      where('currentTurn', '>', fromTurn)
+    );
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) return;
+    const batch = writeBatch(db);
+    querySnapshot.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+  }
+}
+
+export const gameRepository = new FirestoreGameRepository();
+@@END_FILE@@
+
+@@FILE: src/data/repositories/promptCardRepository.ts =====
+// src/data/repositories/promptCardRepository.ts
+
+import {
+  collection,
+  doc,
+  getDoc,
+  setDoc,
+  deleteDoc,
+  query,
+  getDocs,
+  serverTimestamp,
+  orderBy
+} from 'firebase/firestore';
+import { db } from '../infrastructure/firebaseClient'; // Import our Firestore instance
+import type { PromptCard } from '../../models';
+import { toIsoStringIfTimestamp } from '../../utils/formatDate';
+
+/**
+ * Defines the contract for PromptCard data persistence operations.
+ * This interface can be implemented by different concrete repositories
+ * (e.g., FirestorePromptCardRepository, MockPromptCardRepository)
+ * to allow for easy swapping of data sources.
+ */
+export interface IPromptCardRepository {
+  /**
+   * Saves a new or updates an existing PromptCard.
+   * If the card already has an ID, it will update the existing document.
+   * If not, it assumes the card object passed already has an ID generated (e.g., by cardManager).
+   * @param userId The ID of the user owning the card.
+   * @param card The PromptCard object to save.
+   * @returns A Promise that resolves when the card is successfully saved.
+   */
+  savePromptCard(userId: string, card: PromptCard): Promise<void>;
+
+  /**
+   * Retrieves a single PromptCard by its ID for a specific user.
+   * @param userId The ID of the user owning the card.
+   * @param cardId The ID of the PromptCard to retrieve.
+   * @returns A Promise that resolves with the PromptCard object or null if not found.
+   */
+  getPromptCard(userId: string, cardId: string): Promise<PromptCard | null>;
+
+  /**
+   * Retrieves all PromptCards for a specific user, ordered by updatedAt descending.
+   * @param userId The ID of the user owning the cards.
+   * @returns A Promise that resolves with an array of PromptCard objects.
+   */
+  getAllPromptCards(userId: string): Promise<PromptCard[]>;
+
+  /**
+   * Deletes a PromptCard by its ID for a specific user.
+   * @param userId The ID of the user owning the card.
+   * @param cardId The ID of the PromptCard to delete.
+   * @returns A Promise that resolves when the card is successfully deleted.
+   */
+  deletePromptCard(userId: string, cardId: string): Promise<void>;
+
+  /**
+   * Imports a collection of PromptCards. This method will likely involve
+   * generating new IDs/hashes and setting ownerId upon import.
+   * The actual logic for generating IDs/hashes and setting ownerId should be in cardManager.ts,
+   * this repository method merely handles the bulk persistence.
+   * @param userId The ID of the user importing the cards.
+   * @param cards The array of PromptCard objects to import.
+   * @returns A Promise that resolves when all cards are imported.
+   */
+  importPromptCards(userId: string, cards: PromptCard[]): Promise<void>;
+}
+
+/**
+ * Concrete implementation of IPromptCardRepository using Firestore.
+ */
+export class FirestorePromptCardRepository implements IPromptCardRepository {
+
+  private getCollectionRef(userId: string) {
+    // Path: users/{userId}/promptCards
+    return collection(db, 'users', userId, 'promptCards');
+  }
+
+  async savePromptCard(userId: string, card: PromptCard): Promise<void> {
+    if (!card.id) {
+      // This case should ideally be prevented by logic in cardManager or wherever cards are created
+      // as PromptCard should always have an ID before reaching the repository.
+      throw new Error("PromptCard must have an ID to be saved.");
+    }
+    const cardDocRef = doc(this.getCollectionRef(userId), card.id);
+    await setDoc(cardDocRef, {
+      ...card,
+      updatedAt: serverTimestamp() // Firestore special value for server timestamp
+    }, { merge: true }); // Use merge: true to update existing fields and add new ones without overwriting entire doc
+    // Note: createdAt should only be set on initial creation, not on every update.
+    // We'll manage createdAt in cardManager.ts before passing to repository.
+    console.log(`PromptCard ${card.id} saved for user ${userId}`);
+  }
+
+  async getPromptCard(userId: string, cardId: string): Promise<PromptCard | null> {
+    const cardDocRef = doc(this.getCollectionRef(userId), cardId);
+    const cardSnap = await getDoc(cardDocRef);
+
+    if (cardSnap.exists()) {
+      // Firestore `data()` method returns `any`. We cast it to PromptCard.
+      // Note: serverTimestamp() will be an object like { seconds: ..., nanoseconds: ... }
+      // when retrieved, not an ISO string. We might need a conversion layer if UI strictly expects ISO string.
+      // However, Firestore handles this transparently for objects if saving back.
+      // For display, formatIsoDateForDisplay will handle it correctly if it's Date or Timestamp object.
+      const data = cardSnap.data() as PromptCard;
+
+      // Firestore's serverTimestamp() retrieves as a Timestamp object.
+      // To ensure our PromptCard interface holds string (ISO 8601), we convert it here.
+      // This is a common pattern: store one way, retrieve/convert to match app's type.
+      return {
+        ...data,
+        createdAt: toIsoStringIfTimestamp(data.createdAt),
+        updatedAt: toIsoStringIfTimestamp(data.updatedAt),
+      };
+    } else {
+      console.log(`No PromptCard found with ID: ${cardId} for user ${userId}`);
+      return null;
+    }
+  }
+
+  async getAllPromptCards(userId: string): Promise<PromptCard[]> {
+    const q = query(
+      this.getCollectionRef(userId),
+      orderBy('updatedAt', 'desc') // Order by last updated, newest first
+    );
+    const querySnapshot = await getDocs(q);
+    const cards: PromptCard[] = [];
+    querySnapshot.forEach((doc) => {
+      // Same conversion for Timestamp objects as in getPromptCard
+      const data = doc.data() as PromptCard;
+      cards.push({
+        ...data,
+        createdAt: toIsoStringIfTimestamp(data.createdAt),
+        updatedAt: toIsoStringIfTimestamp(data.updatedAt),
+      });
+    });
+    console.log(`Retrieved ${cards.length} prompt cards for user ${userId}`);
+    return cards;
+  }
+
+  async deletePromptCard(userId: string, cardId: string): Promise<void> {
+    const cardDocRef = doc(this.getCollectionRef(userId), cardId);
+    await deleteDoc(cardDocRef);
+    console.log(`PromptCard ${cardId} deleted for user ${userId}`);
+  }
+
+  async importPromptCards(userId: string, cards: PromptCard[]): Promise<void> {
+    // Firestore transactions/batch writes are ideal for bulk operations.
+    // For simplicity in MVP, we'll do individual setDoc calls in parallel.
+    // A more robust solution might use writeBatch for atomicity.
+    const importPromises = cards.map(async (card) => {
+      // Assume cardManager has already processed these cards for import (new IDs, hashes, ownerId).
+      const cardDocRef = doc(this.getCollectionRef(userId), card.id);
+      await setDoc(cardDocRef, {
+        ...card,
+        // Ensure timestamps are correctly handled for imported cards.
+        // If the imported card already has createdAt/updatedAt, use them.
+        // Otherwise, serverTimestamp() is an option, but for imports,
+        // it's often preferred to preserve original times or set a specific import time.
+        // For now, assume the card object already has string ISO timestamps set by cardManager.
+      });
+    });
+    await Promise.all(importPromises);
+    console.log(`Successfully imported ${cards.length} prompt cards for user ${userId}`);
+  }
+}
+
+// Export a singleton instance of the repository for use throughout the application
+export const promptCardRepository = new FirestorePromptCardRepository();
+@@END_FILE@@

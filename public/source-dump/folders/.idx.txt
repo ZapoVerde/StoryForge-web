@@ -1,0 +1,22 @@
+# Group: .idx
+# Files: 2
+
+===== BEGIN FILE: .idx/dev.nix =====
+{pkgs}: {
+  channel = "stable-24.05";
+  packages = [
+    pkgs.nodejs_22
+  ];
+  idx.extensions = [
+    "svelte.svelte-vscode"
+    "vue.volar"
+  ];
+ 
+}
+===== END FILE
+
+===== BEGIN FILE: .idx/integrations.json =====
+{
+  "gemini_api": {}
+}
+===== END FILE
