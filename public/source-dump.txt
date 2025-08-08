@@ -3409,8 +3409,6 @@ interface GameStateActions {
   toggleWorldStatePin: (keyPath: string, type: 'variable' | 'entity' | 'category') => Promise<void>;
   reset: () => void;
   processTurn: (action: string) => Promise<void>;
-  resetGameFromSnapshot: (snapshot: GameSnapshot) => void;
-  rerollLastNarration: () => void;
 }
 
 type GameStateStore = GameStateState & GameStateActions;
@@ -3553,56 +3551,6 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
 
     processTurn: (action: string) => {
       return get().processPlayerAction(action);
-    },
-
-    resetGameFromSnapshot: async (snapshot: GameSnapshot) => {
-      debugLog(`[useGameStateStore] resetGameFromSnapshot: Resetting to snapshot ${snapshot.id}`);
-      set({ gameLoading: true, gameError: null });
-      try {
-        const card = await promptCardRepository.getPromptCard(snapshot.userId, snapshot.promptCardId);
-        if (!card) {
-          throw new Error(`PromptCard ${snapshot.promptCardId} for the snapshot could not be found.`);
-        }
-        usePromptCardStore.getState().setActivePromptCard(card);
-        await updateSnapshotAndPersist(snapshot);
-      } catch (error: any) {
-        errorLog("[useGameStateStore] resetGameFromSnapshot ERROR:", error);
-        set({ gameError: error.message });
-      } finally {
-        set({ gameLoading: false });
-      }
-    },
-
-    rerollLastNarration: async () => {
-      debugLog(`[useGameStateStore] rerollLastNarration: Attempting to reroll last turn.`);
-      set({ isProcessingTurn: true, gameError: null });
-      try {
-        const originalSnapshot = get().currentSnapshot;
-        if (!originalSnapshot || originalSnapshot.logs.length === 0) {
-          throw new Error("Cannot reroll: No previous turn found in logs.");
-        }
-
-        const lastLog = originalSnapshot.logs[originalSnapshot.logs.length - 1];
-        const lastUserInput = lastLog.userInput;
-        if (!lastUserInput) {
-          throw new Error("Cannot reroll: Last user input could not be determined.");
-        }
-
-        const rolledBackSnapshot = produce(originalSnapshot, draft => {
-          draft.logs.pop();
-          draft.conversationHistory.pop();
-          draft.conversationHistory.pop();
-        });
-
-        set({ currentSnapshot: rolledBackSnapshot });
-        await get().processPlayerAction(lastUserInput);
-        debugLog(`[useGameStateStore] rerollLastNarration: Successfully re-ran action: "${lastUserInput}"`);
-      } catch (error: any) {
-        errorLog("[useGameStateStore] rerollLastNarration ERROR:", error);
-        set({ gameError: error.message });
-      } finally {
-        set({ isProcessingTurn: false });
-      }
     },
 
     updateNarratorInputText: (text) => set({ narratorInputText: text }),
@@ -7001,9 +6949,7 @@ export const GameScreen: React.FC = () => {
     gameLoading,
     currentSnapshot,
     isProcessingTurn,
-    processTurn,
-    resetGameFromSnapshot,
-    rerollLastNarration,
+    processTurn
   } = useGameStateStore();
 
   const conversationHistory = useGameStateStore(selectConversationHistory);
@@ -7064,18 +7010,6 @@ export const GameScreen: React.FC = () => {
       handleSubmit();
     }
   }, [handleSubmit]);
-
-  const handleReset = useCallback(() => {
-    if (currentSnapshot && window.confirm("Are you sure you want to reset to the beginning of this turn? All changes from the last narration will be lost.")) {
-      resetGameFromSnapshot(currentSnapshot);
-    }
-  }, [currentSnapshot, resetGameFromSnapshot]);
-
-  const handleReroll = useCallback(() => {
-    if (window.confirm("Are you sure you want to reroll the last narration? The AI will try again with your previous input.")) {
-        rerollLastNarration();
-    }
-  }, [rerollLastNarration]);
 
   if (gameLoading || !activePromptCard) {
     return (
@@ -7171,15 +7105,6 @@ export const GameScreen: React.FC = () => {
           <IconButton onClick={handleSubmit} color="primary" disabled={isProcessingTurn || !userInput.trim()}>
             <SendIcon />
           </IconButton>
-        </Stack>
-        <Stack direction="row" spacing={1} sx={{ mt: 1, justifyContent: 'flex-end' }}>
-          <Button size="small" variant="outlined" onClick={handleReroll} disabled={isProcessingTurn || conversationHistory.length < 2}>
-            Reroll Last
-          </Button>
-          {/* THEME USAGE: 'color="warning"' will use the theme's warning color palette if defined, or a default. */}
-          <Button size="small" variant="outlined" color="warning" onClick={handleReset} disabled={isProcessingTurn}>
-            Restart Turn
-          </Button>
         </Stack>
       </Paper>
     </Box>

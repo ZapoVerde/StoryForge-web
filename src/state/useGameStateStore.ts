@@ -44,8 +44,6 @@ interface GameStateActions {
   toggleWorldStatePin: (keyPath: string, type: 'variable' | 'entity' | 'category') => Promise<void>;
   reset: () => void;
   processTurn: (action: string) => Promise<void>;
-  resetGameFromSnapshot: (snapshot: GameSnapshot) => void;
-  rerollLastNarration: () => void;
 }
 
 type GameStateStore = GameStateState & GameStateActions;
@@ -188,56 +186,6 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
 
     processTurn: (action: string) => {
       return get().processPlayerAction(action);
-    },
-
-    resetGameFromSnapshot: async (snapshot: GameSnapshot) => {
-      debugLog(`[useGameStateStore] resetGameFromSnapshot: Resetting to snapshot ${snapshot.id}`);
-      set({ gameLoading: true, gameError: null });
-      try {
-        const card = await promptCardRepository.getPromptCard(snapshot.userId, snapshot.promptCardId);
-        if (!card) {
-          throw new Error(`PromptCard ${snapshot.promptCardId} for the snapshot could not be found.`);
-        }
-        usePromptCardStore.getState().setActivePromptCard(card);
-        await updateSnapshotAndPersist(snapshot);
-      } catch (error: any) {
-        errorLog("[useGameStateStore] resetGameFromSnapshot ERROR:", error);
-        set({ gameError: error.message });
-      } finally {
-        set({ gameLoading: false });
-      }
-    },
-
-    rerollLastNarration: async () => {
-      debugLog(`[useGameStateStore] rerollLastNarration: Attempting to reroll last turn.`);
-      set({ isProcessingTurn: true, gameError: null });
-      try {
-        const originalSnapshot = get().currentSnapshot;
-        if (!originalSnapshot || originalSnapshot.logs.length === 0) {
-          throw new Error("Cannot reroll: No previous turn found in logs.");
-        }
-
-        const lastLog = originalSnapshot.logs[originalSnapshot.logs.length - 1];
-        const lastUserInput = lastLog.userInput;
-        if (!lastUserInput) {
-          throw new Error("Cannot reroll: Last user input could not be determined.");
-        }
-
-        const rolledBackSnapshot = produce(originalSnapshot, draft => {
-          draft.logs.pop();
-          draft.conversationHistory.pop();
-          draft.conversationHistory.pop();
-        });
-
-        set({ currentSnapshot: rolledBackSnapshot });
-        await get().processPlayerAction(lastUserInput);
-        debugLog(`[useGameStateStore] rerollLastNarration: Successfully re-ran action: "${lastUserInput}"`);
-      } catch (error: any) {
-        errorLog("[useGameStateStore] rerollLastNarration ERROR:", error);
-        set({ gameError: error.message });
-      } finally {
-        set({ isProcessingTurn: false });
-      }
     },
 
     updateNarratorInputText: (text) => set({ narratorInputText: text }),

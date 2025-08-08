@@ -24,9 +24,7 @@ export const GameScreen: React.FC = () => {
     gameLoading,
     currentSnapshot,
     isProcessingTurn,
-    processTurn,
-    resetGameFromSnapshot,
-    rerollLastNarration,
+    processTurn
   } = useGameStateStore();
 
   const conversationHistory = useGameStateStore(selectConversationHistory);
@@ -87,18 +85,6 @@ export const GameScreen: React.FC = () => {
       handleSubmit();
     }
   }, [handleSubmit]);
-
-  const handleReset = useCallback(() => {
-    if (currentSnapshot && window.confirm("Are you sure you want to reset to the beginning of this turn? All changes from the last narration will be lost.")) {
-      resetGameFromSnapshot(currentSnapshot);
-    }
-  }, [currentSnapshot, resetGameFromSnapshot]);
-
-  const handleReroll = useCallback(() => {
-    if (window.confirm("Are you sure you want to reroll the last narration? The AI will try again with your previous input.")) {
-        rerollLastNarration();
-    }
-  }, [rerollLastNarration]);
 
   if (gameLoading || !activePromptCard) {
     return (
@@ -194,15 +180,6 @@ export const GameScreen: React.FC = () => {
           <IconButton onClick={handleSubmit} color="primary" disabled={isProcessingTurn || !userInput.trim()}>
             <SendIcon />
           </IconButton>
-        </Stack>
-        <Stack direction="row" spacing={1} sx={{ mt: 1, justifyContent: 'flex-end' }}>
-          <Button size="small" variant="outlined" onClick={handleReroll} disabled={isProcessingTurn || conversationHistory.length < 2}>
-            Reroll Last
-          </Button>
-          {/* THEME USAGE: 'color="warning"' will use the theme's warning color palette if defined, or a default. */}
-          <Button size="small" variant="outlined" color="warning" onClick={handleReset} disabled={isProcessingTurn}>
-            Restart Turn
-          </Button>
         </Stack>
       </Paper>
     </Box>
