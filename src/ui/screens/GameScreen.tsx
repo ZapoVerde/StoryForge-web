@@ -10,7 +10,6 @@ import {
 
 import type {AlertColor} from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
-import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import CasinoIcon from '@mui/icons-material/Casino';
 
 import { useGameStateStore, selectConversationHistory } from '../../state/useGameStateStore';
@@ -22,9 +21,8 @@ import { useLongPress } from '../../utils/hooks/useLongPress';
 export const GameScreen: React.FC = () => {
   const {
     gameLoading,
-    currentSnapshot,
     isProcessingTurn,
-    processTurn
+    processTurn,
   } = useGameStateStore();
 
   const conversationHistory = useGameStateStore(selectConversationHistory);
@@ -102,7 +100,6 @@ export const GameScreen: React.FC = () => {
       <Box sx={{ flex: 1, overflowY: 'auto', px: 1, pb: 8 }}>
         {conversationHistory.map((msg, index) => (
           <Paper key={index} elevation={0} sx={{ p: 1.5, mb: 1.5, backgroundColor: 'transparent' }}>
-            {/* THEME USAGE: Using 'primary.main' and 'secondary.main' from your theme for text colors */}
             <Typography variant="body2" sx={{ fontWeight: 'bold', color: msg.role === 'user' ? 'primary.main' : 'secondary.main' }}>
               {msg.role === 'user' ? 'You' : 'Narrator'}
             </Typography>
@@ -120,7 +117,6 @@ export const GameScreen: React.FC = () => {
       </Box>
 
       <Fab
-        // THEME USAGE: 'color="secondary"' pulls BRAND_PRIMARY_DARK/LIGHT from your theme
         color="secondary"
         aria-label="roll dice"
         {...longPressProps}
@@ -134,7 +130,6 @@ export const GameScreen: React.FC = () => {
       </Fab>
 
       <Dialog open={isRollDialogOpen} onClose={handleCloseRollDialog}>
-        {/* ... Dialog content is generally styled by the global theme ... */}
         <DialogTitle>Set Dice Formula</DialogTitle>
         <DialogContent>
           <TextField
@@ -157,7 +152,6 @@ export const GameScreen: React.FC = () => {
       </Dialog>
       
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={closeSnackbar}>
-        {/* THEME USAGE: The `severity` prop on Alert automatically uses the theme's success, error, etc. colors */}
         <Alert onClose={closeSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
           {snackbar.message}
         </Alert>
@@ -176,7 +170,6 @@ export const GameScreen: React.FC = () => {
             onKeyPress={handleKeyPress}
             disabled={isProcessingTurn}
           />
-          {/* THEME USAGE: 'color="primary"' pulls BRAND_PRIMARY_DARK/LIGHT from your theme */}
           <IconButton onClick={handleSubmit} color="primary" disabled={isProcessingTurn || !userInput.trim()}>
             <SendIcon />
           </IconButton>

@@ -1,3 +1,4 @@
+// src/state/useGameStateStore.ts
 import { create } from 'zustand';
 import type { GameSnapshot, GameState, LogEntry, Message } from '../models';
 import type { IGameSession } from '../logic/gameSession';
