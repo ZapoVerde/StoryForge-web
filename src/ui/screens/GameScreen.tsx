@@ -11,7 +11,7 @@ import {
 import type {AlertColor} from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import CasinoIcon from '@mui/icons-material/Casino';
-
+import { TurnNavigator } from '../components/TurnNavigator';
 import { useGameStateStore, selectConversationHistory } from '../../state/useGameStateStore';
 import { usePromptCardStore } from '../../state/usePromptCardStore';
 import { PinnedItemsView } from '../components/PinnedItemsView';
@@ -23,6 +23,9 @@ export const GameScreen: React.FC = () => {
     gameLoading,
     isProcessingTurn,
     processTurn,
+    currentSnapshot,    
+    maxTurn,            
+    navigateToTurn,   
   } = useGameStateStore();
 
   const conversationHistory = useGameStateStore(selectConversationHistory);
@@ -97,6 +100,15 @@ export const GameScreen: React.FC = () => {
     <Box sx={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', p: 2 }}>
       <PinnedItemsView />
       <Divider sx={{ my: 1 }} />
+      {/* ADD TURN NAVIGATOR HERE */}
+      {activePromptCard?.historyBrowsingEnabled && currentSnapshot && maxTurn !== null && (
+        <TurnNavigator
+          currentTurn={currentSnapshot.currentTurn}
+          maxTurn={maxTurn}
+          onNavigate={navigateToTurn}
+          isLoading={isProcessingTurn || gameLoading}
+        />
+      )}
       <Box sx={{ flex: 1, overflowY: 'auto', px: 1, pb: 8 }}>
         {conversationHistory.map((msg, index) => (
           <Paper key={index} elevation={0} sx={{ p: 1.5, mb: 1.5, backgroundColor: 'transparent' }}>

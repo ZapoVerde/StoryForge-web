@@ -10,6 +10,7 @@ import type { GameState, LogEntry, Message } from './index';
 export interface GameSnapshot {
   // --- Core Identifiers ---
   id: string; // Unique ID for this snapshot/game session
+  gameId: string; 
   userId: string;
   promptCardId: string; // ID of the card used
   title: string; // NEW: A human-readable title for the saved game

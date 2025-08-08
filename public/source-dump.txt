@@ -503,6 +503,71 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 @@FOLDER: src/data/repositories
+@@FILE: src/data/repositories/aiConnectionRepository.ts
+// src/data/repositories/aiConnectionRepository.ts
+
+import {
+    collection, doc, setDoc, deleteDoc, query, getDocs,
+    serverTimestamp, orderBy, Timestamp
+  } from 'firebase/firestore';
+  import { db } from '../infrastructure/firebaseClient';
+  import { generateUuid } from '../../utils/uuid';
+  import type { AiConnection } from '../../models';
+  
+  // Helper to convert Firestore Timestamp to ISO string
+  const convertTimestamps = <T extends { createdAt?: any; lastUpdated?: any }>(data: any): T => {
+    const convertedData: any = { ...data };
+    if (data.createdAt && data.createdAt instanceof Timestamp) {
+      convertedData.createdAt = data.createdAt.toDate().toISOString();
+    }
+    if (data.lastUpdated && data.lastUpdated instanceof Timestamp) {
+      convertedData.lastUpdated = data.lastUpdated.toDate().toISOString();
+    }
+    return convertedData as T;
+  };
+  
+  export interface IAiConnectionRepository {
+    getAiConnections(userId: string): Promise<AiConnection[]>;
+    saveAiConnection(userId: string, connection: AiConnection): Promise<void>;
+    deleteAiConnection(userId: string, connectionId: string): Promise<void>;
+  }
+  
+  class FirestoreAiConnectionRepository implements IAiConnectionRepository {
+    private getAiConnectionsCollectionRef(userId: string) {
+      return collection(db, 'users', userId, 'aiConnections');
+    }
+  
+    async getAiConnections(userId: string): Promise<AiConnection[]> {
+      const q = query(
+        this.getAiConnectionsCollectionRef(userId),
+        orderBy('displayName', 'asc')
+      );
+      const querySnapshot = await getDocs(q);
+      const connections: AiConnection[] = [];
+      querySnapshot.forEach((docSnap) => {
+        connections.push(convertTimestamps<AiConnection>(docSnap.data()));
+      });
+      return connections;
+    }
+  
+    async saveAiConnection(userId: string, connection: AiConnection): Promise<void> {
+      const connectionDocRef = doc(this.getAiConnectionsCollectionRef(userId), connection.id);
+      await setDoc(connectionDocRef, {
+        ...connection,
+        createdAt: connection.createdAt || serverTimestamp(),
+        lastUpdated: serverTimestamp(),
+      }, { merge: true });
+      console.log(`AI Connection ${connection.id} saved for user ${userId}`);
+    }
+  
+    async deleteAiConnection(userId: string, connectionId: string): Promise<void> {
+      const connectionDocRef = doc(this.getAiConnectionsCollectionRef(userId), connectionId);
+      await deleteDoc(connectionDocRef);
+      console.log(`AI Connection ${connectionId} deleted for user ${userId}`);
+    }
+  }
+  
+  export const aiConnectionRepository = new FirestoreAiConnectionRepository();
 @@FILE: src/data/repositories/authRepository.ts
 // src/data/authRepository.ts
 
@@ -578,152 +643,72 @@ export function getCurrentUser(): User | null {
 // src/data/repositories/gameRepository.ts
 
 import {
-  collection,
-  doc,
-  getDoc,
-  setDoc,
-  deleteDoc,
-  query,
-  getDocs,
-  serverTimestamp,
-  orderBy,
-  Timestamp, // Import Timestamp type
+  collection, doc, getDoc, setDoc, deleteDoc, query, getDocs,
+  serverTimestamp, orderBy, Timestamp, where, writeBatch
 } from 'firebase/firestore';
 import { db } from '../infrastructure/firebaseClient';
-import { generateUuid } from '../../utils/uuid'; // Import generateUuid
-import type { AiConnection, GameSnapshot } from '../../models';
+import type { GameSnapshot } from '../../models';
+
 /**
- * Defines the contract for GameSnapshot and AiConnection data persistence operations.
+ * Defines the contract for GameSnapshot data persistence operations.
  */
 export interface IGameRepository {
-  /**
-   * Saves a new or updates an existing GameSnapshot.
-   * @param userId The ID of the user owning the snapshot.
-   * @param snapshot The GameSnapshot object to save.
-   * @returns A Promise that resolves when the snapshot is successfully saved.
-   */
   saveGameSnapshot(userId: string, snapshot: GameSnapshot): Promise<void>;
-
-  /**
-   * Retrieves a single GameSnapshot by its ID for a specific user.
-   * @param userId The ID of the user owning the snapshot.
-   * @param snapshotId The ID of the GameSnapshot to retrieve.
-   * @returns A Promise that resolves with the GameSnapshot object or null if not found.
-   */
   getGameSnapshot(userId: string, snapshotId: string): Promise<GameSnapshot | null>;
-
-  /**
-   * Retrieves all GameSnapshots for a specific user, ordered by updatedAt descending.
-   * @param userId The ID of the user owning the snapshots.
-   * @returns A Promise that resolves with an array of GameSnapshot objects.
-   */
   getAllGameSnapshots(userId: string): Promise<GameSnapshot[]>;
-
-  /**
-   * Deletes a GameSnapshot by its ID for a specific user.
-   * @param userId The ID of the user owning the snapshot.
-   * @param snapshotId The ID of the GameSnapshot to delete.
-   * @returns A Promise that resolves when the snapshot is successfully deleted.
-   */
   deleteGameSnapshot(userId: string, snapshotId: string): Promise<void>;
-
-  /**
-   * Retrieves all AI Connections for a user.
-   * @param userId The ID of the user.
-   * @returns A Promise resolving with an array of AiConnection objects.
-   */
-  getAiConnections(userId: string): Promise<AiConnection[]>;
-
-  /**
-   * Saves a new or updates an existing AI Connection.
-   * @param userId The ID of the user.
-   * @param connection The AiConnection object to save.
-   * @returns A Promise that resolves when the connection is successfully saved.
-   */
-  saveAiConnection(userId: string, connection: AiConnection): Promise<void>;
-
-  /**
-   * Deletes an AI Connection by its ID for a specific user.
-   * @param userId The ID of the user.
-   * @param connectionId The ID of the AiConnection to delete.
-   * @returns A Promise that resolves when the connection is successfully deleted.
-   */
-  deleteAiConnection(userId: string, connectionId: string): Promise<void>;
+  getGameTimeline(userId: string, gameId: string): Promise<GameSnapshot[]>;
+  deleteFutureTurns(userId: string, gameId: string, fromTurn: number): Promise<void>;
 }
 
 /**
  * Concrete implementation of IGameRepository using Firestore.
  */
 class FirestoreGameRepository implements IGameRepository {
-
   private getSnapshotsCollectionRef(userId: string) {
-    // Path: users/{userId}/gameSnapshots
     return collection(db, 'users', userId, 'gameSnapshots');
   }
 
-  private getAiConnectionsCollectionRef(userId: string) {
-    // Path: users/{userId}/aiConnections
-    return collection(db, 'users', userId, 'aiConnections');
-  }
-
   // Helper to convert Firestore Timestamp to ISO string
-  private convertTimestamps<T extends { createdAt?: any; updatedAt?: any; lastUpdated?: any }>(data: any): T {
+  private convertTimestamps<T extends { createdAt?: any; updatedAt?: any }>(data: any): T {
     const convertedData: any = { ...data };
-
     if (data.createdAt && data.createdAt instanceof Timestamp) {
       convertedData.createdAt = data.createdAt.toDate().toISOString();
     }
     if (data.updatedAt && data.updatedAt instanceof Timestamp) {
       convertedData.updatedAt = data.updatedAt.toDate().toISOString();
     }
-    // This is the specific field causing the error. 
-    // Only convert it if it exists on the source object.
-    if (data.lastUpdated && data.lastUpdated instanceof Timestamp) {
-      convertedData.lastUpdated = data.lastUpdated.toDate().toISOString();
-    }
-    
     return convertedData as T;
   }
 
   async saveGameSnapshot(userId: string, snapshot: GameSnapshot): Promise<void> {
     const snapshotDocRef = doc(this.getSnapshotsCollectionRef(userId), snapshot.id);
-    console.log(`FirestoreGameRepository: Attempting to setDoc for GameSnapshot ${snapshot.id} for user ${userId}.`);
     try {
       await setDoc(snapshotDocRef, {
-        // Pass all snapshot data, including the new 'title'
         ...snapshot,
-        updatedAt: serverTimestamp() // Always update timestamp on save
+        updatedAt: serverTimestamp()
       }, { merge: true });
-      console.log(`FirestoreGameRepository: Successfully setDoc for GameSnapshot ${snapshot.id}.`);
     } catch (e) {
       console.error(`FirestoreGameRepository: FAILED to setDoc for GameSnapshot ${snapshot.id}:`, e);
-      throw e; // Re-throw the error for GameSession to catch
+      throw e;
     }
   }
 
   async getGameSnapshot(userId: string, snapshotId: string): Promise<GameSnapshot | null> {
     const snapshotDocRef = doc(this.getSnapshotsCollectionRef(userId), snapshotId);
     const snapshotSnap = await getDoc(snapshotDocRef);
-
     if (snapshotSnap.exists()) {
-      const data = snapshotSnap.data();
-      // Ensure title is retrieved
-      return this.convertTimestamps<GameSnapshot>(data) as GameSnapshot;
+      return this.convertTimestamps<GameSnapshot>(snapshotSnap.data()) as GameSnapshot;
     } else {
-      console.log(`No GameSnapshot found with ID: ${snapshotId} for user ${userId}`);
       return null;
     }
   }
 
   async getAllGameSnapshots(userId: string): Promise<GameSnapshot[]> {
-    const q = query(
-      this.getSnapshotsCollectionRef(userId),
-      orderBy('updatedAt', 'desc')
-    );
+    const q = query(this.getSnapshotsCollectionRef(userId), orderBy('updatedAt', 'desc'));
     const querySnapshot = await getDocs(q);
     const snapshots: GameSnapshot[] = [];
     querySnapshot.forEach((doc) => {
-      // Ensure title is retrieved
       snapshots.push(this.convertTimestamps<GameSnapshot>(doc.data()) as GameSnapshot);
     });
     return snapshots;
@@ -732,64 +717,37 @@ class FirestoreGameRepository implements IGameRepository {
   async deleteGameSnapshot(userId: string, snapshotId: string): Promise<void> {
     const snapshotDocRef = doc(this.getSnapshotsCollectionRef(userId), snapshotId);
     await deleteDoc(snapshotDocRef);
-    console.log(`GameSnapshot ${snapshotId} deleted for user ${userId}`);
   }
 
-  async getAiConnections(userId: string): Promise<AiConnection[]> {
+  async getGameTimeline(userId: string, gameId: string): Promise<GameSnapshot[]> {
     const q = query(
-      this.getAiConnectionsCollectionRef(userId),
-      orderBy('displayName', 'asc') // Order by display name
+      this.getSnapshotsCollectionRef(userId),
+      where('gameId', '==', gameId),
+      orderBy('currentTurn', 'asc')
     );
     const querySnapshot = await getDocs(q);
-    const connections: AiConnection[] = [];
-    querySnapshot.forEach((docSnap) => {
-      // Ensure the ID from the document is used
-      connections.push(this.convertTimestamps<AiConnection>(docSnap.data()));
+    const timeline: GameSnapshot[] = [];
+    querySnapshot.forEach((doc) => {
+      timeline.push(this.convertTimestamps<GameSnapshot>(doc.data()) as GameSnapshot);
     });
-
-    // Provide a default DeepSeek connection if no connections exist for the user.
-    // This allows immediate testing without requiring users to manually add one.
-    if (connections.length === 0) {
-      console.log("No AI connections found, returning default.");
-      return [
-        {
-          id: generateUuid(), // Use a generated UUID for the default
-          displayName: 'DeepSeek Coder (Default)', // Added displayName
-          modelName: 'DeepSeek Coder (Default)',
-          modelSlug: 'deepseek-coder',
-          apiUrl: 'https://api.deepseek.com/v1/',
-          apiToken: 'YOUR_DEEPSEEK_API_KEY_HERE', // User should be able to edit this
-          functionCallingEnabled: false, // Default value
-          createdAt: new Date().toISOString(),
-          lastUpdated: new Date().toISOString(),
-          userAgent: 'StoryForge/1.0 (Default)'
-        },
-      ];
-    }
-    return connections;
+    return timeline;
   }
 
-  async saveAiConnection(userId: string, connection: AiConnection): Promise<void> {
-    const connectionDocRef = doc(this.getAiConnectionsCollectionRef(userId), connection.id);
-    await setDoc(connectionDocRef, {
-      ...connection,
-      createdAt: connection.createdAt || serverTimestamp(), // Set createdAt only on initial creation
-      lastUpdated: serverTimestamp(), // Always update lastUpdated
-    }, { merge: true });
-    console.log(`AI Connection ${connection.id} saved for user ${userId}`);
-  }
-
-  async deleteAiConnection(userId: string, connectionId: string): Promise<void> {
-    const connectionDocRef = doc(this.getAiConnectionsCollectionRef(userId), connectionId);
-    await deleteDoc(connectionDocRef);
-    console.log(`AI Connection ${connectionId} deleted for user ${userId}`);
+  async deleteFutureTurns(userId: string, gameId: string, fromTurn: number): Promise<void> {
+    const q = query(
+      this.getSnapshotsCollectionRef(userId),
+      where('gameId', '==', gameId),
+      where('currentTurn', '>', fromTurn)
+    );
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) return;
+    const batch = writeBatch(db);
+    querySnapshot.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
   }
 }
 
-// Export a singleton instance of the repository.
 export const gameRepository = new FirestoreGameRepository();
-
-
 @@FILE: src/data/repositories/promptCardRepository.ts
 // src/data/repositories/promptCardRepository.ts
 
@@ -2087,6 +2045,7 @@ export class PromptCardManager implements ICardManager {
       functionDefs: data.functionDefs ?? "",
       isPublic: data.isPublic ?? false, // Default to private for new user-created cards
       contentHash: '', // Will be calculated below
+      historyBrowsingEnabled: data.historyBrowsingEnabled ?? true, // <-- ADD THIS (default to true)
     };
 
     // Calculate content hash AFTER all content fields are finalized
@@ -2434,7 +2393,7 @@ export class GameSession implements IGameSession {
       errorLog("[gameSession.ts] initializeGame: Failed to parse worldStateInit JSON:", e);
       initialWorldState = {};
     }
-
+    const gameId = generateUuid();
     const now = new Date().toISOString();
 
     // CREATE THE "TURN 0" LOG ENTRY
@@ -2459,6 +2418,7 @@ export class GameSession implements IGameSession {
 
     const initialSnapshot: GameSnapshot = {
       id: generateUuid(),
+      gameId: gameId,    // Timeline ID
       userId: userId,
       promptCardId: card.id,
       title: `Game with ${card.title} - ${formatIsoDateForDisplay(now)}`,
@@ -2913,6 +2873,7 @@ import type { GameState, LogEntry, Message } from './index';
 export interface GameSnapshot {
   // --- Core Identifiers ---
   id: string; // Unique ID for this snapshot/game session
+  gameId: string; 
   userId: string;
   promptCardId: string; // ID of the card used
   title: string; // NEW: A human-readable title for the saved game
@@ -3080,13 +3041,10 @@ export interface AiSettings {
  * This is a pure data definition, with no default values or logic.
  */
 export interface PromptCard {
-  // Web-specific lineage and deduplication fields (as per initial migration plan)
   id: string;
   rootId: string;
   parentId: string | null; // Null for root cards
   contentHash: string; // Hash of significant content fields to detect duplicates
-
-  // Fields directly from old PromptCard.kt
   title: string;
   description: string | null; // Optional in Kotlin, so `string | null`
   prompt: string;
@@ -3101,8 +3059,7 @@ export interface PromptCard {
   tags: string[];            // Kotlin `List<String>` maps to `string[]`
   isExample: boolean;        // From Kotlin `isExample`
   functionDefs: string;      // JSON string
-
-  // Additional web-specific metadata (as per initial migration plan)
+  historyBrowsingEnabled: boolean;
   isPublic: boolean;
   createdAt: string; // ISO 8601 string
   updatedAt: string; // ISO 8601 string
@@ -3132,6 +3089,7 @@ export interface NewPromptCardData {
   isExample?: boolean;
   functionDefs?: string;
   isPublic?: boolean;
+  historyBrowsingEnabled?: boolean;
 }
 @@FILE: src/models/StackInstructions.ts
 // src/models/StackInstructions.ts
@@ -3369,11 +3327,11 @@ import type { GameSnapshot, GameState, LogEntry, Message } from '../models';
 import type { IGameSession } from '../logic/gameSession';
 import { useSettingsStore } from './useSettingsStore';
 import { usePromptCardStore } from './usePromptCardStore';
-import { gameRepository } from '../data/repositories/gameRepository';
 import { promptCardRepository } from '../data/repositories/promptCardRepository';
 import { debugLog, errorLog } from '../utils/debug';
 import { produce } from 'immer';
-
+import { gameRepository } from '../data/repositories/gameRepository';
+import { aiConnectionRepository } from '../data/repositories/aiConnectionRepository';
 
 // External GameSession service instance
 let _gameSessionService: IGameSession | null = null;
@@ -3387,6 +3345,7 @@ export const initializeGameStateStore = (gameSession: IGameSession) => {
 
 interface GameStateState {
   currentSnapshot: GameSnapshot | null;
+  maxTurn: number | null;
   narratorInputText: string;
   narratorScrollPosition: number;
   gameError: string | null;
@@ -3410,6 +3369,7 @@ interface GameStateActions {
   toggleWorldStatePin: (keyPath: string, type: 'variable' | 'entity' | 'category') => Promise<void>;
   reset: () => void;
   processTurn: (action: string) => Promise<void>;
+  navigateToTurn: (turnNumber: number) => Promise<void>;
 }
 
 type GameStateStore = GameStateState & GameStateActions;
@@ -3421,6 +3381,7 @@ const initialState: GameStateState = {
   gameError: null,
   gameLoading: false,
   isProcessingTurn: false,
+  maxTurn: null, 
 };
 
 export const useGameStateStore = create<GameStateStore>((set, get) => {
@@ -3492,23 +3453,45 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
     processPlayerAction: async (action) => {
       const snapshot = get().currentSnapshot;
       const card = usePromptCardStore.getState().activePromptCard;
+      const maxTurn = get().maxTurn; // Get maxTurn from state
+
       if (!snapshot || !card) {
         set({ gameError: "Cannot process action: Game or Prompt Card not loaded." });
         return;
       }
+
+      // DESTRUCTIVE RESUME LOGIC
+      if (maxTurn !== null && snapshot.currentTurn < maxTurn) {
+        const confirmed = window.confirm(
+          "You are about to resume from an earlier point. This will delete all future turns from your previous timeline. This cannot be undone. Are you sure?"
+        );
+        if (!confirmed) {
+          return; // User cancelled
+        }
+        // Tell the repository to delete the obsolete future turns
+        await gameRepository.deleteFutureTurns(snapshot.userId, snapshot.gameId, snapshot.currentTurn);
+      }
+
       set({ isProcessingTurn: true, gameError: null, narratorInputText: '' });
       const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
       try {
-        const aiConnections = await gameRepository.getAiConnections(snapshot.userId);
+        const aiConnections = await aiConnectionRepository.getAiConnections(snapshot.userId);
         const service = getGameService();
-        const newSnapshot = await service.processPlayerAction(
-          snapshot,
-          card,
-          action,
-          useDummyNarrator,
-          aiConnections
+        // The service returns a new snapshot with turn number incremented
+        const processedSnapshot = await service.processPlayerAction(
+          snapshot, card, action, useDummyNarrator, aiConnections
         );
-        await updateSnapshotAndPersist(newSnapshot);
+        
+        // Overwrite the ID to follow our new convention
+        const finalSnapshot = {
+          ...processedSnapshot,
+          id: `${processedSnapshot.gameId}-${processedSnapshot.currentTurn}`
+        };
+
+        await updateSnapshotAndPersist(finalSnapshot);
+        // After persisting, update the maxTurn to the current turn
+        set({ maxTurn: finalSnapshot.currentTurn });
+
       } catch (error: any) {
         errorLog("[useGameStateStore] processPlayerAction action ERROR:", error);
         set({ gameError: error.message });
@@ -3517,18 +3500,42 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
       }
     },
 
-    loadGame: async (userId, snapshotId) => {
+    loadGame: async (userId, gameId) => { // This now receives a gameId
       set({ gameLoading: true, gameError: null });
       try {
-        const snapshot = await gameRepository.getGameSnapshot(userId, snapshotId);
-        if (!snapshot) throw new Error(`Game snapshot ${snapshotId} not found.`);
-        const card = await promptCardRepository.getPromptCard(userId, snapshot.promptCardId);
-        if (!card) throw new Error(`PromptCard ${snapshot.promptCardId} not found for loaded game.`);
+        const timeline = await gameRepository.getGameTimeline(userId, gameId);
+        if (timeline.length === 0) throw new Error(`Game ${gameId} not found.`);
+        
+        const latestSnapshot = timeline[timeline.length - 1];
+        const card = await promptCardRepository.getPromptCard(userId, latestSnapshot.promptCardId);
+        if (!card) throw new Error(`PromptCard for game could not be found.`);
+
         usePromptCardStore.getState().setActivePromptCard(card);
-        set({ currentSnapshot: snapshot, gameLoading: false });
+        set({
+          currentSnapshot: latestSnapshot,
+          maxTurn: latestSnapshot.currentTurn, // Max turn is the turn number of the latest snapshot
+          gameLoading: false,
+        });
       } catch (error: any) {
         errorLog("[useGameStateStore] loadGame action ERROR:", error);
         set({ gameError: error.message, gameLoading: false });
+      }
+    },
+
+    // ADD NEW ACTION: navigateToTurn
+    navigateToTurn: async (turnNumber: number) => {
+      const snapshot = get().currentSnapshot;
+      if (!snapshot) return;
+
+      set({ gameLoading: true, gameError: null });
+      try {
+        const targetSnapshotId = `${snapshot.gameId}-${turnNumber}`;
+        const targetSnapshot = await gameRepository.getGameSnapshot(snapshot.userId, targetSnapshotId);
+        if (!targetSnapshot) throw new Error(`Turn ${turnNumber} not found.`);
+        
+        set({ currentSnapshot: targetSnapshot, gameLoading: false });
+      } catch(e: any) {
+        set({ gameError: e.message, gameLoading: false });
       }
     },
 
@@ -3645,8 +3652,8 @@ export const useLogStore = create<LogState>((set) => ({
 import { create } from 'zustand';
 import type { PromptCard, NewPromptCardData, AiConnection } from '../models'; // Assuming index.ts exports these
 import { promptCardManager } from '../logic/cardManager';
-import { gameRepository } from '../data/repositories/gameRepository'; // For AI Connections
 import { debugLog, errorLog } from '../utils/debug';
+import { aiConnectionRepository } from '../data/repositories/aiConnectionRepository';
 
 const initialState = {
   promptCards: [],
@@ -3769,7 +3776,7 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
   fetchAiConnections: async (userId) => {
     set({ isLoading: true, error: null });
     try {
-      const connections = await gameRepository.getAiConnections(userId);
+      const connections = await aiConnectionRepository.getAiConnections(userId);
       set({ aiConnections: connections, isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });
@@ -3817,9 +3824,9 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { AiConnection } from '../models';
-import { gameRepository } from '../data/repositories/gameRepository';
 import { generateUuid } from '../utils/uuid';
-import { debugLog } from '../utils/debug'; // <-- NEW
+import { debugLog } from '../utils/debug'; 
+import { aiConnectionRepository } from '../data/repositories/aiConnectionRepository';
 
 interface SettingsState {
   aiConnections: AiConnection[];
@@ -3828,8 +3835,8 @@ interface SettingsState {
   connectionsError: string | null;
   useDummyNarrator: boolean;
   themeMode: 'light' | 'dark';
-  enableDebugLogging: boolean;              // <-- NEW
-  textGenerationSpeedMs: number;            // <-- NEW
+  enableDebugLogging: boolean;              
+  textGenerationSpeedMs: number;            
 
   fetchAiConnections: (userId: string) => Promise<void>;
   addAiConnection: (
@@ -3845,8 +3852,8 @@ interface SettingsState {
   setSelectedConnectionId: (id: string | null) => void;
   setUseDummyNarrator: (enabled: boolean) => void;
   setThemeMode: (mode: 'light' | 'dark') => void;
-  setEnableDebugLogging: (enabled: boolean) => void;     // <-- NEW
-  setTextGenerationSpeedMs: (speed: number) => void;     // <-- NEW
+  setEnableDebugLogging: (enabled: boolean) => void;     
+  setTextGenerationSpeedMs: (speed: number) => void;     
   reset: () => void;
 }
 
@@ -3860,14 +3867,14 @@ export const useSettingsStore = create<SettingsState>()(
       connectionsError: null,
       useDummyNarrator: false,
       themeMode: 'light',
-      enableDebugLogging: false,             // <-- NEW
-      textGenerationSpeedMs: 20,             // <-- NEW
+      enableDebugLogging: false,             
+      textGenerationSpeedMs: 20,             
 
       // --- Actions ---
       fetchAiConnections: async (userId) => {
         set({ isLoadingConnections: true, connectionsError: null });
         try {
-          const connections = await gameRepository.getAiConnections(userId);
+          const connections = await aiConnectionRepository.getAiConnections(userId);
           set({
             aiConnections: connections,
             isLoadingConnections: false,
@@ -3892,7 +3899,7 @@ export const useSettingsStore = create<SettingsState>()(
             createdAt: now,
             lastUpdated: now,
           };
-          await gameRepository.saveAiConnection(userId, connection);
+          await aiConnectionRepository.saveAiConnection(userId, connection);
           set(state => {
             const updatedConnections = [...state.aiConnections, connection].sort((a, b) =>
               a.displayName.localeCompare(b.displayName)
@@ -3915,7 +3922,7 @@ export const useSettingsStore = create<SettingsState>()(
         try {
           const now = new Date().toISOString();
           const connectionToSave = { ...updatedConnection, lastUpdated: now };
-          await gameRepository.saveAiConnection(userId, connectionToSave);
+          await aiConnectionRepository.saveAiConnection(userId, connectionToSave);
           set(state => {
             const updatedConnections = state.aiConnections.map(conn =>
               conn.id === updatedConnection.id ? connectionToSave : conn
@@ -3935,7 +3942,7 @@ export const useSettingsStore = create<SettingsState>()(
       deleteAiConnection: async (userId, connectionId) => {
         set({ isLoadingConnections: true, connectionsError: null });
         try {
-          await gameRepository.deleteAiConnection(userId, connectionId);
+          await aiConnectionRepository.deleteAiConnection(userId, connectionId);
           set(state => {
             const updatedConnections = state.aiConnections.filter(conn => conn.id !== connectionId);
             let newSelectedId = state.selectedConnectionId;
@@ -3958,8 +3965,8 @@ export const useSettingsStore = create<SettingsState>()(
       setSelectedConnectionId: (id) => set({ selectedConnectionId: id }),
       setUseDummyNarrator: (enabled) => set({ useDummyNarrator: enabled }),
       setThemeMode: (mode) => set({ themeMode: mode }),
-      setEnableDebugLogging: (enabled) => set({ enableDebugLogging: enabled }), // <-- NEW
-      setTextGenerationSpeedMs: (speed) => set({ textGenerationSpeedMs: speed }), // <-- NEW
+      setEnableDebugLogging: (enabled) => set({ enableDebugLogging: enabled }), 
+      setTextGenerationSpeedMs: (speed) => set({ textGenerationSpeedMs: speed }), 
 
       reset: () => {
         debugLog("Resetting SettingsStore."); // ⬅️ Replaces console.log
@@ -3977,8 +3984,8 @@ export const useSettingsStore = create<SettingsState>()(
         selectedConnectionId: state.selectedConnectionId,
         useDummyNarrator: state.useDummyNarrator,
         themeMode: state.themeMode,
-        enableDebugLogging: state.enableDebugLogging,         // <-- NEW
-        textGenerationSpeedMs: state.textGenerationSpeedMs,   // <-- NEW
+        enableDebugLogging: state.enableDebugLogging,         
+        textGenerationSpeedMs: state.textGenerationSpeedMs,   
       }),
     }
   )
@@ -4318,77 +4325,93 @@ export const AiSettingsEditor: React.FC<AiSettingsEditorProps> = ({
 };
 @@FILE: src/ui/components/AuthOrchestrator.tsx
 // src/ui/components/AuthOrchestrator.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useReducer } from 'react';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { Box, CircularProgress, Typography } from '@mui/material';
+import { debugLog } from '../../utils/debug';
+
+// --- Start of State Machine Definition ---
+
+type LoadingState = 'IDLE' | 'CHECKING_AUTH' | 'LOADING_GAME' | 'READY';
+type LoadingAction =
+  | { type: 'AUTH_CHECK_COMPLETE'; payload: { isAuthenticated: boolean } }
+  | { type: 'GAME_LOAD_SUCCESS' }
+  | { type: 'GAME_LOAD_FAIL' }
+  | { type: 'RESET' };
+
+const reducer = (state: LoadingState, action: LoadingAction): LoadingState => {
+  debugLog(`%c[AuthOrchestrator] State Transition: ${state} -> Action: ${action.type}`, 'color: blue;');
+  switch (state) {
+    case 'IDLE':
+      if (action.type === 'AUTH_CHECK_COMPLETE') {
+        return action.payload.isAuthenticated ? 'LOADING_GAME' : 'READY';
+      }
+      return state;
+    case 'LOADING_GAME':
+      if (action.type === 'GAME_LOAD_SUCCESS' || action.type === 'GAME_LOAD_FAIL') {
+        return 'READY';
+      }
+      if (action.type === 'RESET') {
+        return 'IDLE';
+      }
+      return state;
+    case 'READY':
+      if (action.type === 'RESET') {
+        return 'IDLE';
+      }
+      return state;
+    default:
+      return state;
+  }
+};
+// --- End of State Machine Definition ---
+
 
 const AuthOrchestrator: React.FC = () => {
-  console.log('%c[AuthOrchestrator.tsx] Component rendering.', 'color: green;');
-
-  const { user } = useAuthStore();
-  const gameLoading = useGameStateStore(state => state.gameLoading); 
+  const { user, isLoading: isAuthLoading } = useAuthStore();
+  const loadLastActiveGame = useGameStateStore(state => state.loadLastActiveGame);
   const navigate = useNavigate();
   const location = useLocation();
-  const initialLoadAttempted = useRef(false);
 
-  // Capture current action references for debugging useEffect dependencies
-  const loadLastActiveGameAction = useGameStateStore(state => state.loadLastActiveGame);
-  const userRef = useRef(user);
-  const gameLoadingRef = useRef(gameLoading);
-  const locationPathnameRef = useRef(location.pathname);
+  const [state, dispatch] = useReducer(reducer, 'IDLE');
 
-
+  // Effect 1: React to authentication changes to kick off the state machine.
   useEffect(() => {
-    // DEBUG: Log dependency changes
-    console.log('%c[AuthOrchestrator.tsx] useEffect triggered.', 'color: blue;');
-    if (userRef.current !== user) console.log(`[AuthOrchestrator.tsx] useEffect dependency change: user from ${userRef.current?.uid || 'null'} to ${user?.uid || 'null'}`);
-    if (gameLoadingRef.current !== gameLoading) console.log(`[AuthOrchestrator.tsx] useEffect dependency change: gameLoading from ${gameLoadingRef.current} to ${gameLoading}`);
-    if (locationPathnameRef.current !== location.pathname) console.log(`[AuthOrchestrator.tsx] useEffect dependency change: location.pathname from ${locationPathnameRef.current} to ${location.pathname}`);
-    
-    // Update refs for next comparison
-    userRef.current = user;
-    gameLoadingRef.current = gameLoading;
-    locationPathnameRef.current = location.pathname;
-
-
-    // Logic to prevent re-attempts for game loading
-    if (user && !initialLoadAttempted.current) {
-      initialLoadAttempted.current = true; // Mark that we are attempting this load
-      
-      console.log(`%c[AuthOrchestrator.tsx] Authenticated user (${user.uid}), attempting initial game load.`, 'color: orange; font-weight: bold;');
-
-      loadLastActiveGameAction(user.uid).then((gameLoaded) => {
-        console.log(`%c[AuthOrchestrator.tsx] loadLastActiveGameAction resolved. Game loaded: ${gameLoaded}. Current path: ${location.pathname}`, 'color: orange;');
-        if (location.pathname === '/') {
-          if (gameLoaded) {
-            console.log('[AuthOrchestrator.tsx] Navigating to /game');
-            navigate('/game', { replace: true });
-          } else {
-            console.log('[AuthOrchestrator.tsx] Navigating to /library (no game loaded)');
-            navigate('/library', { replace: true });
-          }
-        } else {
-             console.log(`[AuthOrchestrator.tsx] Not navigating from non-root path: ${location.pathname}`);
-        }
-      }).catch((error) => {
-          console.error("[AuthOrchestrator.tsx] Error during loadLastActiveGameAction:", error);
-          if (location.pathname === '/') {
-              navigate('/library', { replace: true });
-          }
-      });
-    } else if (!user && initialLoadAttempted.current) {
-        // If user logs out and we had previously attempted to load, reset the flag.
-        console.log('[AuthOrchestrator.tsx] User logged out, resetting initialLoadAttempted flag.');
-        initialLoadAttempted.current = false;
-    } else {
-        console.log('[AuthOrchestrator.tsx] useEffect: No user or initialLoadAttempted already true. Skipping load logic.');
+    if (!isAuthLoading) {
+      dispatch({ type: 'AUTH_CHECK_COMPLETE', payload: { isAuthenticated: !!user } });
     }
-  }, [user, gameLoading, location.pathname, navigate, loadLastActiveGameAction]); // loadLastActiveGameAction is now a stable reference due to Zustand's action pattern.
+  }, [isAuthLoading, user]);
 
-  if ((user && !initialLoadAttempted.current) || gameLoading) {
-    console.log(`[AuthOrchestrator.tsx] Displaying loading screen. User: ${user ? 'present' : 'null'}, InitialLoadAttempted: ${initialLoadAttempted.current}, GameLoading: ${gameLoading}`);
+  // Effect 2: Perform side-effects based on the current state of the machine.
+  useEffect(() => {
+    if (state === 'LOADING_GAME' && user) {
+      loadLastActiveGame(user.uid).then((gameLoaded) => {
+        dispatch({ type: gameLoaded ? 'GAME_LOAD_SUCCESS' : 'GAME_LOAD_FAIL' });
+        // Navigate only if we are at the root, otherwise stay put.
+        if (location.pathname === '/') {
+          navigate(gameLoaded ? '/game' : '/library', { replace: true });
+        }
+      }).catch(() => {
+        dispatch({ type: 'GAME_LOAD_FAIL' });
+        if (location.pathname === '/') {
+          navigate('/library', { replace: true });
+        }
+      });
+    }
+  }, [state, user, loadLastActiveGame, navigate, location.pathname]);
+  
+  // Effect 3: Reset the machine if the user logs out.
+  useEffect(() => {
+    if (!user && state === 'READY') {
+      dispatch({ type: 'RESET' });
+    }
+  }, [user, state]);
+
+
+  // Render loading indicator until the machine is in the 'READY' state.
+  if (state !== 'READY') {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
@@ -4397,7 +4420,7 @@ const AuthOrchestrator: React.FC = () => {
     );
   }
 
-  console.log('[AuthOrchestrator.tsx] Rendering Outlet (loading complete).');
+  // Once ready, render the nested routes.
   return <Outlet />;
 };
 
@@ -5266,6 +5289,7 @@ const createBlankPromptCard = (): PromptCard => ({
   isExample: false,
   functionDefs: '',
   isPublic: false,
+  historyBrowsingEnabled: true,
   contentHash: '',
 });
 
@@ -5950,6 +5974,51 @@ const StackInstructionsEditor: React.FC<StackInstructionsEditorProps> = ({
 };
 
 export { StackInstructionsEditor };
+@@FILE: src/ui/components/TurnNavigator.tsx
+// src/ui/components/TurnNavigator.tsx
+import React from 'react';
+import { Box, IconButton, Typography, Tooltip } from '@mui/material';
+import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
+import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
+
+interface TurnNavigatorProps {
+  currentTurn: number;
+  maxTurn: number;
+  onNavigate: (turn: number) => void;
+  isLoading: boolean;
+}
+
+export const TurnNavigator: React.FC<TurnNavigatorProps> = ({
+  currentTurn,
+  maxTurn,
+  onNavigate,
+  isLoading,
+}) => {
+  const canGoBack = currentTurn > 0;
+  const canGoForward = currentTurn < maxTurn;
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', p: 1, gap: 2, backgroundColor: 'action.selected', borderRadius: 2 }}>
+      <Tooltip title="Previous Turn">
+        <span>
+          <IconButton onClick={() => onNavigate(currentTurn - 1)} disabled={!canGoBack || isLoading}>
+            <ArrowBackIosNewIcon />
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+        Turn {currentTurn} / {maxTurn}
+      </Typography>
+      <Tooltip title="Next Turn">
+        <span>
+          <IconButton onClick={() => onNavigate(currentTurn + 1)} disabled={!canGoForward || isLoading}>
+            <ArrowForwardIosIcon />
+          </IconButton>
+        </span>
+      </Tooltip>
+    </Box>
+  );
+};
 @@FILE: src/ui/components/WorldStateCategory.tsx
 import React from 'react';
 import {
@@ -7094,7 +7163,7 @@ import {
 import type {AlertColor} from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import CasinoIcon from '@mui/icons-material/Casino';
-
+import { TurnNavigator } from '../components/TurnNavigator';
 import { useGameStateStore, selectConversationHistory } from '../../state/useGameStateStore';
 import { usePromptCardStore } from '../../state/usePromptCardStore';
 import { PinnedItemsView } from '../components/PinnedItemsView';
@@ -7106,6 +7175,9 @@ export const GameScreen: React.FC = () => {
     gameLoading,
     isProcessingTurn,
     processTurn,
+    currentSnapshot,    
+    maxTurn,            
+    navigateToTurn,   
   } = useGameStateStore();
 
   const conversationHistory = useGameStateStore(selectConversationHistory);
@@ -7180,6 +7252,15 @@ export const GameScreen: React.FC = () => {
     <Box sx={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', p: 2 }}>
       <PinnedItemsView />
       <Divider sx={{ my: 1 }} />
+      {/* ADD TURN NAVIGATOR HERE */}
+      {activePromptCard?.historyBrowsingEnabled && currentSnapshot && maxTurn !== null && (
+        <TurnNavigator
+          currentTurn={currentSnapshot.currentTurn}
+          maxTurn={maxTurn}
+          onNavigate={navigateToTurn}
+          isLoading={isProcessingTurn || gameLoading}
+        />
+      )}
       <Box sx={{ flex: 1, overflowY: 'auto', px: 1, pb: 8 }}>
         {conversationHistory.map((msg, index) => (
           <Paper key={index} elevation={0} sx={{ p: 1.5, mb: 1.5, backgroundColor: 'transparent' }}>
@@ -8481,6 +8562,30 @@ export function getPromptCardContentForHash(card: {
   ].join('|||'); // Use a distinctive separator to avoid accidental matches
 }
 @@FOLDER: src/utils/hooks
+@@FILE: src/utils/hooks/useDialog.ts
+// src/utils/hooks/useDialog.ts
+import { useState, useCallback } from 'react';
+
+/**
+ * A custom hook to manage the state of a dialog or modal.
+ * @param initialState - The initial open state of the dialog (defaults to false).
+ * @returns An object with { isOpen, open, close } properties for controlling the dialog.
+ */
+export const useDialog = (initialState = false) => {
+  const [isOpen, setIsOpen] = useState(initialState);
+
+  /**
+   * Opens the dialog.
+   */
+  const open = useCallback(() => setIsOpen(true), []);
+
+  /**
+   * Closes the dialog.
+   */
+  const close = useCallback(() => setIsOpen(false), []);
+
+  return { isOpen, open, close };
+};
 @@FILE: src/utils/hooks/useGameScreenLogic.ts
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -9035,6 +9140,7 @@ import type { AiConnection } from '../../models';
 import { aiClient } from '../../logic/aiClient';
 import { aiConnectionTemplates } from '../../data/config/aiConnectionTemplates';
 import type { ModelInfo } from '../../data/config/aiConnectionTemplates';
+import { useDialog } from './useDialog'; // <-- ADD IMPORT
 
 export const useSettingsLogic = () => {
   const { user } = useAuthStore();
@@ -9045,23 +9151,15 @@ export const useSettingsLogic = () => {
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
   const [modelSearchTerm, setModelSearchTerm] = useState('');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  
+
+  const connectionDialog = useDialog();
+  const modelInfoDialog = useDialog();
+
+  
   const [testStatus, setTestStatus] = useState<{ text: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({ open: false, message: '', severity: 'info' });
-
-  // --- START: ADDED STATE AND HANDLERS FOR MODEL INFO DIALOG ---
   const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null);
-  const [openModelInfo, setOpenModelInfo] = useState(false);
-
-  const handleOpenModelInfo = useCallback((model: ModelInfo) => {
-    setModelInfo(model);
-    setOpenModelInfo(true);
-  }, []);
-
-  const handleCloseModelInfo = useCallback(() => {
-    setOpenModelInfo(false);
-  }, []);
-  // --- END: ADDED STATE AND HANDLERS ---
 
   useEffect(() => {
     if (user?.uid) {
@@ -9083,10 +9181,14 @@ export const useSettingsLogic = () => {
     setAvailableModels(initialModels);
     setModelSearchTerm('');
     setTestStatus(null);
-    setIsDialogOpen(true);
-  }, []);
+    connectionDialog.open(); // <-- UPDATE TO USE HOOK
+  }, [connectionDialog]);
 
-  // ... (rest of the hook logic is correct and remains unchanged) ...
+  const handleOpenModelInfo = useCallback((model: ModelInfo) => {
+    setModelInfo(model);
+    modelInfoDialog.open(); // <-- UPDATE TO USE HOOK
+  }, [modelInfoDialog]);
+
   const handleLoadTemplate = useCallback((templateKey: string) => {
     const template = aiConnectionTemplates[templateKey] || {
         displayName: 'Custom', modelName: '', modelSlug: '', apiUrl: '', apiToken: '', functionCallingEnabled: false,
@@ -9140,8 +9242,12 @@ export const useSettingsLogic = () => {
   }, [availableModels, modelSearchTerm]);
 
   const handleCloseDialog = useCallback(() => {
-    setIsDialogOpen(false);
-  }, []);
+    connectionDialog.close(); // <-- UPDATE TO USE HOOK
+  }, [connectionDialog]);
+  
+  const handleCloseModelInfo = useCallback(() => {
+    modelInfoDialog.close(); // <-- UPDATE TO USE HOOK
+  }, [modelInfoDialog]);
 
   const handleUpdateEditingConnection = useCallback((updates: Partial<AiConnection>) => {
     setEditingConnection(prev => prev ? ({ ...prev, ...updates }) : null);
@@ -9189,7 +9295,8 @@ export const useSettingsLogic = () => {
 
   return {
     ...settingsStore,
-    isDialogOpen,
+    isDialogOpen: connectionDialog.isOpen, // <-- UPDATE RETURN VALUE
+    openModelInfo: modelInfoDialog.isOpen, // <-- UPDATE RETURN VALUE
     dialogStep,
     editingConnection,
     availableModels,
@@ -9200,6 +9307,7 @@ export const useSettingsLogic = () => {
     modelSearchTerm,
     setModelSearchTerm,
     filteredModels,
+    modelInfo,
     handleOpenDialog,
     handleCloseDialog,
     handleLoadTemplate,
@@ -9209,12 +9317,8 @@ export const useSettingsLogic = () => {
     handleDelete,
     closeSnackbar,
     handleTest,
-    // --- START: ADDED PROPERTIES TO RETURN OBJECT ---
-    modelInfo,
-    openModelInfo,
     handleOpenModelInfo,
     handleCloseModelInfo,
-    // --- END: ADDED PROPERTIES ---
   };
 };
 @@FILE: src/utils/hooks/useWorldStateViewLogic.ts

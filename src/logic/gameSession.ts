@@ -53,7 +53,7 @@ export class GameSession implements IGameSession {
       errorLog("[gameSession.ts] initializeGame: Failed to parse worldStateInit JSON:", e);
       initialWorldState = {};
     }
-
+    const gameId = generateUuid();
     const now = new Date().toISOString();
 
     // CREATE THE "TURN 0" LOG ENTRY
@@ -78,6 +78,7 @@ export class GameSession implements IGameSession {
 
     const initialSnapshot: GameSnapshot = {
       id: generateUuid(),
+      gameId: gameId,    // Timeline ID
       userId: userId,
       promptCardId: card.id,
       title: `Game with ${card.title} - ${formatIsoDateForDisplay(now)}`,

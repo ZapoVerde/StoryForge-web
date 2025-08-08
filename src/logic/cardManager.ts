@@ -156,6 +156,7 @@ export class PromptCardManager implements ICardManager {
       functionDefs: data.functionDefs ?? "",
       isPublic: data.isPublic ?? false, // Default to private for new user-created cards
       contentHash: '', // Will be calculated below
+      historyBrowsingEnabled: data.historyBrowsingEnabled ?? true, // <-- ADD THIS (default to true)
     };
 
     // Calculate content hash AFTER all content fields are finalized

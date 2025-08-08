@@ -4,11 +4,11 @@ import type { GameSnapshot, GameState, LogEntry, Message } from '../models';
 import type { IGameSession } from '../logic/gameSession';
 import { useSettingsStore } from './useSettingsStore';
 import { usePromptCardStore } from './usePromptCardStore';
-import { gameRepository } from '../data/repositories/gameRepository';
 import { promptCardRepository } from '../data/repositories/promptCardRepository';
 import { debugLog, errorLog } from '../utils/debug';
 import { produce } from 'immer';
-
+import { gameRepository } from '../data/repositories/gameRepository';
+import { aiConnectionRepository } from '../data/repositories/aiConnectionRepository';
 
 // External GameSession service instance
 let _gameSessionService: IGameSession | null = null;
@@ -22,6 +22,7 @@ export const initializeGameStateStore = (gameSession: IGameSession) => {
 
 interface GameStateState {
   currentSnapshot: GameSnapshot | null;
+  maxTurn: number | null;
   narratorInputText: string;
   narratorScrollPosition: number;
   gameError: string | null;
@@ -45,6 +46,7 @@ interface GameStateActions {
   toggleWorldStatePin: (keyPath: string, type: 'variable' | 'entity' | 'category') => Promise<void>;
   reset: () => void;
   processTurn: (action: string) => Promise<void>;
+  navigateToTurn: (turnNumber: number) => Promise<void>;
 }
 
 type GameStateStore = GameStateState & GameStateActions;
@@ -56,6 +58,7 @@ const initialState: GameStateState = {
   gameError: null,
   gameLoading: false,
   isProcessingTurn: false,
+  maxTurn: null, 
 };
 
 export const useGameStateStore = create<GameStateStore>((set, get) => {
@@ -127,23 +130,45 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
     processPlayerAction: async (action) => {
       const snapshot = get().currentSnapshot;
       const card = usePromptCardStore.getState().activePromptCard;
+      const maxTurn = get().maxTurn; // Get maxTurn from state
+
       if (!snapshot || !card) {
         set({ gameError: "Cannot process action: Game or Prompt Card not loaded." });
         return;
       }
+
+      // DESTRUCTIVE RESUME LOGIC
+      if (maxTurn !== null && snapshot.currentTurn < maxTurn) {
+        const confirmed = window.confirm(
+          "You are about to resume from an earlier point. This will delete all future turns from your previous timeline. This cannot be undone. Are you sure?"
+        );
+        if (!confirmed) {
+          return; // User cancelled
+        }
+        // Tell the repository to delete the obsolete future turns
+        await gameRepository.deleteFutureTurns(snapshot.userId, snapshot.gameId, snapshot.currentTurn);
+      }
+
       set({ isProcessingTurn: true, gameError: null, narratorInputText: '' });
       const useDummyNarrator = useSettingsStore.getState().useDummyNarrator;
       try {
-        const aiConnections = await gameRepository.getAiConnections(snapshot.userId);
+        const aiConnections = await aiConnectionRepository.getAiConnections(snapshot.userId);
         const service = getGameService();
-        const newSnapshot = await service.processPlayerAction(
-          snapshot,
-          card,
-          action,
-          useDummyNarrator,
-          aiConnections
+        // The service returns a new snapshot with turn number incremented
+        const processedSnapshot = await service.processPlayerAction(
+          snapshot, card, action, useDummyNarrator, aiConnections
         );
-        await updateSnapshotAndPersist(newSnapshot);
+        
+        // Overwrite the ID to follow our new convention
+        const finalSnapshot = {
+          ...processedSnapshot,
+          id: `${processedSnapshot.gameId}-${processedSnapshot.currentTurn}`
+        };
+
+        await updateSnapshotAndPersist(finalSnapshot);
+        // After persisting, update the maxTurn to the current turn
+        set({ maxTurn: finalSnapshot.currentTurn });
+
       } catch (error: any) {
         errorLog("[useGameStateStore] processPlayerAction action ERROR:", error);
         set({ gameError: error.message });
@@ -152,18 +177,42 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
       }
     },
 
-    loadGame: async (userId, snapshotId) => {
+    loadGame: async (userId, gameId) => { // This now receives a gameId
       set({ gameLoading: true, gameError: null });
       try {
-        const snapshot = await gameRepository.getGameSnapshot(userId, snapshotId);
-        if (!snapshot) throw new Error(`Game snapshot ${snapshotId} not found.`);
-        const card = await promptCardRepository.getPromptCard(userId, snapshot.promptCardId);
-        if (!card) throw new Error(`PromptCard ${snapshot.promptCardId} not found for loaded game.`);
+        const timeline = await gameRepository.getGameTimeline(userId, gameId);
+        if (timeline.length === 0) throw new Error(`Game ${gameId} not found.`);
+        
+        const latestSnapshot = timeline[timeline.length - 1];
+        const card = await promptCardRepository.getPromptCard(userId, latestSnapshot.promptCardId);
+        if (!card) throw new Error(`PromptCard for game could not be found.`);
+
         usePromptCardStore.getState().setActivePromptCard(card);
-        set({ currentSnapshot: snapshot, gameLoading: false });
+        set({
+          currentSnapshot: latestSnapshot,
+          maxTurn: latestSnapshot.currentTurn, // Max turn is the turn number of the latest snapshot
+          gameLoading: false,
+        });
       } catch (error: any) {
         errorLog("[useGameStateStore] loadGame action ERROR:", error);
         set({ gameError: error.message, gameLoading: false });
+      }
+    },
+
+    // ADD NEW ACTION: navigateToTurn
+    navigateToTurn: async (turnNumber: number) => {
+      const snapshot = get().currentSnapshot;
+      if (!snapshot) return;
+
+      set({ gameLoading: true, gameError: null });
+      try {
+        const targetSnapshotId = `${snapshot.gameId}-${turnNumber}`;
+        const targetSnapshot = await gameRepository.getGameSnapshot(snapshot.userId, targetSnapshotId);
+        if (!targetSnapshot) throw new Error(`Turn ${turnNumber} not found.`);
+        
+        set({ currentSnapshot: targetSnapshot, gameLoading: false });
+      } catch(e: any) {
+        set({ gameError: e.message, gameLoading: false });
       }
     },
 

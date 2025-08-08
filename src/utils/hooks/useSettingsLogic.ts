@@ -6,6 +6,7 @@ import type { AiConnection } from '../../models';
 import { aiClient } from '../../logic/aiClient';
 import { aiConnectionTemplates } from '../../data/config/aiConnectionTemplates';
 import type { ModelInfo } from '../../data/config/aiConnectionTemplates';
+import { useDialog } from './useDialog'; // <-- ADD IMPORT
 
 export const useSettingsLogic = () => {
   const { user } = useAuthStore();
@@ -16,23 +17,15 @@ export const useSettingsLogic = () => {
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([]);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
   const [modelSearchTerm, setModelSearchTerm] = useState('');
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  
+
+  const connectionDialog = useDialog();
+  const modelInfoDialog = useDialog();
+
+  
   const [testStatus, setTestStatus] = useState<{ text: string, type: 'success' | 'error' | 'info' } | null>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({ open: false, message: '', severity: 'info' });
-
-  // --- START: ADDED STATE AND HANDLERS FOR MODEL INFO DIALOG ---
   const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null);
-  const [openModelInfo, setOpenModelInfo] = useState(false);
-
-  const handleOpenModelInfo = useCallback((model: ModelInfo) => {
-    setModelInfo(model);
-    setOpenModelInfo(true);
-  }, []);
-
-  const handleCloseModelInfo = useCallback(() => {
-    setOpenModelInfo(false);
-  }, []);
-  // --- END: ADDED STATE AND HANDLERS ---
 
   useEffect(() => {
     if (user?.uid) {
@@ -54,10 +47,14 @@ export const useSettingsLogic = () => {
     setAvailableModels(initialModels);
     setModelSearchTerm('');
     setTestStatus(null);
-    setIsDialogOpen(true);
-  }, []);
+    connectionDialog.open(); // <-- UPDATE TO USE HOOK
+  }, [connectionDialog]);
 
-  // ... (rest of the hook logic is correct and remains unchanged) ...
+  const handleOpenModelInfo = useCallback((model: ModelInfo) => {
+    setModelInfo(model);
+    modelInfoDialog.open(); // <-- UPDATE TO USE HOOK
+  }, [modelInfoDialog]);
+
   const handleLoadTemplate = useCallback((templateKey: string) => {
     const template = aiConnectionTemplates[templateKey] || {
         displayName: 'Custom', modelName: '', modelSlug: '', apiUrl: '', apiToken: '', functionCallingEnabled: false,
@@ -111,8 +108,12 @@ export const useSettingsLogic = () => {
   }, [availableModels, modelSearchTerm]);
 
   const handleCloseDialog = useCallback(() => {
-    setIsDialogOpen(false);
-  }, []);
+    connectionDialog.close(); // <-- UPDATE TO USE HOOK
+  }, [connectionDialog]);
+  
+  const handleCloseModelInfo = useCallback(() => {
+    modelInfoDialog.close(); // <-- UPDATE TO USE HOOK
+  }, [modelInfoDialog]);
 
   const handleUpdateEditingConnection = useCallback((updates: Partial<AiConnection>) => {
     setEditingConnection(prev => prev ? ({ ...prev, ...updates }) : null);
@@ -160,7 +161,8 @@ export const useSettingsLogic = () => {
 
   return {
     ...settingsStore,
-    isDialogOpen,
+    isDialogOpen: connectionDialog.isOpen, // <-- UPDATE RETURN VALUE
+    openModelInfo: modelInfoDialog.isOpen, // <-- UPDATE RETURN VALUE
     dialogStep,
     editingConnection,
     availableModels,
@@ -171,6 +173,7 @@ export const useSettingsLogic = () => {
     modelSearchTerm,
     setModelSearchTerm,
     filteredModels,
+    modelInfo,
     handleOpenDialog,
     handleCloseDialog,
     handleLoadTemplate,
@@ -180,11 +183,7 @@ export const useSettingsLogic = () => {
     handleDelete,
     closeSnackbar,
     handleTest,
-    // --- START: ADDED PROPERTIES TO RETURN OBJECT ---
-    modelInfo,
-    openModelInfo,
     handleOpenModelInfo,
     handleCloseModelInfo,
-    // --- END: ADDED PROPERTIES ---
   };
 };

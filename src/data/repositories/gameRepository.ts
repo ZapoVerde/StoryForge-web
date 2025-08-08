@@ -1,152 +1,72 @@
 // src/data/repositories/gameRepository.ts
 
 import {
-  collection,
-  doc,
-  getDoc,
-  setDoc,
-  deleteDoc,
-  query,
-  getDocs,
-  serverTimestamp,
-  orderBy,
-  Timestamp, // Import Timestamp type
+  collection, doc, getDoc, setDoc, deleteDoc, query, getDocs,
+  serverTimestamp, orderBy, Timestamp, where, writeBatch
 } from 'firebase/firestore';
 import { db } from '../infrastructure/firebaseClient';
-import { generateUuid } from '../../utils/uuid'; // Import generateUuid
-import type { AiConnection, GameSnapshot } from '../../models';
+import type { GameSnapshot } from '../../models';
+
 /**
- * Defines the contract for GameSnapshot and AiConnection data persistence operations.
+ * Defines the contract for GameSnapshot data persistence operations.
  */
 export interface IGameRepository {
-  /**
-   * Saves a new or updates an existing GameSnapshot.
-   * @param userId The ID of the user owning the snapshot.
-   * @param snapshot The GameSnapshot object to save.
-   * @returns A Promise that resolves when the snapshot is successfully saved.
-   */
   saveGameSnapshot(userId: string, snapshot: GameSnapshot): Promise<void>;
-
-  /**
-   * Retrieves a single GameSnapshot by its ID for a specific user.
-   * @param userId The ID of the user owning the snapshot.
-   * @param snapshotId The ID of the GameSnapshot to retrieve.
-   * @returns A Promise that resolves with the GameSnapshot object or null if not found.
-   */
   getGameSnapshot(userId: string, snapshotId: string): Promise<GameSnapshot | null>;
-
-  /**
-   * Retrieves all GameSnapshots for a specific user, ordered by updatedAt descending.
-   * @param userId The ID of the user owning the snapshots.
-   * @returns A Promise that resolves with an array of GameSnapshot objects.
-   */
   getAllGameSnapshots(userId: string): Promise<GameSnapshot[]>;
-
-  /**
-   * Deletes a GameSnapshot by its ID for a specific user.
-   * @param userId The ID of the user owning the snapshot.
-   * @param snapshotId The ID of the GameSnapshot to delete.
-   * @returns A Promise that resolves when the snapshot is successfully deleted.
-   */
   deleteGameSnapshot(userId: string, snapshotId: string): Promise<void>;
-
-  /**
-   * Retrieves all AI Connections for a user.
-   * @param userId The ID of the user.
-   * @returns A Promise resolving with an array of AiConnection objects.
-   */
-  getAiConnections(userId: string): Promise<AiConnection[]>;
-
-  /**
-   * Saves a new or updates an existing AI Connection.
-   * @param userId The ID of the user.
-   * @param connection The AiConnection object to save.
-   * @returns A Promise that resolves when the connection is successfully saved.
-   */
-  saveAiConnection(userId: string, connection: AiConnection): Promise<void>;
-
-  /**
-   * Deletes an AI Connection by its ID for a specific user.
-   * @param userId The ID of the user.
-   * @param connectionId The ID of the AiConnection to delete.
-   * @returns A Promise that resolves when the connection is successfully deleted.
-   */
-  deleteAiConnection(userId: string, connectionId: string): Promise<void>;
+  getGameTimeline(userId: string, gameId: string): Promise<GameSnapshot[]>;
+  deleteFutureTurns(userId: string, gameId: string, fromTurn: number): Promise<void>;
 }
 
 /**
  * Concrete implementation of IGameRepository using Firestore.
  */
 class FirestoreGameRepository implements IGameRepository {
-
   private getSnapshotsCollectionRef(userId: string) {
-    // Path: users/{userId}/gameSnapshots
     return collection(db, 'users', userId, 'gameSnapshots');
   }
 
-  private getAiConnectionsCollectionRef(userId: string) {
-    // Path: users/{userId}/aiConnections
-    return collection(db, 'users', userId, 'aiConnections');
-  }
-
   // Helper to convert Firestore Timestamp to ISO string
-  private convertTimestamps<T extends { createdAt?: any; updatedAt?: any; lastUpdated?: any }>(data: any): T {
+  private convertTimestamps<T extends { createdAt?: any; updatedAt?: any }>(data: any): T {
     const convertedData: any = { ...data };
-
     if (data.createdAt && data.createdAt instanceof Timestamp) {
       convertedData.createdAt = data.createdAt.toDate().toISOString();
     }
     if (data.updatedAt && data.updatedAt instanceof Timestamp) {
       convertedData.updatedAt = data.updatedAt.toDate().toISOString();
     }
-    // This is the specific field causing the error. 
-    // Only convert it if it exists on the source object.
-    if (data.lastUpdated && data.lastUpdated instanceof Timestamp) {
-      convertedData.lastUpdated = data.lastUpdated.toDate().toISOString();
-    }
-    
     return convertedData as T;
   }
 
   async saveGameSnapshot(userId: string, snapshot: GameSnapshot): Promise<void> {
     const snapshotDocRef = doc(this.getSnapshotsCollectionRef(userId), snapshot.id);
-    console.log(`FirestoreGameRepository: Attempting to setDoc for GameSnapshot ${snapshot.id} for user ${userId}.`);
     try {
       await setDoc(snapshotDocRef, {
-        // Pass all snapshot data, including the new 'title'
         ...snapshot,
-        updatedAt: serverTimestamp() // Always update timestamp on save
+        updatedAt: serverTimestamp()
       }, { merge: true });
-      console.log(`FirestoreGameRepository: Successfully setDoc for GameSnapshot ${snapshot.id}.`);
     } catch (e) {
       console.error(`FirestoreGameRepository: FAILED to setDoc for GameSnapshot ${snapshot.id}:`, e);
-      throw e; // Re-throw the error for GameSession to catch
+      throw e;
     }
   }
 
   async getGameSnapshot(userId: string, snapshotId: string): Promise<GameSnapshot | null> {
     const snapshotDocRef = doc(this.getSnapshotsCollectionRef(userId), snapshotId);
     const snapshotSnap = await getDoc(snapshotDocRef);
-
     if (snapshotSnap.exists()) {
-      const data = snapshotSnap.data();
-      // Ensure title is retrieved
-      return this.convertTimestamps<GameSnapshot>(data) as GameSnapshot;
+      return this.convertTimestamps<GameSnapshot>(snapshotSnap.data()) as GameSnapshot;
     } else {
-      console.log(`No GameSnapshot found with ID: ${snapshotId} for user ${userId}`);
       return null;
     }
   }
 
   async getAllGameSnapshots(userId: string): Promise<GameSnapshot[]> {
-    const q = query(
-      this.getSnapshotsCollectionRef(userId),
-      orderBy('updatedAt', 'desc')
-    );
+    const q = query(this.getSnapshotsCollectionRef(userId), orderBy('updatedAt', 'desc'));
     const querySnapshot = await getDocs(q);
     const snapshots: GameSnapshot[] = [];
     querySnapshot.forEach((doc) => {
-      // Ensure title is retrieved
       snapshots.push(this.convertTimestamps<GameSnapshot>(doc.data()) as GameSnapshot);
     });
     return snapshots;
@@ -155,60 +75,34 @@ class FirestoreGameRepository implements IGameRepository {
   async deleteGameSnapshot(userId: string, snapshotId: string): Promise<void> {
     const snapshotDocRef = doc(this.getSnapshotsCollectionRef(userId), snapshotId);
     await deleteDoc(snapshotDocRef);
-    console.log(`GameSnapshot ${snapshotId} deleted for user ${userId}`);
   }
 
-  async getAiConnections(userId: string): Promise<AiConnection[]> {
+  async getGameTimeline(userId: string, gameId: string): Promise<GameSnapshot[]> {
     const q = query(
-      this.getAiConnectionsCollectionRef(userId),
-      orderBy('displayName', 'asc') // Order by display name
+      this.getSnapshotsCollectionRef(userId),
+      where('gameId', '==', gameId),
+      orderBy('currentTurn', 'asc')
     );
     const querySnapshot = await getDocs(q);
-    const connections: AiConnection[] = [];
-    querySnapshot.forEach((docSnap) => {
-      // Ensure the ID from the document is used
-      connections.push(this.convertTimestamps<AiConnection>(docSnap.data()));
+    const timeline: GameSnapshot[] = [];
+    querySnapshot.forEach((doc) => {
+      timeline.push(this.convertTimestamps<GameSnapshot>(doc.data()) as GameSnapshot);
     });
-
-    // Provide a default DeepSeek connection if no connections exist for the user.
-    // This allows immediate testing without requiring users to manually add one.
-    if (connections.length === 0) {
-      console.log("No AI connections found, returning default.");
-      return [
-        {
-          id: generateUuid(), // Use a generated UUID for the default
-          displayName: 'DeepSeek Coder (Default)', // Added displayName
-          modelName: 'DeepSeek Coder (Default)',
-          modelSlug: 'deepseek-coder',
-          apiUrl: 'https://api.deepseek.com/v1/',
-          apiToken: 'YOUR_DEEPSEEK_API_KEY_HERE', // User should be able to edit this
-          functionCallingEnabled: false, // Default value
-          createdAt: new Date().toISOString(),
-          lastUpdated: new Date().toISOString(),
-          userAgent: 'StoryForge/1.0 (Default)'
-        },
-      ];
-    }
-    return connections;
+    return timeline;
   }
 
-  async saveAiConnection(userId: string, connection: AiConnection): Promise<void> {
-    const connectionDocRef = doc(this.getAiConnectionsCollectionRef(userId), connection.id);
-    await setDoc(connectionDocRef, {
-      ...connection,
-      createdAt: connection.createdAt || serverTimestamp(), // Set createdAt only on initial creation
-      lastUpdated: serverTimestamp(), // Always update lastUpdated
-    }, { merge: true });
-    console.log(`AI Connection ${connection.id} saved for user ${userId}`);
-  }
-
-  async deleteAiConnection(userId: string, connectionId: string): Promise<void> {
-    const connectionDocRef = doc(this.getAiConnectionsCollectionRef(userId), connectionId);
-    await deleteDoc(connectionDocRef);
-    console.log(`AI Connection ${connectionId} deleted for user ${userId}`);
+  async deleteFutureTurns(userId: string, gameId: string, fromTurn: number): Promise<void> {
+    const q = query(
+      this.getSnapshotsCollectionRef(userId),
+      where('gameId', '==', gameId),
+      where('currentTurn', '>', fromTurn)
+    );
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) return;
+    const batch = writeBatch(db);
+    querySnapshot.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
   }
 }
 
-// Export a singleton instance of the repository.
 export const gameRepository = new FirestoreGameRepository();
-

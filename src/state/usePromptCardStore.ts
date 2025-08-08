@@ -3,8 +3,8 @@
 import { create } from 'zustand';
 import type { PromptCard, NewPromptCardData, AiConnection } from '../models'; // Assuming index.ts exports these
 import { promptCardManager } from '../logic/cardManager';
-import { gameRepository } from '../data/repositories/gameRepository'; // For AI Connections
 import { debugLog, errorLog } from '../utils/debug';
+import { aiConnectionRepository } from '../data/repositories/aiConnectionRepository';
 
 const initialState = {
   promptCards: [],
@@ -127,7 +127,7 @@ export const usePromptCardStore = create<PromptCardState>((set, get) => ({
   fetchAiConnections: async (userId) => {
     set({ isLoading: true, error: null });
     try {
-      const connections = await gameRepository.getAiConnections(userId);
+      const connections = await aiConnectionRepository.getAiConnections(userId);
       set({ aiConnections: connections, isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });

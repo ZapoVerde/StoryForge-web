@@ -49,6 +49,7 @@ const createBlankPromptCard = (): PromptCard => ({
   isExample: false,
   functionDefs: '',
   isPublic: false,
+  historyBrowsingEnabled: true,
   contentHash: '',
 });
 

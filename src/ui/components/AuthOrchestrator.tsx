@@ -1,75 +1,91 @@
 // src/ui/components/AuthOrchestrator.tsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useReducer } from 'react';
 import { useAuthStore } from '../../state/useAuthStore';
 import { useGameStateStore } from '../../state/useGameStateStore';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { Box, CircularProgress, Typography } from '@mui/material';
+import { debugLog } from '../../utils/debug';
+
+// --- Start of State Machine Definition ---
+
+type LoadingState = 'IDLE' | 'CHECKING_AUTH' | 'LOADING_GAME' | 'READY';
+type LoadingAction =
+  | { type: 'AUTH_CHECK_COMPLETE'; payload: { isAuthenticated: boolean } }
+  | { type: 'GAME_LOAD_SUCCESS' }
+  | { type: 'GAME_LOAD_FAIL' }
+  | { type: 'RESET' };
+
+const reducer = (state: LoadingState, action: LoadingAction): LoadingState => {
+  debugLog(`%c[AuthOrchestrator] State Transition: ${state} -> Action: ${action.type}`, 'color: blue;');
+  switch (state) {
+    case 'IDLE':
+      if (action.type === 'AUTH_CHECK_COMPLETE') {
+        return action.payload.isAuthenticated ? 'LOADING_GAME' : 'READY';
+      }
+      return state;
+    case 'LOADING_GAME':
+      if (action.type === 'GAME_LOAD_SUCCESS' || action.type === 'GAME_LOAD_FAIL') {
+        return 'READY';
+      }
+      if (action.type === 'RESET') {
+        return 'IDLE';
+      }
+      return state;
+    case 'READY':
+      if (action.type === 'RESET') {
+        return 'IDLE';
+      }
+      return state;
+    default:
+      return state;
+  }
+};
+// --- End of State Machine Definition ---
+
 
 const AuthOrchestrator: React.FC = () => {
-  console.log('%c[AuthOrchestrator.tsx] Component rendering.', 'color: green;');
-
-  const { user } = useAuthStore();
-  const gameLoading = useGameStateStore(state => state.gameLoading); 
+  const { user, isLoading: isAuthLoading } = useAuthStore();
+  const loadLastActiveGame = useGameStateStore(state => state.loadLastActiveGame);
   const navigate = useNavigate();
   const location = useLocation();
-  const initialLoadAttempted = useRef(false);
 
-  // Capture current action references for debugging useEffect dependencies
-  const loadLastActiveGameAction = useGameStateStore(state => state.loadLastActiveGame);
-  const userRef = useRef(user);
-  const gameLoadingRef = useRef(gameLoading);
-  const locationPathnameRef = useRef(location.pathname);
+  const [state, dispatch] = useReducer(reducer, 'IDLE');
 
-
+  // Effect 1: React to authentication changes to kick off the state machine.
   useEffect(() => {
-    // DEBUG: Log dependency changes
-    console.log('%c[AuthOrchestrator.tsx] useEffect triggered.', 'color: blue;');
-    if (userRef.current !== user) console.log(`[AuthOrchestrator.tsx] useEffect dependency change: user from ${userRef.current?.uid || 'null'} to ${user?.uid || 'null'}`);
-    if (gameLoadingRef.current !== gameLoading) console.log(`[AuthOrchestrator.tsx] useEffect dependency change: gameLoading from ${gameLoadingRef.current} to ${gameLoading}`);
-    if (locationPathnameRef.current !== location.pathname) console.log(`[AuthOrchestrator.tsx] useEffect dependency change: location.pathname from ${locationPathnameRef.current} to ${location.pathname}`);
-    
-    // Update refs for next comparison
-    userRef.current = user;
-    gameLoadingRef.current = gameLoading;
-    locationPathnameRef.current = location.pathname;
-
-
-    // Logic to prevent re-attempts for game loading
-    if (user && !initialLoadAttempted.current) {
-      initialLoadAttempted.current = true; // Mark that we are attempting this load
-      
-      console.log(`%c[AuthOrchestrator.tsx] Authenticated user (${user.uid}), attempting initial game load.`, 'color: orange; font-weight: bold;');
-
-      loadLastActiveGameAction(user.uid).then((gameLoaded) => {
-        console.log(`%c[AuthOrchestrator.tsx] loadLastActiveGameAction resolved. Game loaded: ${gameLoaded}. Current path: ${location.pathname}`, 'color: orange;');
-        if (location.pathname === '/') {
-          if (gameLoaded) {
-            console.log('[AuthOrchestrator.tsx] Navigating to /game');
-            navigate('/game', { replace: true });
-          } else {
-            console.log('[AuthOrchestrator.tsx] Navigating to /library (no game loaded)');
-            navigate('/library', { replace: true });
-          }
-        } else {
-             console.log(`[AuthOrchestrator.tsx] Not navigating from non-root path: ${location.pathname}`);
-        }
-      }).catch((error) => {
-          console.error("[AuthOrchestrator.tsx] Error during loadLastActiveGameAction:", error);
-          if (location.pathname === '/') {
-              navigate('/library', { replace: true });
-          }
-      });
-    } else if (!user && initialLoadAttempted.current) {
-        // If user logs out and we had previously attempted to load, reset the flag.
-        console.log('[AuthOrchestrator.tsx] User logged out, resetting initialLoadAttempted flag.');
-        initialLoadAttempted.current = false;
-    } else {
-        console.log('[AuthOrchestrator.tsx] useEffect: No user or initialLoadAttempted already true. Skipping load logic.');
+    if (!isAuthLoading) {
+      dispatch({ type: 'AUTH_CHECK_COMPLETE', payload: { isAuthenticated: !!user } });
     }
-  }, [user, gameLoading, location.pathname, navigate, loadLastActiveGameAction]); // loadLastActiveGameAction is now a stable reference due to Zustand's action pattern.
+  }, [isAuthLoading, user]);
 
-  if ((user && !initialLoadAttempted.current) || gameLoading) {
-    console.log(`[AuthOrchestrator.tsx] Displaying loading screen. User: ${user ? 'present' : 'null'}, InitialLoadAttempted: ${initialLoadAttempted.current}, GameLoading: ${gameLoading}`);
+  // Effect 2: Perform side-effects based on the current state of the machine.
+  useEffect(() => {
+    if (state === 'LOADING_GAME' && user) {
+      loadLastActiveGame(user.uid).then((gameLoaded) => {
+        dispatch({ type: gameLoaded ? 'GAME_LOAD_SUCCESS' : 'GAME_LOAD_FAIL' });
+        // Navigate only if we are at the root, otherwise stay put.
+        if (location.pathname === '/') {
+          navigate(gameLoaded ? '/game' : '/library', { replace: true });
+        }
+      }).catch(() => {
+        dispatch({ type: 'GAME_LOAD_FAIL' });
+        if (location.pathname === '/') {
+          navigate('/library', { replace: true });
+        }
+      });
+    }
+  }, [state, user, loadLastActiveGame, navigate, location.pathname]);
+  
+  // Effect 3: Reset the machine if the user logs out.
+  useEffect(() => {
+    if (!user && state === 'READY') {
+      dispatch({ type: 'RESET' });
+    }
+  }, [user, state]);
+
+
+  // Render loading indicator until the machine is in the 'READY' state.
+  if (state !== 'READY') {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
@@ -78,7 +94,7 @@ const AuthOrchestrator: React.FC = () => {
     );
   }
 
-  console.log('[AuthOrchestrator.tsx] Rendering Outlet (loading complete).');
+  // Once ready, render the nested routes.
   return <Outlet />;
 };
 

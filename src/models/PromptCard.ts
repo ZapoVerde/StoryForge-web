@@ -23,13 +23,10 @@ export interface AiSettings {
  * This is a pure data definition, with no default values or logic.
  */
 export interface PromptCard {
-  // Web-specific lineage and deduplication fields (as per initial migration plan)
   id: string;
   rootId: string;
   parentId: string | null; // Null for root cards
   contentHash: string; // Hash of significant content fields to detect duplicates
-
-  // Fields directly from old PromptCard.kt
   title: string;
   description: string | null; // Optional in Kotlin, so `string | null`
   prompt: string;
@@ -44,8 +41,7 @@ export interface PromptCard {
   tags: string[];            // Kotlin `List<String>` maps to `string[]`
   isExample: boolean;        // From Kotlin `isExample`
   functionDefs: string;      // JSON string
-
-  // Additional web-specific metadata (as per initial migration plan)
+  historyBrowsingEnabled: boolean;
   isPublic: boolean;
   createdAt: string; // ISO 8601 string
   updatedAt: string; // ISO 8601 string
@@ -75,4 +71,5 @@ export interface NewPromptCardData {
   isExample?: boolean;
   functionDefs?: string;
   isPublic?: boolean;
+  historyBrowsingEnabled?: boolean;
 }
