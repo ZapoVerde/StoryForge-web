@@ -386,7 +386,7 @@ const GameLibraryScreen: React.FC = () => {
                 <ListItem
                   secondaryAction={
                     <Box>
-                      <IconButton edge="end" aria-label="load-game" onClick={() => handleLoadGame(game.id)}>
+                      <IconButton edge="end" aria-label="load-game" onClick={() => handleLoadGame(game.gameId)}>
                         <PlayArrowIcon sx={{ color: (theme) => theme.palette.primary.main }} />
                       </IconButton>
                       <IconButton edge="end" aria-label="delete-game" onClick={() => handleDeleteGame(game.id)}>

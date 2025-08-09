@@ -221,7 +221,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
       try {
         const allSnapshots = await gameRepository.getAllGameSnapshots(userId);
         if (allSnapshots.length > 0) {
-          await get().loadGame(userId, allSnapshots[0].id);
+          await get().loadGame(userId, allSnapshots[0].gameId); 
           return true;
         }
         return false;

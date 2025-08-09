@@ -3624,7 +3624,7 @@ export const useGameStateStore = create<GameStateStore>((set, get) => {
       try {
         const allSnapshots = await gameRepository.getAllGameSnapshots(userId);
         if (allSnapshots.length > 0) {
-          await get().loadGame(userId, allSnapshots[0].id);
+          await get().loadGame(userId, allSnapshots[0].gameId); 
           return true;
         }
         return false;
@@ -7479,7 +7479,7 @@ const GameLibraryScreen: React.FC = () => {
                 <ListItem
                   secondaryAction={
                     <Box>
-                      <IconButton edge="end" aria-label="load-game" onClick={() => handleLoadGame(game.id)}>
+                      <IconButton edge="end" aria-label="load-game" onClick={() => handleLoadGame(game.gameId)}>
                         <PlayArrowIcon sx={{ color: (theme) => theme.palette.primary.main }} />
                       </IconButton>
                       <IconButton edge="end" aria-label="delete-game" onClick={() => handleDeleteGame(game.id)}>
