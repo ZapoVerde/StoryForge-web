@@ -10,10 +10,12 @@ import { GameScreen } from './ui/screens/GameScreen';
 import WorldStateScreen from './ui/screens/WorldStateScreen';
 import { LogViewerScreen } from './ui/screens/LogViewerScreen';
 import SettingsScreen from './ui/screens/SettingsScreen';
+import AdminRoute from './ui/components/AdminRoute';
 import type { JSX } from 'react';
 
 // Lazy-loaded screens
 const SourceDumpScreen = lazy(() => import('./ui/screens/SourceDumpScreen'));
+const AdminSettingsScreen = lazy(() => import('./ui/screens/AdminSettingsScreen')); // Lazy 
 
 // Used by GameActiveRoute
 import { useGameStateStore } from './state/useGameStateStore';
@@ -77,6 +79,17 @@ export const AppRoutes = () => {
             <GameActiveRoute>
               <LogViewerScreen />
             </GameActiveRoute>
+          }
+        />
+
+        <Route
+          path="/admin/settings"
+          element={
+            <AdminRoute>
+              <Suspense fallback={<div>Loading...</div>}>
+                <AdminSettingsScreen />
+              </Suspense>
+            </AdminRoute>
           }
         />
 

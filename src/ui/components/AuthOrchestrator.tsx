@@ -5,6 +5,10 @@ import { useGameStateStore } from '../../state/useGameStateStore';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { debugLog } from '../../utils/debug';
+import { useSettingsStore } from '../../state/useSettingsStore';
+import { aiConnectionRepository } from '../../data/repositories/aiConnectionRepository';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../data/infrastructure/firebaseClient';
 
 // --- Start of State Machine Definition ---
 
@@ -60,7 +64,32 @@ const AuthOrchestrator: React.FC = () => {
 
   // Effect 2: Perform side-effects based on the current state of the machine.
   useEffect(() => {
-    if (state === 'LOADING_GAME' && user) {
+    if(state === 'LOADING_GAME' && user) {
+      // --- START: NEW ONBOARDING LOGIC ---
+      const onboardNewUser = async (uid: string) => {
+        // Check if user already has connections
+        const existingConnections = await aiConnectionRepository.getAiConnections(uid);
+        if (existingConnections.length === 0) {
+          try {
+            // Fetch the global default
+            const defaultConnRef = doc(db, "globalSettings", "defaultAiConnection");
+            const defaultConnSnap = await getDoc(defaultConnRef);
+
+            if (defaultConnSnap.exists()) {
+              const defaultConnectionData = defaultConnSnap.data();
+              // Create a copy for the user
+              await useSettingsStore.getState().addAiConnection(uid, {
+                ...defaultConnectionData,
+                displayName: `${defaultConnectionData.displayName} (Default)`
+              } as any);
+              console.log(`[AuthOrchestrator] Provided default AI connection to new user ${uid}`);
+            }
+          } catch (err) {
+              console.error("Failed to provide default connection to new user", err);
+          }
+        }
+      };
+      onboardNewUser(user.uid);
       loadLastActiveGame(user.uid).then((gameLoaded) => {
         dispatch({ type: gameLoaded ? 'GAME_LOAD_SUCCESS' : 'GAME_LOAD_FAIL' });
         // Navigate only if we are at the root, otherwise stay put.
